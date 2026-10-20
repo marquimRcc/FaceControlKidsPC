@@ -329,6 +329,34 @@ static int camera_status_client() {
     return 0;
 }
 
+// Oversized frames MUST NOT be interpreted as a valid precheck.
+// The message-mode pipe can reply DENIED or close the connection;
+// both are safe, but PRECHECK_ONLY or PONG would be a critical defect.
+static int oversized_request_client() {
+    if (!WaitNamedPipeW(kPipe, 5000)) return 4;
+    HANDLE pipe=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
+        OPEN_EXISTING, SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
+    if (pipe==INVALID_HANDLE_VALUE) return 5;
+    BYTE message[128]={};
+    facekids_ipc::Request request={};
+    request.session_id=7;
+    request.child_id=1;
+    std::memcpy(message, &request, sizeof(request));
+    DWORD written=0, received=0;
+    char response[32]={};
+    bool sent=WriteFile(pipe, message, sizeof(message), &written, nullptr)
+        && written==sizeof(message);
+    bool answered=sent && ReadFile(pipe, response, sizeof(response), &received, nullptr);
+    CloseHandle(pipe);
+    if (!sent) return 6;
+    if (answered && (received!=6 || std::memcmp(response,"DENIED",6)!=0)) {
+        std::puts("FAIL: oversized precheck received unsafe response");
+        return 7;
+    }
+    std::puts("PASS: oversized IPC request denied or disconnected (no grant)");
+    return 0;
+}
+
 // Exercise malformed protocol bytes across a real named-pipe connection.
 // The broker must return DENIED without accessing quota or Windows login.
 static int malformed_request_client() {
@@ -417,7 +445,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
@@ -468,6 +496,7 @@ int wmain(int argc, wchar_t** argv) {
     if (std::wcscmp(argv[1], L"--camera-status") == 0) return camera_status_client();
     if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
     if (std::wcscmp(argv[1], L"--malformed-request") == 0) return malformed_request_client();
+    if (std::wcscmp(argv[1], L"--oversized-request") == 0) return oversized_request_client();
     if (std::wcscmp(argv[1], L"--console-once") == 0) {
         g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stop) return 3;
