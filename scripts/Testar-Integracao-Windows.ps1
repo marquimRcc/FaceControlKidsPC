@@ -32,6 +32,10 @@ try {
     Write-Host 'Executando testes de quotas e reconhecimento simulado...'
     & $py -m unittest discover -s tests -q
     if ($LASTEXITCODE -ne 0) { throw "Testes falharam: $LASTEXITCODE" }
+    Write-Host 'Consultando sessoes reais do Windows (WTS) sem alterar nada...'
+    & $py -m facekids.windows_session_diagnostic
+    if ($LASTEXITCODE -ne 0) { throw "Diagnostico WTS falhou: $LASTEXITCODE" }
+
 } finally {
     Pop-Location
 }

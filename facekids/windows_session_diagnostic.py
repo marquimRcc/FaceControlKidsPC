@@ -33,6 +33,8 @@ def classify(connect_state: int, flags: int | None) -> LockView:
         return LockView.UNKNOWN
     if connect_state != 0:
         return LockView.INACTIVE
+    if type(flags) is not int:
+        return LockView.UNKNOWN
     if flags == 0:
         return LockView.LOCKED
     if flags == 1:
