@@ -5,6 +5,7 @@
 #include "quota_gate.h"
 #include <windows.h>
 #include <mutex>
+#include <type_traits>
 #include <string>
 
 namespace facekids_face {
@@ -122,6 +123,10 @@ public:
         return Decision::ReadyForAdditionalControls;
     }
 };
+
+// Static build guard: production code cannot opt into synthetic decisions.
+static_assert(!std::is_constructible_v<InternalFacePolicy, bool>,
+              "Synthetic policy constructor must remain private");
 
 inline bool self_test(facekids_quota::Store& quota) {
     constexpr auto Locked = facekids_wts::LockView::Locked;
