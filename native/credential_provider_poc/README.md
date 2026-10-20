@@ -1,26 +1,34 @@
-# P0-2 — Credential Provider COM mínimo (build-only)
+# P0-2 — Credential Provider COM mínimo (build + host test)
 
-Este diretório contém uma DLL **inofensiva e NÃO INSTALÁVEL** que implementa o
-contrato ICredentialProvider para validar compilação com o Windows SDK.
-Retorna sempre **0 credenciais**, não desenha um tile, não usa câmera, não
-guarda senha, não registra DLL no Windows e não desbloqueia sessões.
+Esta DLL C++ é build-only: não foi instalada e não é registrada. Implementa
+ICredentialProvider, com **ZERO credenciais**. Não desbloqueia, não abre câmera,
+não guarda senha e não exibe tile.
 
-A prova serve somente para validar o toolchain e o contrato COM básico. Sem
-registro do CLSID no registro Windows, o LogonUI não carrega a DLL.
+## Build e teste local no Developer PowerShell x64 do Visual Studio
 
-Para compilar no Windows com Visual Studio Build Tools e Windows SDK, em
-Developer PowerShell for VS (arquitetura x64):
+Execute na raiz do repositório:
 
-    cd native/credential_provider_poc
-    cl /nologo /std:c++17 /EHsc /W4 /LD provider.cpp /link /OUT:FaceKidsEmptyProvider.dll Ole32.lib
+    cl /nologo /std:c++17 /EHsc /W4 /LD native\credential_provider_poc\provider.cpp /link /OUT:FaceKidsEmptyProvider.dll /EXPORT:DllGetClassObject=FaceKidsGetClassObject /EXPORT:DllCanUnloadNow=FaceKidsCanUnloadNow Ole32.lib
+    cl /nologo /std:c++17 /EHsc /W4 native\credential_provider_poc\host.cpp /link /OUT:FaceKidsProviderHost.exe Ole32.lib
+    .\FaceKidsProviderHost.exe .\FaceKidsEmptyProvider.dll
 
-Não execute regsvr32 nem cadastre o CLSID no sistema principal.
-A próxima prova será construir um **host de testes isolado** para instanciar
-a classe COM e verificar que GetCredentialCount retorna zero.
-Somente depois será considerada uma instalação em VM com snapshot e
-recuperação administrativa intacta.
+O host independente usa LoadLibrary, DllGetClassObject, IClassFactory,
+ICredentialProvider, CPUS_LOGON e CPUS_UNLOCK_WORKSTATION. Garante que
+o provider não anuncia credenciais, não aceita CredUI e descarrega limpo.
+O workflow credential-provider-build.yml faz a mesma verificação no CI Windows.
 
-Sobre produção: um CP é um componente COM carregado pelo LogonUI, e não
-um processo Python. Evitar chamadas de reconhecimento facial pesadas no CP.
-A implementação final exigirá broker/IPC autenticado, estratégia de câmera
-no lock screen, credenciais da conta Filhos protegidas e políticas de recovery.
+**Não executar regsvr32 nem registrar este CLSID no seu Windows.**
+O provider ainda não tem um caminho de recuperação e autenticação validado.
+
+## Próxima prova técnica
+
+Estudar nyxri0f8/winface (cp/provider.cpp, cp/credential.cpp, cp/scanner.cpp)
+como referência: primeiro, um tile diagnóstico em VM sem senha. Só depois
+de validar webcam em Win+L, adicionar autorizador por quota de criança,
+credenciais protegidas e recuperação com login administrativo.
+
+Um rosto identificado não basta: cada desbloqueio deverá exigir uma
+autorização **recente, de uso único**, do serviço que guarda os saldos
+individuais. A sessão Windows é compartilhada, mas cada criança terá ID próprio.
+
+Esta etapa não prova webcam em lock screen nem desbloqueio real.
