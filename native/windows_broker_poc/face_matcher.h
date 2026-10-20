@@ -36,13 +36,12 @@ inline bool normalized_dot(const std::array<float,128>& a,
 // a confidence threshold and a separation margin from the runner-up PERSON.
 // Raw cosine score alone cannot verify presentation authenticity.
 inline Match candidate(facekids_quota::Store& db,
-                       const std::array<float,128>& observed,
-                       double threshold=0.50, double min_margin=0.07) {
+                       const std::array<float,128>& observed) {
+    // Thresholds are fixed in this internal POC; an IPC caller must not
+    // lower them, making unknown faces appear to match a child profile.
+    constexpr double threshold=0.50;
+    constexpr double min_margin=0.07;
     Match result;
-    if(!std::isfinite(threshold)||!std::isfinite(min_margin) ||
-       threshold<0||threshold>1||min_margin<0||min_margin>1) {
-        result.status=Status::InvalidProbe; return result;
-    }
     double magnitude=0;
     for(float v:observed) {
         if(!std::isfinite(v)) {result.status=Status::InvalidProbe; return result;}
