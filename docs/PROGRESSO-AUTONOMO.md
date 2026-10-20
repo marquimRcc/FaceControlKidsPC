@@ -34,13 +34,23 @@ fisicamente sem webcam, liveness real e prova de LogonUI em VM.
   candidato protegido + WTS/SID da sessão + quota. A resposta
   positiva significa apenas NEEDS_TRUSTED_CAMERA_AND_LIVENESS;
   não fornece ticket ou desbloqueio.
-- **P0-49 SIMULADO:** facial_policy.h mantém rechecagem de quota e
-  expiração de 8s, apenas nos autotestes sem login real.
+- **P0-49 SOFTWARE IMPLEMENTADO, TESTE SINTÉTICO:** one_use_preflight.h
+  encadeia o candidato protegido à pré-verificação única de sessão;
+  ticket interno expira em 8s, revalida SID/WTS/quota e rejeita replay.
+  O construtor de simulação é privado aos autotestes; uso normal
+  sempre nega. facial_policy.h permanece como guarda independente.
+  Nenhum ticket de login, senha ou credencial do Windows é emitido.
 - **P0-50 SIMULADO:** usage_meter.h contabiliza tempo monotônico
   e quotas no banco; ativo apenas nos autotestes.
 - **P0-51 DRY-RUN:** lock_decision.h verifica sessão alvo, SID e
   esgotamento de quota, mas em runtime sempre recusa bloquear.
-  Não existe chamada Win32 para bloquear usuários.
+  Construtor que habilita simulação é privado aos autotestes;
+  não existe chamada Win32 para bloquear usuários.
+
+
+Obs.: Fase 1 só pode receber status FINALIZADA após validar
+a câmera física, a proveniência da captura e o liveness real
+contra foto/vídeo. O GitHub CI não tem o hardware alvo.
 
 ### Próxima execução
 
