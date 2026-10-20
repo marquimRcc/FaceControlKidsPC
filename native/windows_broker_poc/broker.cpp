@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cwchar>
 #include "wts_diagnostic.h"
+#include "session_guard.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -218,8 +219,8 @@ int wmain(int argc, wchar_t** argv) {
         PSECURITY_DESCRIPTOR sd = nullptr;
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
-        if (!valid || !facekids_wts::self_test()) return 3;
-        std::puts("PASS: Windows SCM shell and protected SYSTEM/Administrators-only pipe ACL");
+        if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test()) return 3;
+        std::puts("PASS: SCM shell, restricted pipe ACL and fail-closed session SID guard");
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
