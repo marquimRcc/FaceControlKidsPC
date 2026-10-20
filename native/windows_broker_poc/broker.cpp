@@ -7,6 +7,7 @@
 #include <sddl.h>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 
 #pragma comment(lib, "advapi32.lib")
 
