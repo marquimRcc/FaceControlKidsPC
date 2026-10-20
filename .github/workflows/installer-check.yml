@@ -1,0 +1,18 @@
+name: One-click installer syntax check
+on:
+  push:
+    paths:
+      - 'FaceKids-Teste-Webcam-WinL.bat'
+      - '.github/workflows/installer-check.yml'
+  pull_request:
+    paths:
+      - 'FaceKids-Teste-Webcam-WinL.bat'
+      - '.github/workflows/installer-check.yml'
+jobs:
+  bootstrap-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check batch and embedded PowerShell without downloads
+        shell: cmd
+        run: call FaceKids-Teste-Webcam-WinL.bat --check
