@@ -20,6 +20,8 @@ instalacao do servico no PC, acesso por criancas ou desbloqueio real.
   de segundos, nao valores float da conta infantil
 - Estado salvo e reaberto para demonstrar persistencia
 - Execucao --self-test usa pasta temporaria privada, sem tocar ProgramData
+- Teste negativo cria pastas/arquivos com DACL Everyone e comprova que a abertura e recusada
+- Gate interno cruza SID WTS autentico, sessao bloqueada e saldo individual; somente a precondicao para avaliar rosto e atendida
 
 ## Integracao ao Windows Service
 
@@ -27,7 +29,7 @@ O caminho --service (ainda NAO instalado) agora exige que o banco de quotas
 passe nos testes de ACL e integridade antes de passar a RUNNING ou expor o
 pipe administrativo PING/PONG. Falha de permissao = SERVICE_STOPPED.
 
-O pipe **nao expõe operações de quota**: precisa primeiro implementar
+O pipe **nao expoe operacoes de quota**: precisa primeiro implementar
 autenticacao por tipo de chamador e impedir que a conta Filhos possa
 escrever a base. A comunicacao final com o Credential Provider exigira
 um canal separado e autenticado e evidencias faciais confiaveis.

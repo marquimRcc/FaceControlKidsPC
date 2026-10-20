@@ -74,3 +74,25 @@ executa esses testes antes de publicar o binario.
 **Pendencias:** executar no SCM real sob LocalSystem em VM, manter o
 banco de quotas protegido e ligar esta leitura ao coordenador no
 lado servidor, sem jamais confiar em dados fornecidos pela conta Filhos.
+
+
+## P0-8 - Banco de quotas SQLite com ACL e autorizacao combinada
+
+O broker inclui quota_store.h e quota_gate.h. Na inicializacao de
+--service, exige um banco SQLite seguro no diretorio ProgramData antes
+de entrar em SERVICE_RUNNING; se a verificacao da ACL falhar, nega
+a inicializacao do servico.
+
+O --self-test cria apenas bases temporarias e testa tres quotas de
+120 minutos, consumo atomico, bonus, persistencia, virada de data,
+pastas e bancos permissivos rejeitados e combinacao entre SID do
+Windows, sessao LOCKED e saldo individual. Nao instala o SCM e nao
+toca no login.
+
+O resultado READY_FOR_FACIAL_POLICY **nao e autorizacao de login**.
+Ainda sao exigidos rosto real com origem confiavel, liveness,
+autorizacao curta e comunicacao autenticada do Credential Provider.
+O named pipe publico do PoC continua restrito a PING/PONG, sem quota
+nem senha.
+
+Leia docs/POC-008-WINDOWS-QUOTA-SQLITE.md para requisitos e pendencias.

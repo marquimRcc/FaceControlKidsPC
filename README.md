@@ -8,7 +8,8 @@
 - **Política individual:** 74 testes Python aprovados (face, sessão, 3 quotas, expiração e autorização de uso único).
 - **Credential Provider:** DLL COM diagnóstica compilada; enumera tile somente para SID autorizado, mas não serializa nenhuma credencial.
 - **Broker Windows P0-5:** estrutura SCM C++ compilada com named pipe local que admite apenas SYSTEM/administradores elevados e responde somente PING. Testado no GitHub Actions sem instalar serviço.
-- **Ainda faltam:** Windows Service real em SCM/LocalSystem, IPC do Credential Provider autenticado, WTS server-side, evidência facial confiável, SQLite protegido, cofre seguro para credencial Filhos, instalação/rollback em VM e teste efetivo de LogonUI.
+- **Quotas nativas P0-8:** WinSQLite protegido por DACL SYSTEM/administradores em ProgramData (somente quando o serviço SCM for instalado em VM); testes offline com 3 saldos, débitos atômicos, virada de dia, persistência e rejeição de ACLs permissivas. O broker combina validação de SID/WTS com saldo antes de considerar uma solicitação para análise facial.
+- **Ainda faltam:** validação do SCM/LocalSystem em VM, IPC autenticado do Credential Provider, evidência facial confiável, mapeamento entre rosto e saldo, cofre seguro da credencial Filhos, instalação/rollback em VM e teste efetivo de LogonUI. SQLite/ACL e verificação WTS foram implementados como componentes nativos, mas ainda sem serviço instalado.
 
 ### Repositório local da conta principal
 
