@@ -1,0 +1,81 @@
+name: Windows LocalSystem service lifecycle on ephemeral runner
+on:
+  push:
+    paths:
+      - 'native/windows_broker_poc/**'
+      - '.github/workflows/windows-broker-scm-vm.yml'
+  pull_request:
+    paths:
+      - 'native/windows_broker_poc/**'
+      - '.github/workflows/windows-broker-scm-vm.yml'
+jobs:
+  local-system-lifecycle:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile broker using MSVC and WinSQLite
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          if not defined VSROOT exit /b 1
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:FaceKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib
+          if errorlevel 1 exit /b 1
+          FaceKidsBrokerPoc.exe --self-test
+          if errorlevel 1 exit /b 1
+      - name: Register/start/test/stop/delete LocalSystem service on ephemeral runner ONLY
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'FaceKidsBrokerPoc'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          $db = Join-Path $root 'quota.sqlite3'
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw "Service $name unexpectedly already exists"
+          }
+          if (Test-Path $root) {
+            throw "Refusing to touch pre-existing ProgramData folder"
+          }
+          $image = '"' + $exe + '" --service'
+          & sc.exe create $name binPath= $image start= demand obj= LocalSystem
+          if ($LASTEXITCODE -ne 0) {
+            throw "SCM CreateService failed: $LASTEXITCODE"
+          }
+          try {
+            Start-Service -Name $name -ErrorAction Stop
+            $service = Get-Service -Name $name
+            $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+            if ($service.Status -ne 'Running') {
+              throw "Broker did not enter SERVICE_RUNNING"
+            }
+            if (-not (Test-Path $db)) { throw "SQLite database missing from ProgramData" }
+            Write-Host 'PASS: LocalSystem created SQLite quota database in ProgramData'
+            & $exe --ping
+            if ($LASTEXITCODE -ne 0) { throw "Privileged PING failed ($LASTEXITCODE)" }
+            & $exe --precheck-as-admin
+            if ($LASTEXITCODE -ne 0) { throw "Admin was not rejected ($LASTEXITCODE)" }
+            Write-Host 'PASS: Windows SCM lifecycle and negative CP precheck'
+          } finally {
+            $service = Get-Service -Name $name -ErrorAction SilentlyContinue
+            if ($service) {
+              if ($service.Status -ne 'Stopped') {
+                & sc.exe stop $name | Out-Host
+                try {
+                  (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+                } catch {
+                  Write-Warning "Service stop timeout"
+                }
+              }
+              & sc.exe delete $name | Out-Host
+            }
+            if ((Get-Service -Name $name -ErrorAction SilentlyContinue)?.Status -eq 'Running') {
+              throw "Service still running after rollback"
+            }
+            if (Test-Path $root) {
+              Remove-Item -LiteralPath $root -Recurse -Force
+            }
+            Write-Host 'Cleanup: test service and ProgramData folder removed'
+          }
