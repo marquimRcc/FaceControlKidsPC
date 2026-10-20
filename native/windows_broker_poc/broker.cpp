@@ -14,6 +14,7 @@
 #include "quota_gate.h"
 #include "facial_policy.h"
 #include "camera_capability.h"
+#include "camera_frame_probe.h"
 #include "service_identity.h"
 #include "ipc_contract.h"
 #include <vector>
@@ -416,7 +417,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
@@ -427,6 +428,18 @@ int wmain(int argc, wchar_t** argv) {
             std::puts("NOT_SYSTEM");
         else std::puts("IDENTITY_UNAVAILABLE");
         return id==facekids_service_identity::ServiceIdentity::Unavailable ? 4 : 0;
+    }
+    if (std::wcscmp(argv[1], L"--frame-probe") == 0) {
+        // Opt-in physical-camera diagnostic ONLY; never entered from service.
+        const auto measured=facekids_frame::capture_one_frame();
+        const char* label=measured.status==facekids_frame::Status::FrameMeasured
+          ? (measured.nonuniform ? "FRAME_OK_NONUNIFORM" : "FRAME_OK_UNIFORM")
+          : measured.status==facekids_frame::Status::NoCamera
+            ? "NO_CAMERA" : "CAPTURE_UNAVAILABLE";
+        std::printf("FaceKids opt-in frame check: %s | hr=0x%08lx\\n",
+                    label, static_cast<unsigned long>(measured.hr));
+        std::puts("Diagnostic only. No frames saved and NO facial authentication.");
+        return 0;
     }
     if (std::wcscmp(argv[1], L"--camera-capability") == 0) {
         const auto inventory=facekids_camera::enumerate();
@@ -446,6 +459,7 @@ int wmain(int argc, wchar_t** argv) {
             !facekids_quota::self_test() || !quota_gate_self_test() ||
             !facekids_ipc::self_test() || !facial_policy_self_test() ||
             !facekids_camera::self_test() ||
+            !facekids_frame::self_test() ||
             !facekids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
