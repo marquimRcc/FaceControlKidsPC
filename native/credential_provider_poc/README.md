@@ -1,34 +1,54 @@
-# P0-2 — Credential Provider COM mínimo (build + host test)
+# Credential Provider — P0-2.1: interface diagnóstica (NÃO instalada)
 
-Esta DLL C++ é build-only: não foi instalada e não é registrada. Implementa
-ICredentialProvider, com **ZERO credenciais**. Não desbloqueia, não abre câmera,
-não guarda senha e não exibe tile.
+**Objetivo:** validar, num host COM isolado, a estrutura de uma opção
+de autenticação do Windows sem modificar o login real.
 
-## Build e teste local no Developer PowerShell x64 do Visual Studio
+O provider agora fornece exatamente **um tile com dois textos estáticos**,
+somente para testar os contratos COM. Ele nunca produz credenciais: toda
+chamada de GetSerialization retorna CPGSR_NO_CREDENTIAL_NOT_FINISHED
+com estrutura de autenticação vazia e sem autologon. Não abre câmera,
+não lê banco, não executa reconhecimento e não conhece senha alguma.
 
-Execute na raiz do repositório:
+**Não registrar a DLL no Windows** e não executar regsvr32. A DLL ainda não
+tem procedimento de implantação/remoção apropriado, usuário associado
+ou recuperação validada no LogonUI. Não é um aplicativo de desbloqueio.
 
-    cl /nologo /std:c++17 /EHsc /W4 /LD native\credential_provider_poc\provider.cpp /link /OUT:FaceKidsEmptyProvider.dll /EXPORT:DllGetClassObject=FaceKidsGetClassObject /EXPORT:DllCanUnloadNow=FaceKidsCanUnloadNow Ole32.lib
+## Testar na conta principal sem alterar o Windows
+
+Abra a branch feature/windows-native-unlock-poc no GitHub. O workflow
+"Credential Provider compile and host checks" compila ambos os executáveis
+no Windows e publica, após aprovação, o artifact
+FaceKidsCredentialProvider-DiagnosticHostOnly.
+
+No seu PC, o host COM é seguro para executar sem instalar a DLL:
+
+    FaceKidsProviderHost.exe FaceKidsDiagnosticProvider.dll
+
+Ele apenas carrega a DLL com LoadLibrary, instancia ICredentialProvider,
+consulta campos e chama GetSerialization, verificando que o resultado
+**não autoriza login**. Fechou o programa, não há componente instalado.
+
+Também é possível compilar manualmente em Developer PowerShell x64 do
+Visual Studio (C++ Build Tools + Windows SDK), a partir da raiz do repo:
+
+    cl /nologo /std:c++17 /EHsc /W4 /LD native\credential_provider_poc\provider.cpp /link /OUT:FaceKidsDiagnosticProvider.dll /EXPORT:DllGetClassObject=FaceKidsGetClassObject /EXPORT:DllCanUnloadNow=FaceKidsCanUnloadNow Ole32.lib
     cl /nologo /std:c++17 /EHsc /W4 native\credential_provider_poc\host.cpp /link /OUT:FaceKidsProviderHost.exe Ole32.lib
-    .\FaceKidsProviderHost.exe .\FaceKidsEmptyProvider.dll
+    .\FaceKidsProviderHost.exe .\FaceKidsDiagnosticProvider.dll
 
-O host independente usa LoadLibrary, DllGetClassObject, IClassFactory,
-ICredentialProvider, CPUS_LOGON e CPUS_UNLOCK_WORKSTATION. Garante que
-o provider não anuncia credenciais, não aceita CredUI e descarrega limpo.
-O workflow credential-provider-build.yml faz a mesma verificação no CI Windows.
+## Critérios de aprovação
 
-**Não executar regsvr32 nem registrar este CLSID no seu Windows.**
-O provider ainda não tem um caminho de recuperação e autenticação validado.
+- DLL carrega sem registro COM e devolve IClassFactory
+- CPUS_LOGON e CPUS_UNLOCK_WORKSTATION oferecem 1 tile e 2 campos
+- CPUS_CREDUI permanece desabilitado; nenhuma senha é solicitada
+- Auto-logon sempre desabilitado e GetSerialization sem credential bytes
+- Os campos são liberados corretamente e DLL pode ser descarregada
+- Os provedores padrão do Windows nunca são modificados
 
-## Próxima prova técnica
+## Próxima fase
 
-Estudar nyxri0f8/winface (cp/provider.cpp, cp/credential.cpp, cp/scanner.cpp)
-como referência: primeiro, um tile diagnóstico em VM sem senha. Só depois
-de validar webcam em Win+L, adicionar autorizador por quota de criança,
-credenciais protegidas e recuperação com login administrativo.
+Prova em VM: instalação temporária de um tile **não autenticante** com
+recuperação auditada. Apenas depois estudar imagem, quota individual,
+IPC protegido e autenticação real pela conta compartilhada Filhos.
 
-Um rosto identificado não basta: cada desbloqueio deverá exigir uma
-autorização **recente, de uso único**, do serviço que guarda os saldos
-individuais. A sessão Windows é compartilhada, mas cada criança terá ID próprio.
-
-Esta etapa não prova webcam em lock screen nem desbloqueio real.
+Referência de arquitetura: WinFace (nyxri0f8/winface) e as APIs
+do Credential Provider da Microsoft; nenhum código foi copiado do WinFace.
