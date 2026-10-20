@@ -23,6 +23,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(str(self.path), timeout=10)
         self.db.execute("PRAGMA foreign_keys = ON")
+        self.db.execute("PRAGMA secure_delete = ON")
         self.db.execute("PRAGMA journal_mode = WAL")
         self.db.executescript("""
           CREATE TABLE IF NOT EXISTS people (
@@ -85,6 +86,25 @@ class Storage:
             """, (person_id, day, minutes * 60)).rowcount
             if changed != 1:
                 raise ValueError("O bônus acumulado não pode ultrapassar 480 minutos por dia.")
+
+    def remove_embeddings(self, person_id: int) -> int:
+        """Remove locally stored SFace templates for one child only.
+
+        PRAGMA secure_delete reduces residual bytes in SQLite pages; it is
+        not a guarantee of secure erasure from SSDs, journals or backups.
+        """
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador de criança inválido.")
+        with self.db:
+            exists = self.db.execute(
+                "SELECT 1 FROM people WHERE id=?", (person_id,)
+            ).fetchone()
+            if exists is None:
+                raise KeyError(person_id)
+            removed = self.db.execute(
+                "DELETE FROM embeddings WHERE person_id=?", (person_id,)
+            ).rowcount
+        return int(removed)
 
     def enrollment_count(self, person_id: int) -> int:
         row=self.db.execute("SELECT COUNT(*) FROM embeddings WHERE person_id=?", (person_id,)).fetchone()

@@ -46,3 +46,20 @@ class StorageTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 db.add_bonus(child, True, "2026-10-20")
             db.close()
+
+    def test_face_erasure_keeps_time_ledger_intact(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            a = db.add_person("A", 120)
+            b = db.add_person("B", 120)
+            sample = np.ones(128, dtype=np.float32)
+            db.add_embedding(a, sample)
+            db.add_embedding(b, sample)
+            db.charge(a, 90, "2026-10-20")
+            self.assertEqual(db.remove_embeddings(a), 1)
+            self.assertEqual(db.remove_embeddings(a), 0)
+            self.assertEqual(db.enrollment_count(b), 1)
+            self.assertEqual(db.remaining(a, "2026-10-20"), 7110)
+            with self.assertRaises(KeyError):
+                db.remove_embeddings(987)
+            db.close()

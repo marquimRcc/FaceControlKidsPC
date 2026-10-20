@@ -62,6 +62,25 @@ class BrokerTest(unittest.TestCase):
         self.assertEqual(result["action"], "enrollment_complete")
         self.assertEqual(self.db.enrollment_count(kid), 20)
 
+    def test_only_parent_can_erase_child_templates_and_revoke_enrollment(self):
+        a = self.broker.dispatch("PARENT", {"op": "add", "name": "A", "minutes": 120})["id"]
+        b = self.broker.dispatch("PARENT", {"op": "add", "name": "B", "minutes": 120})["id"]
+        self.db.add_embedding(a, np.asarray(features(0), dtype=np.float32))
+        self.db.add_embedding(a, np.asarray(features(0), dtype=np.float32))
+        self.db.add_embedding(b, np.asarray(features(1), dtype=np.float32))
+        self.broker.dispatch("PARENT", {"op": "enroll", "id": a})
+        with self.assertRaises(AccessDenied):
+            self.broker.dispatch("CHILD", {"op": "remove_faces", "id": a})
+        self.assertEqual(self.db.enrollment_count(a), 2)
+        deleted = self.broker.dispatch("PARENT", {"op": "remove_faces", "id": a})
+        self.assertEqual(deleted, {"ok": True, "removed": 2})
+        self.assertEqual(self.db.enrollment_count(a), 0)
+        self.assertEqual(self.db.enrollment_count(b), 1)
+        self.assertIsNone(self.broker.enroll_id)
+        self.assertIsNone(self.broker.dispatch("CHILD", {"op": "ping"})["enrollment_id"])
+        with self.assertRaises(ValueError):
+            self.broker.dispatch("PARENT", {"op": "remove_faces", "id": True})
+
     def test_bad_vectors(self):
         with self.assertRaises(ValueError):
             self.broker.dispatch("CHILD", {"op": "observe", "features": [1.0] * 127})
