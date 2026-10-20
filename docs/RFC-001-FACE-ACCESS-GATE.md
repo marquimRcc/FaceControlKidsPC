@@ -1,6 +1,6 @@
 # RFC-001 — Face Access Gate para conta compartilhada
 
-**Status:** Proposta para análise; não implementada.  
+**Status:** Proposta de arquitetura; protótipo visual da etapa 1 implementado, sem webcam ou bloqueio real.  
 **Branch:** `feature/face-access-gate`  
 **Origem:** `main`, MVP 0.4  
 **Autor/projeto:** Marcos Queiroz Gomes — [FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
@@ -107,4 +107,4 @@ A interface deve mostrar o saldo antes de permitir uso. Uma criança sem tempo n
 - Qual grau de resistência a burlas se espera: dissuasão casual ou controles mais rígidos?
 - Devemos admitir alternativa manual pelo responsável em caso de falta da câmera? (sugestão: sim, com autenticação parental)
 
-**Decisão atual:** analisar e prototipar a experiência nesta branch; **não** alterar `main` nem declarar desbloqueio nativo do Windows implementado.
+**Decisão atual:** o protótipo visual e a máquina de estados estão implementados na branch, para validação da UX. **Não** alterar `main` nem declarar desbloqueio nativo do Windows implementado.

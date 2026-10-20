@@ -1,4 +1,16 @@
-# FaceControlKidsPC — MVP 0.4
+# FaceControlKidsPC — MVP 0.4 (branch experimental)
+
+> **Branch experimental: feature/face-access-gate.** O novo protótipo visual é uma simulação de liberação facial; não é o bloqueio seguro do Windows. A branch main permanece com o MVP 0.4.
+
+## Testar a tela de acesso facial sem webcam
+
+Use Python 3.11+ no Windows. Com a branch selecionada, execute:
+
+    py -3.11 -m facekids.gate_preview
+
+Ou abra **demonstrar-gate.bat** com dois cliques. Os botões simulam reconhecimentos e falhas. Não precisa cadastrar rostos nem instalar dependências externas. **Esc fecha a janela imediatamente.** Leia a documentação em [docs/DEMO-FACE-GATE.md](docs/DEMO-FACE-GATE.md).
+
+---
 
 **Projeto original:** [marquimRcc/FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
 **Autor e mantenedor original:** Marcos Queiroz Gomes ([@marquimRcc](https://github.com/marquimRcc))  
