@@ -13,6 +13,7 @@ namespace facekids_ipc {
 constexpr uint32_t kMagic = 0x31434b46; // "FKC1" little-endian
 constexpr uint16_t kVersion = 1;
 constexpr uint16_t kPrecheck = 1;
+constexpr uint16_t kEraseTemplates = 2; // elevated parent admin, no Windows login
 
 // Explicit wire length avoids compiler padding and arbitrary JSON parsing.
 constexpr DWORD kRequestBytes = 16;
@@ -42,8 +43,13 @@ inline ParseResult parse(const void* data, DWORD size, Request* destination) {
     std::memcpy(&raw, data, sizeof(raw));
     if (raw.magic != kMagic) return ParseResult::BadMagic;
     if (raw.version != kVersion) return ParseResult::BadVersion;
-    if (raw.command != kPrecheck) return ParseResult::BadCommand;
-    if (!raw.session_id || raw.session_id == 0xffffffff)
+    if (raw.command != kPrecheck && raw.command != kEraseTemplates)
+        return ParseResult::BadCommand;
+    if (raw.command == kPrecheck &&
+        (!raw.session_id || raw.session_id == 0xffffffff))
+        return ParseResult::BadSession;
+    // Erasure must NEVER be tied to caller-supplied session identity.
+    if (raw.command == kEraseTemplates && raw.session_id != 0)
         return ParseResult::BadSession;
     if (raw.child_id < 1 || raw.child_id > 3)
         return ParseResult::BadChild;
@@ -78,6 +84,15 @@ inline bool self_test() {
     raw.child_id = 4;
     if (parse(&raw, sizeof(raw), &parsed) != ParseResult::BadChild) return false;
     raw.child_id = 0;
+    if (parse(&raw, sizeof(raw), &parsed) != ParseResult::BadChild) return false;
+    raw.command = kEraseTemplates;
+    raw.session_id = 0;
+    raw.child_id = 3;
+    if (parse(&raw, sizeof(raw), &parsed) != ParseResult::Valid) return false;
+    raw.session_id = 8;
+    if (parse(&raw, sizeof(raw), &parsed) != ParseResult::BadSession) return false;
+    raw.session_id = 0;
+    raw.child_id = 4;
     if (parse(&raw, sizeof(raw), &parsed) != ParseResult::BadChild) return false;
     return true;
 }

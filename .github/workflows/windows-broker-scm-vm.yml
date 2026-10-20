@@ -105,6 +105,13 @@ jobs:
             & $exe --restricted-db-test
             if ($LASTEXITCODE -ne 0) { throw "Restricted Windows token could access protected quota/templates database" }
             Write-Host 'PASS: restricted token cannot read/write biometric or quota storage'
+            # Newly installed demo has zero templates. A parent admin must
+            # be able to request a safe scoped erase (never a credential).
+            & $exe --erase-templates 1
+            if ($LASTEXITCODE -ne 0) { throw "Protected parent-only template erase failed" }
+            & $exe --erase-templates 4
+            if ($LASTEXITCODE -ne 2) { throw "Out-of-range template erase was not rejected" }
+            Write-Host 'PASS: admin scoped biometric erasure and invalid ID rejected'
             & $exe --ping
             if ($LASTEXITCODE -ne 0) { throw "Privileged PING failed ($LASTEXITCODE)" }
             & $exe --camera-status

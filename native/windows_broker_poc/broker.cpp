@@ -205,7 +205,13 @@ static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
                         request, length, &parsed)==facekids_ipc::ParseResult::Valid;
                     // Precheck is protected by the SYSTEM *user token*,
                     // not by an untrusted SID/identity supplied over IPC.
-                    if (valid && role == CallerRole::LocalSystem &&
+                    if (valid && role == CallerRole::Administrator &&
+                        quotas && parsed.command == facekids_ipc::kEraseTemplates) {
+                        int erased=0;
+                        if (quotas->erase_templates(static_cast<int>(parsed.child_id),&erased))
+                            answer="ERASED"; // never send face template bytes
+                    } else if (valid && role == CallerRole::LocalSystem &&
+                        parsed.command == facekids_ipc::kPrecheck &&
                         quotas && !target_sid.empty()) {
                         char day[11]={};
                         local_service_day(day);
@@ -360,6 +366,32 @@ static int restricted_token_pipe_client() {
         return 8;
     }
     std::puts("PASS: restricted non-admin Windows token denied by named-pipe ACL");
+    return 0;
+}
+
+// Explicit local parental maintenance. The broker verifies the actual
+// elevated Windows administrator token and never accepts this from Filhos.
+static int erase_templates_admin_client(int child) {
+    if(child<1 || child>3 || !WaitNamedPipeW(kPipe,5000)) return 4;
+    HANDLE pipe=CreateFileW(kPipe,GENERIC_READ|GENERIC_WRITE,0,nullptr,
+        OPEN_EXISTING,SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION,nullptr);
+    if(pipe==INVALID_HANDLE_VALUE) return 5;
+    facekids_ipc::Request request={};
+    request.command=facekids_ipc::kEraseTemplates;
+    request.session_id=0;
+    request.child_id=static_cast<uint32_t>(child);
+    DWORD written=0,received=0;
+    char answer[32]={};
+    const bool success=WriteFile(pipe,&request,sizeof(request),&written,nullptr) &&
+        written==sizeof(request) &&
+        ReadFile(pipe,answer,sizeof(answer),&received,nullptr) &&
+        received==6 && std::memcmp(answer,"ERASED",6)==0;
+    CloseHandle(pipe);
+    if(!success) {
+        std::puts("FAIL: administrator template erase was denied or unavailable");
+        return 6;
+    }
+    std::printf("PASS: protected broker erased templates for profile %d (no login)\n",child);
     return 0;
 }
 
@@ -529,8 +561,13 @@ static bool quota_gate_self_test() {
 }
 
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 3 && std::wcscmp(argv[1],L"--erase-templates")==0) {
+        if(std::wcslen(argv[2])!=1 || argv[2][0]<L'1' || argv[2][0]>L'3')
+            return 2;
+        return erase_templates_admin_client(int(argv[2][0]-L'0'));
+    }
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --restricted-db-test | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --restricted-db-test | --erase-templates 1..3 | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
