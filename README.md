@@ -9,7 +9,11 @@
 - **Credential Provider:** DLL COM diagnóstica compilada; enumera tile somente para SID autorizado, mas não serializa nenhuma credencial.
 - **Broker Windows P0-5:** estrutura SCM C++ compilada com named pipe local que admite apenas SYSTEM/administradores elevados e responde somente PING. Testado no GitHub Actions sem instalar serviço.
 - **Quotas nativas P0-8:** WinSQLite protegido por DACL SYSTEM/administradores em ProgramData (somente quando o serviço SCM for instalado em VM); testes offline com 3 saldos, débitos atômicos, virada de dia, persistência e rejeição de ACLs permissivas. O broker combina validação de SID/WTS com saldo antes de considerar uma solicitação para análise facial.
-- **Ainda faltam:** validação do SCM/LocalSystem em VM, IPC autenticado do Credential Provider, evidência facial confiável, mapeamento entre rosto e saldo, cofre seguro da credencial Filhos, instalação/rollback em VM e teste efetivo de LogonUI. SQLite/ACL e verificação WTS foram implementados como componentes nativos, mas ainda sem serviço instalado.
+- **IPC de pré-verificação P0-9:** protocolo binário de 16 bytes; somente um cliente cujo token Windows seja exatamente LocalSystem pode passar à avaliação de pré-condições WTS/quota. Administrador comum recebe DENIED. Resposta positiva PRECHECK_ONLY **não concede login**.
+- **SCM em VM descartável P0-10:** Windows GitHub Actions registrou o serviço LocalSystem, abriu o banco protegido em ProgramData, validou comunicação e negativa por administrador e removeu serviço e pasta ao terminar. Nada instalado no PC.
+- **Cliente de diagnóstico CP P0-11:** a DLL COM de teste conversou com o broker pelo protocolo P0-9 e recebeu DENIED corretamente. A DLL normal ainda nunca serializa credenciais.
+
+- **Ainda faltam:** provar autenticação específica do processo LogonUI (SID SYSTEM sozinho não identifica o processo), câmera/liveness com origem confiável, ligação do rosto ao saldo, cofre seguro da credencial Filhos e registro/recuperação do Credential Provider em VM. O SCM foi validado apenas em runner Windows descartável; nada foi instalado no PC.
 
 ### Repositório local da conta principal
 
