@@ -91,6 +91,22 @@ inline bool exec(sqlite3* db, const char* sql) {
     return db && sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+// A successful SQLite API call is not proof of a healthy ledger.
+// Check the actual quick_check result; any error must block service startup.
+inline bool healthy_database(sqlite3* db) {
+    sqlite3_stmt* check=nullptr;
+    if (!db || sqlite3_prepare_v2(db, "PRAGMA quick_check(1);", -1,
+                                  &check, nullptr) != SQLITE_OK)
+        return false;
+    bool healthy=false;
+    if (sqlite3_step(check)==SQLITE_ROW) {
+        const unsigned char* value=sqlite3_column_text(check, 0);
+        healthy=value && std::strcmp(reinterpret_cast<const char*>(value), "ok")==0;
+    }
+    sqlite3_finalize(check);
+    return healthy;
+}
+
 class Store {
     sqlite3* db_ = nullptr;
     std::wstring root_;
@@ -128,6 +144,7 @@ public:
         }
         // Secure directory guarantees newly created DB/journal inheritance.
         if (!allowed_acl(file, false) ||
+            !healthy_database(db_) ||
             !exec(db_, "PRAGMA journal_mode=DELETE;") ||
             !exec(db_, "PRAGMA foreign_keys=ON;") ||
             !exec(db_, "PRAGMA busy_timeout=5000;") ||
