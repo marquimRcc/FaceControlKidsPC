@@ -1,6 +1,31 @@
-# FaceControlKidsPC — MVP 0.4 (branch experimental)
+# FaceControlKidsPC — Windows Native Unlock PoC (branch experimental)
 
-> **Branch experimental: feature/face-access-gate.** O novo protótipo visual é uma simulação de liberação facial; não é o bloqueio seguro do Windows. A branch main permanece com o MVP 0.4.
+> **Branch ativa:** `feature/windows-native-unlock-poc`. A `main` continua com o MVP anterior. O bloqueio/desbloqueio por rosto ainda **não está implementado**; a autenticação nativa nunca deve ser modificada enquanto os componentes estão em prova de conceito.
+
+## Estado técnico — Windows (20/10/2026)
+
+- **Webcam durante Win+L:** diagnóstico na conta Filhos confirmou leitura de frames durante bloqueio do Windows. Isto não comprova execução dentro do LogonUI.
+- **Política individual:** 74 testes Python aprovados (face, sessão, 3 quotas, expiração e autorização de uso único).
+- **Credential Provider:** DLL COM diagnóstica compilada; enumera tile somente para SID autorizado, mas não serializa nenhuma credencial.
+- **Broker Windows P0-5:** estrutura SCM C++ compilada com named pipe local que admite apenas SYSTEM/administradores elevados e responde somente PING. Testado no GitHub Actions sem instalar serviço.
+- **Ainda faltam:** Windows Service real em SCM/LocalSystem, IPC do Credential Provider autenticado, WTS server-side, evidência facial confiável, SQLite protegido, cofre seguro para credencial Filhos, instalação/rollback em VM e teste efetivo de LogonUI.
+
+### Repositório local da conta principal
+
+O clone fica em `C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC`.
+
+Para atualizar e testar sem alterar o login:
+
+```powershell
+$p="C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC"; git -C $p pull --ff-only; if($LASTEXITCODE -ne 0){throw "Falha ao atualizar"}; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$p\scripts\Testar-Integracao-Windows.ps1"
+```
+
+Os binários C++ de diagnóstico são compilados e testados automaticamente no GitHub Actions. **Não registrar manualmente Credential Provider ou instalar o serviço experimental no PC.**
+
+Veja [Arquitetura nativa](docs/ADR-003-WINDOWS-REAL-FACE-UNLOCK.md), [associação de SID](docs/POC-004-WINDOWS-SID-BINDING.md), [autorização por quota](docs/POC-005-OFFLINE-UNLOCK-COORDINATOR.md) e [broker C++](native/windows_broker_poc/README.md).
+
+---
+
 
 ## Testar a identificacao facial pela webcam (novo)
 
