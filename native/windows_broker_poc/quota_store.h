@@ -15,6 +15,7 @@
 #include <cwchar>
 #include <cstring>
 #include <array>
+#include <vector>
 #include <cmath>
 #include <limits>
 
@@ -224,6 +225,38 @@ public:
         if(stmt) sqlite3_finalize(stmt);
         if(ok) ok=exec(db_, "COMMIT;");
         if(!ok) exec(db_, "ROLLBACK;");
+        return ok;
+    }
+
+    // Read-only internal retrieval for a broker-owned matcher; NOT IPC.
+    // Fail closed if the stored BLOB is malformed, or if more than the
+    // expected five rows exist. Untrusted clients never supply a SQL path.
+    bool read_templates(int child, std::vector<std::array<float,128>>* out) const {
+        if(!db_ || child<1 || child>3 || !out) return false;
+        out->clear();
+        sqlite3_stmt* statement=nullptr;
+        if(sqlite3_prepare_v2(db_,
+            "SELECT embedding FROM face_templates WHERE child_id=?1 ORDER BY template_id;",
+            -1,&statement,nullptr)!=SQLITE_OK) return false;
+        bool ok=sqlite3_bind_int(statement,1,child)==SQLITE_OK;
+        int step=SQLITE_DONE;
+        while(ok && (step=sqlite3_step(statement))==SQLITE_ROW) {
+            const void* bytes=sqlite3_column_blob(statement,0);
+            const int size=sqlite3_column_bytes(statement,0);
+            if(!bytes || size!=512 || out->size()>=5) { ok=false; break; }
+            std::array<float,128> vector={};
+            std::memcpy(vector.data(),bytes,sizeof(vector));
+            double norm2=0;
+            for(float value:vector) {
+                if(!std::isfinite(value)) { ok=false; break; }
+                norm2+=double(value)*double(value);
+            }
+            if(!std::isfinite(norm2) || norm2<=1e-12) ok=false;
+            if(ok) out->push_back(vector);
+        }
+        if(step!=SQLITE_DONE) ok=false;
+        sqlite3_finalize(statement);
+        if(!ok) out->clear();
         return ok;
     }
 
@@ -521,6 +554,12 @@ inline bool self_test() {
             !store.add_template(1,std::array<float,128>{}) &&
             store.count_templates(1,&count) && count==1 &&
             store.count_templates(2,&count) && count==1;
+        std::vector<std::array<float,128>> templates;
+        success=success && store.read_templates(1,&templates) &&
+            templates.size()==1 && templates[0][0]==1.0f &&
+            store.read_templates(2,&templates) &&
+            templates.size()==1 && templates[0][1]==1.0f &&
+            !store.read_templates(4,&templates);
         for(int i=0;i<4 && success;++i) success=store.add_template(1,first);
         success=success && !store.add_template(1,first) &&
             store.count_templates(1,&count) && count==5 &&
