@@ -14,6 +14,14 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Refuse privileged SCM experiments outside disposable GitHub VM
+        shell: pwsh
+        env:
+          FACEKIDS_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\Conferir-Ambiente-Isolado.ps1 -RequireGitHubHosted
+          if ($LASTEXITCODE -ne 0) { throw 'VM safety preflight did not pass' }
       - name: Compile broker using MSVC and WinSQLite
         shell: cmd
         run: |
