@@ -4,6 +4,58 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Fases 1 e 2 — progresso pós-P0-42 (20/10/2026)
+
+Pedido: concluir a Fase 1 e, sem solicitar nova autorização,
+iniciar automaticamente a Fase 2. NÃO declarar a Fase 1 validada
+fisicamente sem webcam, liveness real e prova de LogonUI em VM.
+
+### Fase 1: P0-43 a P0-47
+
+- **P0-43 PARCIAL:** protected_camera_worker.h inspeciona somente
+  dispositivos de video dentro do processo LocalSystem e recusa
+  falso worker vindo de uma conta sem privilégios. Ainda nao
+  captura frames confiaveis na sessao LogonUI.
+- **P0-44 HARDWARE PENDENTE:** scripts/Testar-Camera-WinL.ps1 existe,
+  mas a camera do computador familiar precisa de ensaio Win+L real.
+- **P0-45 SOFTWARE IMPLEMENTADO:** face_matcher.h lê embeddings
+  protegidos do SQLite e faz comparação 1:N com limites internos;
+  rostos desconhecidos não podem gerar autorização de login.
+- **P0-46 SOFTWARE IMPLEMENTADO:** face_consensus.h exige três
+  confirmações do mesmo candidato em 3s, com uma só face e mesma sessão.
+- **P0-47 DIAGNÓSTICO, NÃO LIVENESS:** liveness_challenge.py exercita
+  pedido aleatório de movimento lateral e retorno, rejeitando
+  imagem estática. Não resiste comprovadamente a foto móvel,
+  vídeo, replay ou deepfake. Testes Python run 39464342930 OK.
+
+### Fase 2: P0-48 a P0-51, iniciada em paralelo ao aceite físico
+
+- **P0-48 SOFTWARE IMPLEMENTADO:** face_quota_bridge.h junta
+  candidato protegido + WTS/SID da sessão + quota. A resposta
+  positiva significa apenas NEEDS_TRUSTED_CAMERA_AND_LIVENESS;
+  não fornece ticket ou desbloqueio.
+- **P0-49 SIMULADO:** facial_policy.h mantém rechecagem de quota e
+  expiração de 8s, apenas nos autotestes sem login real.
+- **P0-50 SIMULADO:** usage_meter.h contabiliza tempo monotônico
+  e quotas no banco; ativo apenas nos autotestes.
+- **P0-51 DRY-RUN:** lock_decision.h verifica sessão alvo, SID e
+  esgotamento de quota, mas em runtime sempre recusa bloquear.
+  Não existe chamada Win32 para bloquear usuários.
+
+### Próxima execução
+
+1. Confirmar resultados C++/SCM dos commits P0-43 a P0-51
+   (alguns workflows entraram na fila de GitHub Actions).
+2. Corrigir quaisquer falhas e trabalhar nas próximas peças
+   de integração, mantendo todos os caminhos de login fechados.
+3. Recolher resultado do script Win+L no PC físico voluntariamente;
+   provar captura protegida, cadastro consentido e liveness
+   real contra foto/video antes de dar Fase 1 como concluída.
+4. Nunca instalar Credential Provider no computador real; usar VM
+   com snapshot restaurável e preservar a branch main.
+
+---
+
 ## Ciclo de armazenamento biometrico e medicao — P0-36 a P0-42 (20/10/2026)
 
 - **P0-36:** esquema protegido no WinSQLite para ate cinco embeddings
