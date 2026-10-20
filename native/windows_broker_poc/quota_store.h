@@ -32,10 +32,12 @@ inline bool allowed_acl(const std::wstring& path, bool requireProtected) {
     if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
         return false; // prohibit junctions/symlinks in the trusted data path
     PACL acl = nullptr;
+    PSID owner = nullptr;
     PSECURITY_DESCRIPTOR descriptor = nullptr;
     DWORD err = GetNamedSecurityInfoW(
         const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION, nullptr, nullptr, &acl, nullptr, &descriptor);
+        DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION,
+        &owner, nullptr, &acl, nullptr, &descriptor);
     if (err != ERROR_SUCCESS || !descriptor) return false;
     BOOL present = FALSE, defaulted = FALSE;
     PACL current = nullptr;
@@ -49,10 +51,16 @@ inline bool allowed_acl(const std::wstring& path, bool requireProtected) {
     DWORD sysBytes = sizeof(sys), admBytes = sizeof(adm);
     valid = valid && CreateWellKnownSid(WinLocalSystemSid, nullptr, sys, &sysBytes)
         && CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adm, &admBytes);
+    // A child may create a folder with a seemingly safe DACL while
+    // retaining its OWNER privilege to rewrite that DACL later.
+    // Only SYSTEM or builtin Administrators may own protected storage.
+    valid = valid && owner && IsValidSid(owner) &&
+        (EqualSid(owner,sys) || EqualSid(owner,adm));
     bool systemFound = false, adminsFound = false;
     if (valid) {
         ACL_SIZE_INFORMATION info = {};
-        valid = GetAclInformation(acl, &info, sizeof(info), AclSizeInformation) != FALSE;
+        valid = GetAclInformation(acl, &info, sizeof(info), AclSizeInformation) != FALSE
+            && info.AceCount == 2;
         for (DWORD i = 0; valid && i < info.AceCount; ++i) {
             void* raw = nullptr;
             if (!GetAce(acl, i, &raw)) { valid = false; break; }
@@ -63,9 +71,18 @@ inline bool allowed_acl(const std::wstring& path, bool requireProtected) {
             }
             auto* allow = static_cast<ACCESS_ALLOWED_ACE*>(raw);
             PSID who = &allow->SidStart;
-            if (EqualSid(who, sys)) systemFound = true;
-            else if (EqualSid(who, adm)) adminsFound = true;
-            else valid = false;
+            // Reject read-only masks and duplicate ACEs for trusted SIDs.
+            if ((allow->Mask & FILE_ALL_ACCESS) != FILE_ALL_ACCESS) {
+                valid=false;
+            } else if (EqualSid(who, sys)) {
+                if (systemFound) valid=false;
+                systemFound = true;
+            } else if (EqualSid(who, adm)) {
+                if (adminsFound) valid=false;
+                adminsFound = true;
+            } else {
+                valid=false;
+            }
         }
     }
     LocalFree(descriptor);
