@@ -6,13 +6,11 @@
 #include <credentialprovider.h>
 #include <new>
 
-static HMODULE g_module = nullptr;
 static volatile LONG g_objects = 0;
 static volatile LONG g_locks = 0;
 
 class EmptyProvider final : public ICredentialProvider {
     volatile LONG refs_ = 1;
-    CREDENTIAL_PROVIDER_USAGE_SCENARIO scenario_ = CPUS_INVALID;
 public:
     EmptyProvider() { InterlockedIncrement(&g_objects); }
     ~EmptyProvider() { InterlockedDecrement(&g_objects); }
@@ -38,7 +36,6 @@ public:
     HRESULT STDMETHODCALLTYPE SetUsageScenario(
         CREDENTIAL_PROVIDER_USAGE_SCENARIO scenario, DWORD) override {
         if (scenario == CPUS_LOGON || scenario == CPUS_UNLOCK_WORKSTATION) {
-            scenario_ = scenario;
             return S_OK;
         }
         return E_NOTIMPL;
@@ -121,7 +118,7 @@ public:
 static const CLSID kClassId =
     {0xfac0d041, 0x3dd0, 0x4a8c, {0x9f,0x18,0x44,0x0c,0x44,0x33,0x0c,0x10}};
 
-extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, LPVOID* result) {
+extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, LPVOID* result) {
     if (!result) return E_POINTER;
     *result = nullptr;
     if (!IsEqualCLSID(clsid, kClassId)) return CLASS_E_CLASSNOTAVAILABLE;
@@ -131,12 +128,11 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, LPVOI
     factory->Release();
     return status;
 }
-extern "C" HRESULT __stdcall DllCanUnloadNow() {
+extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow() {
     return (g_objects == 0 && g_locks == 0) ? S_OK : S_FALSE;
 }
 BOOL APIENTRY DllMain(HMODULE module, DWORD why, LPVOID) {
     if (why == DLL_PROCESS_ATTACH) {
-        g_module = module;
         DisableThreadLibraryCalls(module);
     }
     return TRUE;
