@@ -57,6 +57,8 @@ jobs:
             Write-Host 'PASS: LocalSystem created SQLite quota database in ProgramData'
             & $exe --ping
             if ($LASTEXITCODE -ne 0) { throw "Privileged PING failed ($LASTEXITCODE)" }
+            & $exe --camera-status
+            if ($LASTEXITCODE -ne 0) { throw "Camera status from broker failed" }
             & $exe --precheck-as-admin
             if ($LASTEXITCODE -ne 0) { throw "Admin was not rejected ($LASTEXITCODE)" }
             Write-Host 'PASS: Windows SCM lifecycle and negative CP precheck'
