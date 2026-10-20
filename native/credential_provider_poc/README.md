@@ -52,3 +52,13 @@ IPC protegido e autenticação real pela conta compartilhada Filhos.
 
 Referência de arquitetura: WinFace (nyxri0f8/winface) e as APIs
 do Credential Provider da Microsoft; nenhum código foi copiado do WinFace.
+
+
+## P0-2.2 - Vinculacao ao SID Windows
+
+O provider agora possui selecao por SID configurado no registro HKLM. Sem
+configuracao, nao oferece tile. A verificacao no CI usa uma segunda DLL de
+teste com SID ficticio, que nao pode ser registrada no Windows real.
+
+Leia docs/POC-004-WINDOWS-SID-BINDING.md para detalhes e diagnostico
+local do SID da conta Filhos.
