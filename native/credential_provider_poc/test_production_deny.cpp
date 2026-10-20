@@ -7,6 +7,7 @@
 #include <credentialprovider.h>
 #include <objbase.h>
 #include <cstdio>
+#include <initializer_list>
 
 using GetFactory = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
 using CanUnload = HRESULT (STDAPICALLTYPE*)();
