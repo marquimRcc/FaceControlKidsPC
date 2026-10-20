@@ -1,0 +1,28 @@
+name: Windows SID diagnostic PowerShell syntax
+on:
+  push:
+    paths:
+      - 'scripts/Testar-Integracao-Windows.ps1'
+      - '.github/workflows/windows-sid-diagnostic.yml'
+  pull_request:
+    paths:
+      - 'scripts/Testar-Integracao-Windows.ps1'
+      - '.github/workflows/windows-sid-diagnostic.yml'
+jobs:
+  parse:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify PowerShell syntax without accessing real users
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/Testar-Integracao-Windows.ps1').Path,
+            [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'PASS: Windows SID diagnostics PowerShell syntax'
