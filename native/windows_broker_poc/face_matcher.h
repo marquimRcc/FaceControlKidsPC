@@ -95,7 +95,7 @@ inline bool self_test(facekids_quota::Store& db) {
     if(!db.erase_templates(3,&erased)||erased!=1) return false;
     const auto after=candidate(db,a);
     if(after.status!=Status::CandidateOnly||after.child_id!=1) return false;
-    if(candidate(db,x).status!=Status::Unknown) return false;
+    if(candidate(db,x).status!=Status::Ambiguous) return false;
     return true;
 }
 } // namespace facekids_matcher

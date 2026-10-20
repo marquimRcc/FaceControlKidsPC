@@ -14,6 +14,7 @@
 #include "quota_gate.h"
 #include "facial_policy.h"
 #include "usage_meter.h"
+#include "face_matcher.h"
 #include "camera_capability.h"
 #include "camera_frame_probe.h"
 #include "service_identity.h"
@@ -543,6 +544,23 @@ static bool facial_policy_self_test() {
     return passed;
 }
 
+static bool matcher_self_test() {
+    wchar_t temporary[MAX_PATH]={},unique[MAX_PATH]={};
+    if(!GetTempPathW(MAX_PATH,temporary) ||
+       !GetTempFileNameW(temporary,L"FMC",0,unique) ||
+       !DeleteFileW(unique)) return false;
+    const std::wstring root(unique);
+    if(!facekids_quota::make_secure_directory(root)) return false;
+    bool ok=false;
+    {
+        facekids_quota::Store quota;
+        ok=quota.open(root) && facekids_matcher::self_test(quota);
+    }
+    DeleteFileW((root+L"\\quota.sqlite3").c_str());
+    RemoveDirectoryW(root.c_str());
+    return ok;
+}
+
 static bool usage_meter_self_test() {
     // Independent temporary ACL-protected SQLite DB; no live child session
     // or WTS control, Windows login, and no installed SCM changes.
@@ -631,6 +649,7 @@ int wmain(int argc, wchar_t** argv) {
             !facekids_camera::self_test() ||
             !facekids_frame::self_test() ||
             !usage_meter_self_test() ||
+            !matcher_self_test() ||
             !facekids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
