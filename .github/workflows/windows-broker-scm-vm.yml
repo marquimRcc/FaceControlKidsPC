@@ -101,6 +101,41 @@ jobs:
             & $exe --precheck-as-admin
             if ($LASTEXITCODE -ne 0) { throw "Admin was not rejected ($LASTEXITCODE)" }
             Write-Host 'PASS: Windows SCM lifecycle and negative CP precheck'
+            Write-Host 'Testing recoverability after simulated corrupted quota DB'
+            # Intentionally exercise corruption ONLY on this disposable runner.
+            & sc.exe stop $name | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to stop test service' }
+            (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+            $originalBytes = [System.IO.File]::ReadAllBytes($db)
+            if ($originalBytes.Length -lt 100) { throw 'Unexpectedly short SQLite database' }
+            $originalHash = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash
+            [System.IO.File]::WriteAllBytes($db, [Text.Encoding]::ASCII.GetBytes('INVALID_FACEKIDS_SQLITE_TEST_ONLY'))
+            try {
+              $refused = $false
+              try { Start-Service -Name $name -ErrorAction Stop } catch { $refused = $true }
+              Start-Sleep -Seconds 1
+              $status = (Get-Service -Name $name -ErrorAction Stop).Status
+              if ($status -ne 'Stopped') {
+                throw "FAIL: broker accepted a corrupted SQLite ledger ($status)"
+              }
+              Write-Host 'PASS: corrupted SQLite prevents SCM service from running'
+            } finally {
+              if ((Get-Service -Name $name -ErrorAction Stop).Status -ne 'Stopped') {
+                & sc.exe stop $name | Out-Host
+                (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+              }
+              # Restore the original bytes exactly; never reset lost quotas.
+              [System.IO.File]::WriteAllBytes($db, $originalBytes)
+            }
+            if ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash -ne $originalHash) {
+              throw 'Database restoration hash mismatch'
+            }
+            Start-Service -Name $name -ErrorAction Stop
+            (Get-Service -Name $name).WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+            & $exe --ping
+            if ($LASTEXITCODE -ne 0) { throw "Recovered broker PING failed ($LASTEXITCODE)" }
+            Write-Host 'PASS: original quotas restored byte-for-byte and service recovered'
+
           } finally {
             $service = Get-Service -Name $name -ErrorAction SilentlyContinue
             if ($service) {
