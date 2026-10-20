@@ -12,6 +12,7 @@
 #include "session_guard.h"
 #include "quota_store.h"
 #include "quota_gate.h"
+#include "facial_policy.h"
 #include "ipc_contract.h"
 #include <vector>
 #include <string>
@@ -300,6 +301,25 @@ static int negative_precheck_client() {
     return 0;
 }
 
+static bool facial_policy_self_test() {
+    // Isolated ACL-protected SQLite DB with three fresh child quotas;
+    // tests never write to ProgramData or create a real credential.
+    wchar_t temporary[MAX_PATH]={}, unique[MAX_PATH]={};
+    if (!GetTempPathW(MAX_PATH, temporary) ||
+        !GetTempFileNameW(temporary, L"FPL", 0, unique) ||
+        !DeleteFileW(unique)) return false;
+    const std::wstring root(unique);
+    if (!facekids_quota::make_secure_directory(root)) return false;
+    bool passed=false;
+    {
+        facekids_quota::Store database;
+        passed=database.open(root) && facekids_face::self_test(database);
+    }
+    DeleteFileW((root + L"\\quota.sqlite3").c_str());
+    RemoveDirectoryW(root.c_str());
+    return passed;
+}
+
 static bool quota_gate_self_test() {
     wchar_t temporary[MAX_PATH] = {};
     wchar_t unique[MAX_PATH] = {};
@@ -331,8 +351,8 @@ int wmain(int argc, wchar_t** argv) {
         if (sd) LocalFree(sd);
         if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
             !facekids_quota::self_test() || !quota_gate_self_test() ||
-            !facekids_ipc::self_test()) return 3;
-        std::puts("PASS: SCM, restricted pipe, trusted session guard and SQLite quota persistence");
+            !facekids_ipc::self_test() || !facial_policy_self_test()) return 3;
+        std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
