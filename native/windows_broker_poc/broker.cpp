@@ -278,6 +278,46 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     g_stop = nullptr;
 }
 
+// Simulate a standard child account without creating Windows users:
+// disable Administrators group membership and privileges in a restricted
+// OS-issued token, then verify the server DACL rejects the connection.
+static int restricted_token_pipe_client() {
+    if (!WaitNamedPipeW(kPipe, 5000)) return 4;
+    HANDLE token=nullptr, reduced=nullptr;
+    BYTE administratorsSid[SECURITY_MAX_SID_SIZE]={};
+    DWORD bytes=sizeof(administratorsSid);
+    if (!CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr,
+                            administratorsSid, &bytes) ||
+        !OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE|TOKEN_QUERY, &token)) {
+        if (token) CloseHandle(token);
+        return 5;
+    }
+    SID_AND_ATTRIBUTES disabled={administratorsSid,0};
+    const bool created=CreateRestrictedToken(token, DISABLE_MAX_PRIVILEGE,
+        1, &disabled, 0, nullptr, 0, nullptr, &reduced) != FALSE;
+    CloseHandle(token);
+    if (!created || !reduced) {
+        if(reduced) CloseHandle(reduced);
+        return 6;
+    }
+    if (!ImpersonateLoggedOnUser(reduced)) {
+        CloseHandle(reduced);
+        return 7;
+    }
+    HANDLE pipe=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
+        OPEN_EXISTING, SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
+    DWORD error=pipe==INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
+    if (pipe!=INVALID_HANDLE_VALUE) CloseHandle(pipe);
+    const bool reverted=RevertToSelf()!=FALSE;
+    CloseHandle(reduced);
+    if (!reverted || error!=ERROR_ACCESS_DENIED) {
+        std::printf("FAIL: restricted token had unexpected pipe access (%lu)\n",error);
+        return 8;
+    }
+    std::puts("PASS: restricted non-admin Windows token denied by named-pipe ACL");
+    return 0;
+}
+
 static int ping_client() {
     if (!WaitNamedPipeW(kPipe, 5000)) {
         std::printf("FAIL: diagnostic pipe not available (%lu)\n", GetLastError());
@@ -445,7 +485,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
@@ -493,6 +533,7 @@ int wmain(int argc, wchar_t** argv) {
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
+    if (std::wcscmp(argv[1], L"--restricted-token-test") == 0) return restricted_token_pipe_client();
     if (std::wcscmp(argv[1], L"--camera-status") == 0) return camera_status_client();
     if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
     if (std::wcscmp(argv[1], L"--malformed-request") == 0) return malformed_request_client();
