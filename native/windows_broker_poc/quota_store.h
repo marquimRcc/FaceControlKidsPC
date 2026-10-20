@@ -370,6 +370,24 @@ inline bool reject_permissive_directory(const std::wstring& path) {
     return rejected;
 }
 
+// The right SIDs with only read access are not sufficient for a
+// writable ledger. Refuse a directory whose owner is privileged
+// but whose ACEs cannot support safe quota updates.
+inline bool reject_insufficient_acl(const std::wstring& path) {
+    PSECURITY_DESCRIPTOR sd=nullptr;
+    if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        L"D:P(A;OICI;GR;;;SY)(A;OICI;GR;;;BA)",
+        SDDL_REVISION_1,&sd,nullptr)) return false;
+    SECURITY_ATTRIBUTES attributes={sizeof(attributes),sd,FALSE};
+    const BOOL created=CreateDirectoryW(path.c_str(),&attributes);
+    LocalFree(sd);
+    if(!created) return false;
+    Store store;
+    bool denied=!allowed_acl(path,true) && !store.open(path);
+    RemoveDirectoryW(path.c_str());
+    return denied;
+}
+
 inline bool reject_permissive_database(const std::wstring& path) {
     if (!make_secure_directory(path)) return false;
     const std::wstring file = path + L"\\quota.sqlite3";
@@ -485,6 +503,7 @@ inline bool self_test() {
     }
     success = success && allowed_acl(folder, true) && allowed_acl(dbPath, false);
     success = success && reject_permissive_directory(folder + L"_loose");
+    success = success && reject_insufficient_acl(folder + L"_readonly");
     success = success && reject_permissive_database(folder + L"_unsafe_db");
     success = success && reject_unreadable_sqlite(folder + L"_invalid_db");
     DeleteFileW(dbPath.c_str());
