@@ -11,6 +11,7 @@
 #include "wts_diagnostic.h"
 #include "session_guard.h"
 #include "quota_store.h"
+#include "quota_gate.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -219,6 +220,24 @@ static int ping_client() {
     return 0;
 }
 
+static bool quota_gate_self_test() {
+    wchar_t temporary[MAX_PATH] = {};
+    wchar_t unique[MAX_PATH] = {};
+    if (!GetTempPathW(MAX_PATH, temporary) ||
+        !GetTempFileNameW(temporary, L"FQP", 0, unique) ||
+        !DeleteFileW(unique)) return false;
+    const std::wstring root(unique);
+    if (!facekids_quota::make_secure_directory(root)) return false;
+    bool passed = false;
+    {
+        facekids_quota::Store database;
+        passed = database.open(root) && facekids_gate::self_test(database);
+    }
+    DeleteFileW((root + L"\\quota.sqlite3").c_str());
+    RemoveDirectoryW(root.c_str());
+    return passed;
+}
+
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
         std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --sessions | --console-once | --ping | --service");
@@ -231,7 +250,7 @@ int wmain(int argc, wchar_t** argv) {
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
         if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
-            !facekids_quota::self_test()) return 3;
+            !facekids_quota::self_test() || !quota_gate_self_test()) return 3;
         std::puts("PASS: SCM, restricted pipe, trusted session guard and SQLite quota persistence");
         return 0;
     }
