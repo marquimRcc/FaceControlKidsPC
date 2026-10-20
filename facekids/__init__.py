@@ -1,2 +1,2 @@
-"""Controle parental facial local."""
-__version__ = "0.3.0"
+"""Controle parental facial local: protótipo de validação."""
+__version__ = "0.4.0"

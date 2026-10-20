@@ -1,4 +1,4 @@
-# FaceControlKidsPC — MVP 0.3
+# FaceControlKidsPC — MVP 0.4
 
 **Projeto original:** [marquimRcc/FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
 **Autor e mantenedor original:** Marcos Queiroz Gomes ([@marquimRcc](https://github.com/marquimRcc))  
@@ -125,3 +125,10 @@ No primeiro acesso crie seu PIN de 4–12 dígitos e guarde-o: esta versão aind
 **Atenção de segurança:** este painel deve ser executado na mesma conta onde o monitor opera (normalmente `Filhos`). O SQLite fica em `%LOCALAPPDATA%\FaceKids` desse usuário, não no seu perfil administrador. O PIN dificulta uso casual da interface, mas **não protege o banco contra alterações por alguém usando a conta Filhos**. Para impor restrições de verdade será necessário instalar um serviço com permissões adequadas. Também falta testar a webcam no Windows real.
 
 O workflow em `.github/workflows/tests.yml` executará os testes lógicos no Linux e Windows, sem câmera.
+
+
+## MVP 0.4 — Separação de permissões (fundação)
+
+O módulo **facekids/broker.py** foi adicionado com regras de acesso para os SIDs da conta administradora e da conta Filhos. Somente o papel de pai pode alterar limites, conceder bônus ou autorizar cadastro facial. O papel da criança pode enviar embeddings de rosto, mas o tempo é computado pelo relógio do Broker (não por segundos declarados pela criança). Testes adicionais foram adicionados em **tests/test_broker.py**.
+
+**Importante:** este módulo ainda não tem transporte seguro nem serviço Windows instalado. Ele só ficará isolado das contas quando implementarmos o IPC autenticado e o banco protegido em ProgramData. Não utilize a versão 0.4 para impor bloqueio ou para substituir um controle parental consolidado. Veja [Arquitetura do Serviço Windows](docs/SERVICO_WINDOWS.md).
