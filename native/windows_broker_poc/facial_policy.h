@@ -44,6 +44,12 @@ inline bool valid_observation(const WorkerObservation& e, ULONGLONG now_ms) {
 // No child-facing IPC operation can invoke these methods in the current
 // broker. Only a future protected in-process camera worker may do so.
 class InternalFacePolicy {
+    // Until a protected real camera/liveness pipeline exists, the regular
+    // service must fail closed. A dedicated synthetic test constructor is
+    // used ONLY by self_test and is not exposed through IPC.
+    bool synthetic_diagnostics_only_ = false;
+    explicit InternalFacePolicy(bool diagnostics) :
+        synthetic_diagnostics_only_(diagnostics) {}
     std::mutex lock_;
     int pending_child_ = 0;
     DWORD pending_session_ = 0;
@@ -55,6 +61,9 @@ class InternalFacePolicy {
     }
 public:
     InternalFacePolicy() = default;
+    static InternalFacePolicy for_synthetic_self_test() {
+        return InternalFacePolicy(true);
+    }
     InternalFacePolicy(const InternalFacePolicy&) = delete;
     InternalFacePolicy& operator=(const InternalFacePolicy&) = delete;
     void revoke() {
@@ -70,6 +79,10 @@ public:
         std::lock_guard<std::mutex> guard(lock_);
         // Unknown or switched faces cancel all prior candidates.
         clear();
+        // Service-runtime data cannot be attested yet. Never let a boolean
+        // origin/liveness label grant even a readiness decision in production.
+        if (!synthetic_diagnostics_only_)
+            return Decision::DeniedUntrustedOrigin;
         if (evidence.origin != EvidenceOrigin::ProtectedWorker)
             return Decision::DeniedUntrustedOrigin;
         if (now_ms < evidence.captured_tick_ms ||
@@ -118,7 +131,12 @@ inline bool self_test(facekids_quota::Store& quota) {
     facekids_guard::Snapshot os = {7, 7, Locked, child_sid, true};
     WorkerObservation face = {1, 7, 1, 3, true, true,
                               EvidenceOrigin::ProtectedWorker, 1000};
-    InternalFacePolicy policy;
+    InternalFacePolicy production;
+    if (production.observe(face, os, child_sid, quota, day, 1100)
+        != Decision::DeniedUntrustedOrigin) return false;
+    if (production.consume_pending(os, child_sid, quota, day, 1200)
+        != Decision::DeniedNoPending) return false;
+    InternalFacePolicy policy = InternalFacePolicy::for_synthetic_self_test();
     auto arm = [&](ULONGLONG now = 1100) {
         return policy.observe(face, os, child_sid, quota, day, now);
     };
