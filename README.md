@@ -1,6 +1,6 @@
-# FaceControlKidsPC — Windows Native Unlock PoC (branch experimental)
+# FaceControlKidsPC — MVP e Windows Native Unlock PoC
 
-> **Branch ativa:** `feature/windows-native-unlock-poc`. A `main` continua com o MVP anterior. O bloqueio/desbloqueio por rosto ainda **não está implementado**; a autenticação nativa nunca deve ser modificada enquanto os componentes estão em prova de conceito.
+> **Estado:** o repositório contém o MVP e os componentes experimentais da integração nativa Windows. A branch `feature/windows-native-unlock-poc` conserva o histórico dos experimentos. **O desbloqueio facial real ainda não está implementado.** Fazer merge do código na `main` **não instala serviços, não registra um Credential Provider e não altera senhas nem o login do computador.** Só executar diagnósticos explicitamente e testar uma futura integração ao LogonUI em VM descartável com snapshot e recuperação confirmada.
 
 ## Estado técnico — Windows (20/10/2026)
 
