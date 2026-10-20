@@ -147,7 +147,10 @@ static bool verify_tile(ICredentialProviderCredential* c) {
 }
 
 int wmain(int argc,wchar_t** argv) {
-    if (argc!=2) { fwprintf(stderr,L"Usage: FaceKidsProviderHost.exe path-to-DLL\n"); return 2; }
+    if (argc!=2 && !(argc==3 && wcscmp(argv[2],L"--precheck")==0)) {
+        fwprintf(stderr,L"Usage: FaceKidsProviderHost.exe path-to-DLL [--precheck]\n");
+        return 2;
+    }
     HRESULT init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if (FAILED(init)) return 3;
     HMODULE dll=LoadLibraryW(argv[1]);
@@ -157,7 +160,9 @@ int wmain(int argc,wchar_t** argv) {
     auto unload=reinterpret_cast<UnloadEntry>(GetProcAddress(dll,"DllCanUnloadNow"));
     auto setup=reinterpret_cast<HRESULT (STDAPICALLTYPE*)(PCWSTR)>(
         GetProcAddress(dll,"FaceKidsSetDiagnosticSidForHost"));
-    if (!make || !unload || !setup) result=5;
+    auto precheck=reinterpret_cast<HRESULT (STDAPICALLTYPE*)(DWORD,DWORD)>(
+        GetProcAddress(dll,"FaceKidsDiagnosticPrecheckForHost"));
+    if (!make || !unload || !setup || !precheck) result=5;
     else if (setup(L"S-1-5-21-101-202-303-1001")!=S_OK) result=15;
     else {
         IClassFactory* factory=nullptr;
@@ -206,6 +211,13 @@ int wmain(int argc,wchar_t** argv) {
             factory->Release();
         }
         if (unload()!=S_OK) result=14;
+    }
+    if (!result && argc==3) {
+        DWORD session=0;
+        if (!ProcessIdToSessionId(GetCurrentProcessId(),&session))
+            session=1;
+        // A regular admin token must never pass SYSTEM-only broker checks.
+        if (precheck(session ? session : 1, 1)!=S_OK) result=21;
     }
     FreeLibrary(dll);
     CoUninitialize();

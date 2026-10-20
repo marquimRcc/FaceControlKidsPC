@@ -9,6 +9,9 @@
 #include <cstring>
 #include <string>
 #include <sddl.h>
+#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+#include "precheck_client.h"
+#endif
 static volatile LONG objects=0, locks=0;
 
 static HRESULT clone_text(PCWSTR src, PWSTR* out) {
@@ -105,6 +108,14 @@ public:
 // Never enumerate a tile without matching the administratively provisioned SID.
 // The isolated COM test build can inject a fake SID, but never authenticates.
 #ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsDiagnosticPrecheckForHost(
+    DWORD session, DWORD child) {
+    if (!facekids_cp_client::self_test()) return E_FAIL;
+    // In an isolated COM host running as an administrator, PRECHECK must
+    // always be denied. The diagnostic DLL never calls GetSerialization.
+    return facekids_cp_client::request(session, child) ==
+        facekids_cp_client::Precheck::Denied ? S_OK : E_ACCESSDENIED;
+}
 static std::wstring g_host_test_sid;
 extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsSetDiagnosticSidForHost(PCWSTR sid) {
     if (!sid) return E_POINTER;
