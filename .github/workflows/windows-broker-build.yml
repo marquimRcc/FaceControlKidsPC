@@ -99,6 +99,22 @@ jobs:
           } finally {
             if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
           }
+      - name: Reject oversized binary IPC without privileged grants
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $server = Start-Process -FilePath $exe -ArgumentList '--console-once' -PassThru -NoNewWindow
+          try {
+            Start-Sleep -Milliseconds 600
+            & $exe --oversized-request
+            if ($LASTEXITCODE -ne 0) { throw "Oversized IPC regression: $LASTEXITCODE" }
+            if (-not $server.WaitForExit(12000)) { throw 'Oversized test hung broker' }
+            if ($server.ExitCode -ne 0) { throw "Broker failure ($($server.ExitCode))" }
+            Write-Host 'PASS: oversized IPC denied safely and broker terminated'
+          } finally {
+            if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
       - uses: actions/upload-artifact@v4
         if: success()
         with:
