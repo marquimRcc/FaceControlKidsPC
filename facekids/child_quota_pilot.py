@@ -40,7 +40,8 @@ class Reading:
 def provision_three_children(store) -> dict[int, str]:
     """Only fixed pseudonyms, never children's names or actual faces in Git."""
     existing = store.people()
-    if existing and {p[1] for p in existing} != set(CHILD_LABELS):
+    if existing and (not {p[1] for p in existing}.issubset(set(CHILD_LABELS))
+                     or len(existing) > len(CHILD_LABELS)):
         raise ValueError("Banco piloto contem pessoas inesperadas; nao alterar.")
     for name in CHILD_LABELS:
         if store.get_person(name) is None:

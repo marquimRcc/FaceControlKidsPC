@@ -16,3 +16,28 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      - name: Windows-only pilot launcher parse and three-child status smoke test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/Iniciar-Piloto-Filhos.ps1').Path,
+            [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "PowerShell pilot launcher parse failed"
+          }
+          $data = Join-Path $env:RUNNER_TEMP 'facekids-children-ci.sqlite3'
+          try {
+            $lines = @(python -m facekids.children_pilot --database $data status)
+            if ($LASTEXITCODE -ne 0) { throw 'Children CLI status failed' }
+            if (@($lines | Where-Object { $_ -match '^Crianca [123]: 0 amostras; 120 minutos restantes hoje.
+ }).Count -ne 3) {
+              throw "Unexpected pilot profiles: $($lines -join '; ')"
+            }
+          } finally {
+            Remove-Item -LiteralPath $data -Force -ErrorAction SilentlyContinue
+          }

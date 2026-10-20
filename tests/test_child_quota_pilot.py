@@ -34,6 +34,17 @@ class ChildQuotaPilotTests(unittest.TestCase):
         for p in self.store.people():
             self.assertEqual(p[2], LIMIT_MINUTES * 60)
 
+    def test_partial_profile_creation_can_recover(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Storage(Path(folder) / "partial.sqlite3")
+            try:
+                db.add_person(CHILD_LABELS[0], LIMIT_MINUTES)
+                mapping=provision_three_children(db)
+                self.assertEqual(len(mapping),3)
+                self.assertEqual(len(db.people()),3)
+            finally:
+                db.close()
+
     def test_count_after_three_confirmations_without_charge_during_detection(self):
         self.assertEqual(self.step(0, self.a).event, PilotEvent.WAIT)
         self.assertEqual(self.step(1, self.a).event, PilotEvent.WAIT)
