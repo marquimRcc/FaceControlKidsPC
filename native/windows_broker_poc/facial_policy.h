@@ -48,6 +48,9 @@ class InternalFacePolicy {
     // service must fail closed. A dedicated synthetic test constructor is
     // used ONLY by self_test and is not exposed through IPC.
     bool synthetic_diagnostics_only_ = false;
+    // Only this translation-unit self-test can construct a bypass-enabled
+    // policy. Runtime broker and IPC have NO method to enable it.
+    friend bool self_test(facekids_quota::Store& quota);
     explicit InternalFacePolicy(bool diagnostics) :
         synthetic_diagnostics_only_(diagnostics) {}
     std::mutex lock_;
@@ -61,9 +64,6 @@ class InternalFacePolicy {
     }
 public:
     InternalFacePolicy() = default;
-    static InternalFacePolicy for_synthetic_self_test() {
-        return InternalFacePolicy(true);
-    }
     InternalFacePolicy(const InternalFacePolicy&) = delete;
     InternalFacePolicy& operator=(const InternalFacePolicy&) = delete;
     void revoke() {
@@ -136,7 +136,7 @@ inline bool self_test(facekids_quota::Store& quota) {
         != Decision::DeniedUntrustedOrigin) return false;
     if (production.consume_pending(os, child_sid, quota, day, 1200)
         != Decision::DeniedNoPending) return false;
-    InternalFacePolicy policy = InternalFacePolicy::for_synthetic_self_test();
+    InternalFacePolicy policy(true); // allowed only by private friend
     auto arm = [&](ULONGLONG now = 1100) {
         return policy.observe(face, os, child_sid, quota, day, now);
     };
