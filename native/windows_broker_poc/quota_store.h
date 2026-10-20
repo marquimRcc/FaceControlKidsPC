@@ -182,6 +182,11 @@ public:
                        "template_id INTEGER PRIMARY KEY AUTOINCREMENT,"
                        "child_id INTEGER NOT NULL REFERENCES children(id),"
                        "embedding BLOB NOT NULL CHECK(length(embedding)=512));") ||
+            !exec(db_, "CREATE TABLE IF NOT EXISTS security_audit("
+                       "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                       "when_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                       "child_id INTEGER NOT NULL CHECK(child_id BETWEEN 1 AND 3),"
+                       "action TEXT NOT NULL CHECK(action='PARENT_ERASE_TEMPLATES'));") ||
             !exec(db_, "INSERT OR IGNORE INTO children(id,limit_seconds) VALUES"
                        "(1,7200),(2,7200),(3,7200);")) {
             close(); return false;
@@ -237,13 +242,47 @@ public:
 
     bool erase_templates(int child, int* erased) {
         if(!db_ || child<1 || child>3 || !erased) return false;
+        if(!exec(db_,"BEGIN IMMEDIATE;")) return false;
+        sqlite3_stmt* statement=nullptr;
+        int deleted=0;
+        bool ok=false;
+        do {
+            if(sqlite3_prepare_v2(db_,
+               "DELETE FROM face_templates WHERE child_id=?1;",
+               -1,&statement,nullptr)!=SQLITE_OK) break;
+            if(sqlite3_bind_int(statement,1,child)!=SQLITE_OK ||
+               sqlite3_step(statement)!=SQLITE_DONE) break;
+            deleted=sqlite3_changes(db_);
+            sqlite3_finalize(statement);
+            statement=nullptr;
+            if(sqlite3_prepare_v2(db_,
+               "INSERT INTO security_audit(child_id,action)"
+               " VALUES(?1,'PARENT_ERASE_TEMPLATES');",
+               -1,&statement,nullptr)!=SQLITE_OK) break;
+            if(sqlite3_bind_int(statement,1,child)!=SQLITE_OK ||
+               sqlite3_step(statement)!=SQLITE_DONE) break;
+            ok=true;
+        } while(false);
+        if(statement) sqlite3_finalize(statement);
+        if(ok) ok=exec(db_,"COMMIT;");
+        if(!ok) {
+            exec(db_,"ROLLBACK;");
+            return false;
+        }
+        *erased=deleted;
+        return true;
+    }
+
+    // Internal-only audit verifier: no biometric payload or identity is
+    // exposed on IPC; audit survives erasure and broker restart.
+    bool audit_count(int* number) const {
+        if(!db_ || !number) return false;
         sqlite3_stmt* statement=nullptr;
         if(sqlite3_prepare_v2(db_,
-           "DELETE FROM face_templates WHERE child_id=?1;",
-           -1,&statement,nullptr)!=SQLITE_OK) return false;
-        bool ok=sqlite3_bind_int(statement,1,child)==SQLITE_OK &&
-                sqlite3_step(statement)==SQLITE_DONE;
-        if(ok) *erased=sqlite3_changes(db_);
+            "SELECT COUNT(*) FROM security_audit;",
+            -1,&statement,nullptr)!=SQLITE_OK) return false;
+        const bool ok=sqlite3_step(statement)==SQLITE_ROW;
+        if(ok) *number=sqlite3_column_int(statement,0);
         sqlite3_finalize(statement);
         return ok;
     }
@@ -470,7 +509,7 @@ inline bool self_test() {
     // Synthetic embedding vectors: no child photos or actual biometrics.
     {
         Store store;
-        int count=-1, erased=-1;
+        int count=-1, erased=-1, audit=-1;
         std::array<float,128> first={}, sibling={}, invalid={};
         first[0]=1.0f;
         sibling[1]=1.0f;
@@ -486,6 +525,7 @@ inline bool self_test() {
         success=success && !store.add_template(1,first) &&
             store.count_templates(1,&count) && count==5 &&
             store.erase_templates(1,&erased) && erased==5 &&
+            store.audit_count(&audit) && audit==1 &&
             store.count_templates(1,&count) && count==0 &&
             store.count_templates(2,&count) && count==1 &&
             !store.count_templates(4,&count) &&
@@ -499,7 +539,8 @@ inline bool self_test() {
             reopened.remaining(1, today, &remain) && remain == 3600 &&
             reopened.remaining(2, today, &remain) && remain == 0 &&
             reopened.remaining(3, today, &remain) && remain == 3600 &&
-            reopened.count_templates(2, &count_verify) && count_verify == 1;
+            reopened.count_templates(2, &count_verify) && count_verify == 1 &&
+            reopened.audit_count(&count_verify) && count_verify == 1;
     }
     success = success && allowed_acl(folder, true) && allowed_acl(dbPath, false);
     success = success && reject_permissive_directory(folder + L"_loose");
