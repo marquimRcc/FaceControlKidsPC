@@ -96,3 +96,33 @@ O named pipe publico do PoC continua restrito a PING/PONG, sem quota
 nem senha.
 
 Leia docs/POC-008-WINDOWS-QUOTA-SQLITE.md para requisitos e pendencias.
+
+
+## P0-9 — Protocolo de precondicao CP -> broker
+
+O broker inclui ipc_contract.h com formato binario fixo de 16 bytes:
+versao 1, operacao PRECHECK, Session ID e ID de crianca (1, 2 ou 3).
+Nao existe campo de senha, SID, saldo ou rosto informado pelo cliente.
+
+- O pipe continua local, sem acesso para Everyone ou conta Filhos
+- A consulta PING funciona para SYSTEM ou administrador elevado
+- PRECHECK exige que o usuario do token do cliente seja exatamente
+  LocalSystem; pertencer apenas ao grupo Administradores nao basta
+- O SID autorizado vem exclusivamente da configuracao HKLM administrada
+  pelo responsavel; sem configuracao valida a resposta e DENIED
+- O Windows Session ID e validado por WTS/token do SO no servidor
+- Os saldos sao consultados no SQLite protegido pelo servidor, usando
+  sua propria data local
+- Uma resposta PRECHECK_ONLY significa somente "pode avaliar o rosto",
+  NAO autoriza login, NAO fornece senha e NAO produz token de acesso
+- Todos os dados inconsistentes, mensagens truncadas ou clientes
+  nao autorizados produzem DENIED
+
+O GitHub Actions verifica parsing do protocolo e executa o cliente
+--precheck-as-admin: deve receber DENIED e finalizar sem login real.
+A comunicacao ainda e demonstrativa: o Credential Provider atual
+NAO envia consultas e NAO autentica o usuario Windows.
+
+Antes de usar a interface com autorizacao real, precisamos distinguir
+processos LogonUI de outros programas SYSTEM, integrar liveness e
+preparar VM com snapshot, instalacao/rollback e credenciais protegidas.

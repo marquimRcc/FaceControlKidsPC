@@ -41,6 +41,21 @@ jobs:
           } finally {
             if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
           }
+      - name: Reject precheck from administrator (never issue credential)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $server = Start-Process -FilePath $exe -ArgumentList '--console-once' -PassThru -NoNewWindow
+          try {
+            Start-Sleep -Milliseconds 600
+            & $exe --precheck-as-admin
+            if ($LASTEXITCODE -ne 0) { throw "Admin precheck was not denied cleanly: $LASTEXITCODE" }
+            if (-not $server.WaitForExit(12000)) { throw 'One-shot pipe did not exit' }
+            if ($server.ExitCode -ne 0) { throw "One-shot server failed: $($server.ExitCode)" }
+          } finally {
+            if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
       - uses: actions/upload-artifact@v4
         if: success()
         with:
