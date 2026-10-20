@@ -12,6 +12,9 @@
 #include "session_guard.h"
 #include "quota_store.h"
 #include "quota_gate.h"
+#include "ipc_contract.h"
+#include <vector>
+#include <string>
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -51,25 +54,57 @@ static bool security_descriptor(PSECURITY_DESCRIPTOR* sd) {
         kAcl, SDDL_REVISION_1, sd, nullptr) != FALSE;
 }
 
-// The pipe DACL limits connect to SYSTEM or an *elevated* administrator.
-// Token check after impersonation is defense in depth, never caller-provided.
-static bool trusted_pipe_client(HANDLE pipe) {
-    if (!ImpersonateNamedPipeClient(pipe)) return false;
-    BYTE adminSid[SECURITY_MAX_SID_SIZE] = {};
-    BYTE systemSid[SECURITY_MAX_SID_SIZE] = {};
-    DWORD adminBytes = sizeof(adminSid), systemBytes = sizeof(systemSid);
-    BOOL admin = FALSE, system = FALSE;
-    bool ok = CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr,
-                                 adminSid, &adminBytes) &&
-              CreateWellKnownSid(WinLocalSystemSid, nullptr,
-                                 systemSid, &systemBytes);
-    if (ok) {
-        // nullptr checks the current thread's impersonated client identity.
-        if (!CheckTokenMembership(nullptr, adminSid, &admin)) ok = false;
-        if (!CheckTokenMembership(nullptr, systemSid, &system)) ok = false;
+// The pipe DACL limits connects to SYSTEM or elevated administrators,
+// but only an exact LocalSystem token may perform a PRECHECK.
+// Membership in Administrators alone NEVER authorizes the precheck.
+enum class CallerRole { None, Administrator, LocalSystem };
+static CallerRole authenticated_pipe_client(HANDLE pipe) {
+    if (!ImpersonateNamedPipeClient(pipe)) return CallerRole::None;
+    CallerRole result = CallerRole::None;
+    HANDLE token = nullptr;
+    if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &token)) {
+        BYTE systemSid[SECURITY_MAX_SID_SIZE] = {};
+        BYTE adminSid[SECURITY_MAX_SID_SIZE] = {};
+        DWORD systemBytes=sizeof(systemSid), adminBytes=sizeof(adminSid);
+        DWORD required=0;
+        GetTokenInformation(token, TokenUser, nullptr, 0, &required);
+        std::vector<BYTE> buffer(required);
+        const bool valid = required >= sizeof(TOKEN_USER) &&
+            GetTokenInformation(token, TokenUser, buffer.data(), required, &required) &&
+            CreateWellKnownSid(WinLocalSystemSid, nullptr, systemSid, &systemBytes) &&
+            CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adminSid, &adminBytes);
+        if (valid) {
+            const auto* user=reinterpret_cast<const TOKEN_USER*>(buffer.data());
+            if (user->User.Sid && EqualSid(user->User.Sid, systemSid)) {
+                result=CallerRole::LocalSystem;
+            } else {
+                BOOL enabled=FALSE;
+                if (CheckTokenMembership(token, adminSid, &enabled) && enabled)
+                    result=CallerRole::Administrator;
+            }
+        }
+        CloseHandle(token);
     }
-    if (!RevertToSelf()) return false;
-    return ok && (admin || system);
+    if (!RevertToSelf()) return CallerRole::None;
+    return result;
+}
+
+static std::wstring configured_target_sid() {
+    wchar_t sid[256]={};
+    DWORD bytes=sizeof(sid);
+    LONG status=RegGetValueW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\FaceControlKidsPC\\CredentialProvider",
+        L"TargetUserSid", RRF_RT_REG_SZ, nullptr, sid, &bytes);
+    if (status!=ERROR_SUCCESS) return {};
+    const std::wstring result(sid);
+    return facekids_guard::valid_local_account_sid(result) ? result : std::wstring{};
+}
+
+static void local_service_day(char (&day)[11]) {
+    SYSTEMTIME now={};
+    GetLocalTime(&now);
+    sprintf_s(day, sizeof(day), "%04u-%02u-%02u",
+              now.wYear, now.wMonth, now.wDay);
 }
 
 static bool finish_pending(HANDLE pipe, OVERLAPPED* ov, DWORD timeout, DWORD* transferred) {
@@ -117,7 +152,8 @@ static bool transfer(HANDLE pipe, bool read, void* buffer, DWORD size, DWORD* by
     return success;
 }
 
-static bool run_pipe(bool oneShot) {
+static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
+                     const std::wstring& target_sid = L"") {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!security_descriptor(&sd)) {
         g_error = GetLastError();
@@ -143,11 +179,29 @@ static bool run_pipe(bool oneShot) {
             char request[32] = {};
             DWORD length = 0;
             if (transfer(pipe, true, request, sizeof(request), &length)) {
-                const bool privileged = trusted_pipe_client(pipe);
-                // Strict, bounded protocol: not JSON, no credentials/tokens.
-                const bool ping = (length == 4 && std::memcmp(request, "PING", 4) == 0);
-                const char* answer = privileged && ping ? "PONG" : "DENIED";
-                DWORD written = 0;
+                const CallerRole role = authenticated_pipe_client(pipe);
+                const bool ping = length == 4 && std::memcmp(request, "PING", 4) == 0;
+                const char* answer="DENIED";
+                if (ping && role != CallerRole::None) {
+                    answer="PONG";
+                } else {
+                    facekids_ipc::Request parsed={};
+                    const bool valid=facekids_ipc::parse(
+                        request, length, &parsed)==facekids_ipc::ParseResult::Valid;
+                    // Precheck is protected by the SYSTEM *user token*,
+                    // not by an untrusted SID/identity supplied over IPC.
+                    if (valid && role == CallerRole::LocalSystem &&
+                        quotas && !target_sid.empty()) {
+                        char day[11]={};
+                        local_service_day(day);
+                        auto gate=facekids_gate::check_live_wts(
+                            parsed.session_id, target_sid, *quotas,
+                            static_cast<int>(parsed.child_id), day);
+                        if (gate==facekids_gate::GatePrerequisite::ReadyForFacialPolicy)
+                            answer="PRECHECK_ONLY"; // NEVER a logon ticket
+                    }
+                }
+                DWORD written=0;
                 transfer(pipe, false, const_cast<char*>(answer),
                          static_cast<DWORD>(std::strlen(answer)), &written);
             }
@@ -187,7 +241,10 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
         return; // fail closed: no service pipe without a protected quota DB
     }
     report(SERVICE_RUNNING);
-    const bool ok = run_pipe(false);
+    const std::wstring sid = configured_target_sid();
+    // No target SID: diagnostic health PING remains possible, all
+    // PRECHECK requests are denied, including those from SYSTEM.
+    const bool ok = run_pipe(false, &quotas, sid);
     report(SERVICE_STOPPED, ok ? ERROR_SUCCESS : (g_error ? g_error : ERROR_GEN_FAILURE));
     CloseHandle(g_stop);
     g_stop = nullptr;
@@ -220,6 +277,29 @@ static int ping_client() {
     return 0;
 }
 
+static int negative_precheck_client() {
+    if (!WaitNamedPipeW(kPipe, 5000)) return 4;
+    HANDLE pipe=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
+        OPEN_EXISTING, SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
+    if (pipe==INVALID_HANDLE_VALUE) return 5;
+    DWORD session=0, written=0, read=0;
+    char response[32]={};
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    facekids_ipc::Request request={};
+    request.session_id=session ? session : 1;
+    request.child_id=1;
+    const bool sent=WriteFile(pipe,&request,sizeof(request),&written,nullptr) &&
+        written==sizeof(request);
+    const bool got=sent && ReadFile(pipe,response,sizeof(response),&read,nullptr);
+    CloseHandle(pipe);
+    if (!got || read!=6 || std::memcmp(response,"DENIED",6)!=0) {
+        std::puts("FAIL: precheck must reject interactive admin caller");
+        return 6;
+    }
+    std::puts("PASS: precheck denies interactive admin (no credentials)");
+    return 0;
+}
+
 static bool quota_gate_self_test() {
     wchar_t temporary[MAX_PATH] = {};
     wchar_t unique[MAX_PATH] = {};
@@ -240,7 +320,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --sessions | --console-once | --ping | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --sessions | --console-once | --ping | --precheck-as-admin | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--sessions") == 0)
@@ -250,11 +330,13 @@ int wmain(int argc, wchar_t** argv) {
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
         if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
-            !facekids_quota::self_test() || !quota_gate_self_test()) return 3;
+            !facekids_quota::self_test() || !quota_gate_self_test() ||
+            !facekids_ipc::self_test()) return 3;
         std::puts("PASS: SCM, restricted pipe, trusted session guard and SQLite quota persistence");
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
+    if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
     if (std::wcscmp(argv[1], L"--console-once") == 0) {
         g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stop) return 3;
