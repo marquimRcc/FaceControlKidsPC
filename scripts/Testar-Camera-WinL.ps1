@@ -5,7 +5,8 @@
 .NOTES
   Safe for the family PC: never installs services, credential providers,
   modifies registry or changes Windows passwords. Video stays in memory.
-  It does create a local Python venv and install dependencies if missing.
+  It may create a local Python venv and install dependencies if missing.
+  The program only measures frame availability in Win+L and cannot unlock.
 #>
 [CmdletBinding()]
 param(
@@ -18,8 +19,9 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $branch=(& git -C $root branch --show-current)
-if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'feature/windows-native-unlock-poc') {
-    throw "Branch incorreta para diagnostico seguro: $branch"
+$allowedBranches = @('main','feature/parent-face-pilot','feature/windows-native-unlock-poc')
+if ($LASTEXITCODE -ne 0 -or $branch.Trim() -notin $allowedBranches) {
+    throw "Branch nao validada para diagnostico Win+L: $branch"
 }
 $python=Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) {
@@ -47,6 +49,8 @@ try {
     Write-Host 'Nenhuma imagem, foto, modelo facial ou video sera salvo.'
     & $python -m facekids.hardware_camera_probe --duration $Duration --camera-index $CameraIndex
     if ($LASTEXITCODE -ne 0) { throw "Diagnostico encerrado com codigo $LASTEXITCODE." }
+    Write-Host 'IMPORTANTE: apenas FRAMES_DURING_WIN_L_PRELIMINARY_ONLY evidencia frames no bloqueio.' -ForegroundColor Yellow
+    Write-Host 'Nem esse resultado prova acesso confiavel ao LogonUI ou desbloqueio facial.' -ForegroundColor Yellow
 } finally {
     Pop-Location
 }

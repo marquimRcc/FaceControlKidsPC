@@ -41,3 +41,26 @@ Separar em duas provas distintas:
 Nao ativar auto-unlock por proximidade enquanto falta confianca:
 um sensor de presenca ou foto nao identifica uma pessoa. A conta
 \`Filhos\` e as quotas permanecem independentes do piloto adulto.
+
+
+## Teste pratico recomendado com a XWF-1080P, na conta MarcosMiniPC
+
+Confirmado no Windows 11 Pro build 26300: configuracoes Hello dizem
+"nao foi possivel encontrar uma camera compativel"; PnP mostra
+Camera XWF-1080P sem dispositivos nas classes Biometric ou Sensor.
+Isso bloqueia a rota atual Windows Hello nativa, embora nao impeça
+provas de conceito de captura de frames em Win+L.
+
+Apos atualizar a branch \`feature/parent-face-pilot\`, executar
+\`scripts/Testar-Camera-WinL.ps1 -Duration 90\`. Pressionar Win+L
+quando solicitado, aguardar 40-60 segundos e desbloquear com a
+senha/PIN normal para conferir o resumo no PowerShell.
+
+Resultado \`FRAMES_DURING_WIN_L_PRELIMINARY_ONLY\` significa apenas
+frames nao uniformes atribuídos a amostras WTS de sessao bloqueada.
+\`NO_USABLE_LOCKED_FRAMES\` e
+\`INCONCLUSIVE_NOT_ENOUGH_LOCKED_SAMPLES\` nao significam que
+o LoginUI foi testado ou que uma operacao de autenticacao ocorreu.
+
+Este teste nao instala servico nem Credential Provider, nao
+salva videos, nao altera senha e nao tenta desbloquear o Windows.
