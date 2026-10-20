@@ -20,6 +20,7 @@
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfreadwrite.lib")
 #pragma comment(lib, "mfuuid.lib")
+#pragma comment(lib, "mf.lib")
 #pragma comment(lib, "wtsapi32.lib")
 
 template<class T>
