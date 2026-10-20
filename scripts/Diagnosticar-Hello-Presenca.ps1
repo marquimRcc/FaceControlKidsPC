@@ -66,7 +66,7 @@ if ($names.Count -eq 0) {
     Write-Host 'Nao ha camera explicitamente rotulada IR na lista.' -ForegroundColor Yellow
     Write-Host 'Uma camera RGB comum nao basta para login facial Windows Hello.'
 }
-if (@($present['Sensor']).Count -gt 0) {
+if ($present.ContainsKey('Sensor') -and $present['Sensor'].Count -gt 0) {
     Write-Host 'Dispositivos na classe Sensor presentes; isso NAO comprova sensor de presenca.'
 } else {
     Write-Host 'Nenhum sensor PnP da classe Sensor; wake-on-approach pode nao estar disponivel.'
