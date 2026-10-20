@@ -278,6 +278,51 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     g_stop = nullptr;
 }
 
+// Real ACL regression against the file created by the LocalSystem
+// service on an EPHEMERAL Windows test runner. No child accounts created.
+static int restricted_token_database_client() {
+    const std::wstring db=facekids_quota::program_data_root()+L"\\quota.sqlite3";
+    if (GetFileAttributesW(db.c_str())==INVALID_FILE_ATTRIBUTES) {
+        std::puts("FAIL: protected quota DB not present");
+        return 4;
+    }
+    HANDLE token=nullptr, reduced=nullptr;
+    BYTE administratorsSid[SECURITY_MAX_SID_SIZE]={};
+    DWORD bytes=sizeof(administratorsSid);
+    if (!CreateWellKnownSid(WinBuiltinAdministratorsSid,nullptr,
+                            administratorsSid,&bytes) ||
+        !OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_DUPLICATE|TOKEN_QUERY,&token)) {
+        if(token) CloseHandle(token);
+        return 5;
+    }
+    SID_AND_ATTRIBUTES disabled={administratorsSid,0};
+    bool ok=CreateRestrictedToken(token, DISABLE_MAX_PRIVILEGE,
+                                   1,&disabled,0,nullptr,0,nullptr,&reduced)!=FALSE;
+    CloseHandle(token);
+    if(!ok || !reduced) {
+        if(reduced) CloseHandle(reduced);
+        return 6;
+    }
+    if(!ImpersonateLoggedOnUser(reduced)) {
+        CloseHandle(reduced);
+        return 7;
+    }
+    HANDLE file=CreateFileW(db.c_str(),GENERIC_READ|GENERIC_WRITE,
+                            FILE_SHARE_READ|FILE_SHARE_WRITE,
+                            nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    const DWORD error=file==INVALID_HANDLE_VALUE?GetLastError():ERROR_SUCCESS;
+    if(file!=INVALID_HANDLE_VALUE) CloseHandle(file);
+    const bool reverted=RevertToSelf()!=FALSE;
+    CloseHandle(reduced);
+    if(!reverted || error!=ERROR_ACCESS_DENIED) {
+        std::printf("FAIL: restricted token had protected database access (%lu)\n",error);
+        return 8;
+    }
+    std::puts("PASS: restricted child-like token denied access to native face/quota DB");
+    return 0;
+}
+
 // Simulate a standard child account without creating Windows users:
 // disable Administrators group membership and privileges in a restricted
 // OS-issued token, then verify the server DACL rejects the connection.
@@ -485,7 +530,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --restricted-db-test | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
@@ -534,6 +579,7 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
     if (std::wcscmp(argv[1], L"--restricted-token-test") == 0) return restricted_token_pipe_client();
+    if (std::wcscmp(argv[1], L"--restricted-db-test") == 0) return restricted_token_database_client();
     if (std::wcscmp(argv[1], L"--camera-status") == 0) return camera_status_client();
     if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
     if (std::wcscmp(argv[1], L"--malformed-request") == 0) return malformed_request_client();
