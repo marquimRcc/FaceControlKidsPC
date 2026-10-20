@@ -38,19 +38,49 @@ class Storage:
             PRIMARY KEY(person_id, day),
             FOREIGN KEY(person_id) REFERENCES people(id));
         """)
+        self.db.executescript("""
+        CREATE TABLE IF NOT EXISTS daily_bonus (
+          person_id INTEGER NOT NULL, day TEXT NOT NULL,
+          seconds INTEGER NOT NULL DEFAULT 0 CHECK(seconds >= 0),
+          PRIMARY KEY(person_id, day),
+          FOREIGN KEY(person_id) REFERENCES people(id));
+        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        """)
         self.db.commit()
 
     def close(self):
         self.db.close()
 
     def add_person(self, name: str, limit_minutes: int) -> int:
-        if not name.strip() or limit_minutes <= 0:
+        if not name.strip() or len(name.strip()) > 80 or not 1 <= limit_minutes <= 1440:
             raise ValueError("Nome e limite de minutos devem ser positivos.")
         with self.db:
             cur = self.db.execute(
                 "INSERT INTO people(name, daily_limit_seconds) VALUES (?,?)",
                 (name.strip(), int(limit_minutes * 60)))
         return int(cur.lastrowid)
+
+    def set_daily_limit(self, person_id: int, minutes: int):
+        if not 1 <= minutes <= 1440:
+            raise ValueError("Limite permitido: 1 a 1440 minutos.")
+        with self.db:
+            cur = self.db.execute("UPDATE people SET daily_limit_seconds=? WHERE id=?",
+                                  (minutes * 60, person_id))
+            if cur.rowcount != 1: raise KeyError(person_id)
+
+    def add_bonus(self, person_id: int, minutes: int, day: Optional[str] = None):
+        if not 1 <= minutes <= 480: raise ValueError("Bônus permitido: 1 a 480 minutos.")
+        if self.db.execute("SELECT 1 FROM people WHERE id=?", (person_id,)).fetchone() is None:
+            raise KeyError(person_id)
+        with self.db:
+            self.db.execute("""
+                INSERT INTO daily_bonus(person_id, day, seconds) VALUES (?, ?, ?)
+                ON CONFLICT(person_id, day) DO UPDATE SET seconds=seconds+excluded.seconds
+            """, (person_id, day or date.today().isoformat(), minutes * 60))
+
+    def enrollment_count(self, person_id: int) -> int:
+        row=self.db.execute("SELECT COUNT(*) FROM embeddings WHERE person_id=?", (person_id,)).fetchone()
+        return int(row[0])
 
     def get_person(self, name: str):
         return self.db.execute("SELECT id,name,daily_limit_seconds FROM people WHERE name=?", (name,)).fetchone()
@@ -85,7 +115,23 @@ class Storage:
             """, (person_id,day,float(seconds)))
         return self.used(person_id,day)
 
+    def bonus(self, person_id: int, day: Optional[str] = None) -> int:
+        row=self.db.execute("SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
+                            (person_id, day or date.today().isoformat())).fetchone()
+        return int(row[0]) if row else 0
+
     def remaining(self, person_id: int, day: Optional[str] = None) -> float:
         row = self.db.execute("SELECT daily_limit_seconds FROM people WHERE id=?",(person_id,)).fetchone()
         if row is None: raise KeyError(person_id)
-        return max(0.0,float(row[0])-self.used(person_id,day))
+        return max(0.0,float(row[0])+self.bonus(person_id,day)-self.used(person_id,day))
+
+    def get_setting(self, key: str) -> str | None:
+        row=self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str):
+        with self.db:
+            self.db.execute("""
+              INSERT INTO settings(key,value) VALUES (?,?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,(key,value))
