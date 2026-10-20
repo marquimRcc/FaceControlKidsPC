@@ -4,6 +4,50 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Ciclo seguinte — P0-26 a P0-28 (20/10/2026)
+
+- **P0-26 — diagnostico de frames em memoria:** o broker C++ adicionou
+  camera_frame_probe.h e o CLI opt-in --frame-probe, que le um unico
+  frame via Media Foundation, produz somente uma metrica de uniformidade
+  e descarta os pixels. NAO e liveness nem reconhecimento. Nao funciona
+  como autenticador ou operacao do pipe. Compilacao/auto-teste aprovados
+  no Windows; CI sem camera fisica nao prova a captura real.
+  Evidencias CI: 39451223659 (broker), 39451223705 (SCM),
+  39451223655 (Credential Provider).
+- **P0-27 — privacidade na demonstracao:** operacao parent-only
+  remove_faces apaga os embeddings do perfil selecionado e cancela
+  cadastro pendente sem eliminar quota nem outros perfis. PRAGMA
+  secure_delete=ON reduz residuo, sem prometer exclusao fisica de SSD.
+  Evidencia CI: 39451448015 (Python Windows/Linux), aprovado.
+  A base da demonstracao continua editavel pelo proprio usuario:
+  NAO usa-la para autenticacao protegida.
+- **P0-28 — roteiro de teste real Win+L:** criado
+  facekids/hardware_camera_probe.py com contadores somente em memoria,
+  consulta WTS pela sessao de processo do Windows e saida que distingue
+  falta de amostras, camera sem frames e frames preliminares durante
+  bloqueio. Nao salva imagens, nao altera login.
+  Evidencia de CI Python: 39451750368 (validacao sintetica);
+  capturas da webcam real PENDENTES em equipamento fisico.
+
+### Prioridade na proxima execucao automatica
+
+1. Conferir conclusao do run 39451750368 (especialmente Windows),
+   corrigindo se necessario.
+2. Prosseguir P0-29: separar testes de liveness demonstrativos de
+   prova real anti-foto/video; impedir promocao de flag nao confiavel
+   em qualquer fluxo de autorizacao nativa.
+3. Inspecionar falhas do SCM/IPC e revisar limites/timeout/cancelamento
+   de diagnosticos, priorizando operacoes que nao bloqueiem LogonUI.
+4. P0-30: VM com snapshot, teste de recuperacao da conta administrativa
+   e apenas depois estudo de serializacao Windows; nunca no PC real.
+5. Revisar retenção/protecao dos embeddings e nao capturar dados de
+   menores no GitHub Actions.
+
+Leia primeiro este documento, compare HEAD e suites GitHub; faca
+varias mudancas testadas na mesma execucao quando possivel.
+
+---
+
 ## Ultima entrega — 20/10/2026
 
 Etapas tecnicas realizadas nesta rodada:
