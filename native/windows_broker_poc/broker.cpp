@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
+#include "wts_diagnostic.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -208,14 +209,16 @@ static int ping_client() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --console-once | --ping | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --sessions | --console-once | --ping | --service");
         return 2;
     }
+    if (std::wcscmp(argv[1], L"--sessions") == 0)
+        return facekids_wts::dump_local_sessions();
     if (std::wcscmp(argv[1], L"--self-test") == 0) {
         PSECURITY_DESCRIPTOR sd = nullptr;
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
-        if (!valid) return 3;
+        if (!valid || !facekids_wts::self_test()) return 3;
         std::puts("PASS: Windows SCM shell and protected SYSTEM/Administrators-only pipe ACL");
         return 0;
     }
