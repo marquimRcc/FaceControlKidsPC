@@ -16,6 +16,7 @@
 #include "usage_meter.h"
 #include "face_matcher.h"
 #include "face_quota_bridge.h"
+#include "face_consensus.h"
 #include "camera_capability.h"
 #include "camera_frame_probe.h"
 #include "service_identity.h"
@@ -669,6 +670,7 @@ int wmain(int argc, wchar_t** argv) {
             !usage_meter_self_test() ||
             !matcher_self_test() ||
             !face_quota_bridge_self_test() ||
+            !facekids_consensus::self_test() ||
             !facekids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
