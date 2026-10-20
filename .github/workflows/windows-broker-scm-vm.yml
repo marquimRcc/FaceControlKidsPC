@@ -102,6 +102,9 @@ jobs:
             }
             if (-not (Test-Path $db)) { throw "SQLite database missing from ProgramData" }
             Write-Host 'PASS: LocalSystem created SQLite quota database in ProgramData'
+            & $exe --restricted-db-test
+            if ($LASTEXITCODE -ne 0) { throw "Restricted Windows token could access protected quota/templates database" }
+            Write-Host 'PASS: restricted token cannot read/write biometric or quota storage'
             & $exe --ping
             if ($LASTEXITCODE -ne 0) { throw "Privileged PING failed ($LASTEXITCODE)" }
             & $exe --camera-status
