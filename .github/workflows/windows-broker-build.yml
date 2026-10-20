@@ -99,6 +99,25 @@ jobs:
           } finally {
             if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
           }
+      - name: Reject restricted non-administrator Windows token at pipe ACL
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $server = Start-Process -FilePath $exe -ArgumentList '--console-once' -PassThru -NoNewWindow
+          try {
+            Start-Sleep -Milliseconds 600
+            & $exe --restricted-token-test
+            if ($LASTEXITCODE -ne 0) { throw "Restricted Windows token was not denied: $LASTEXITCODE" }
+            # A denied connection does not consume the one-shot pipe.
+            & $exe --ping
+            if ($LASTEXITCODE -ne 0) { throw "Admin follow-up health check failed" }
+            if (-not $server.WaitForExit(12000)) { throw 'Broker remained waiting' }
+            if ($server.ExitCode -ne 0) { throw "Broker failed: $($server.ExitCode)" }
+            Write-Host 'PASS: restricted child-like token blocked; admin diagnostic works'
+          } finally {
+            if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
       - name: Reject oversized binary IPC without privileged grants
         shell: pwsh
         run: |
