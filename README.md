@@ -1,4 +1,4 @@
-# FaceControlKidsPC — MVP 0.1
+# FaceControlKidsPC — MVP 0.3
 
 **Projeto original:** [marquimRcc/FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
 **Autor e mantenedor original:** Marcos Queiroz Gomes ([@marquimRcc](https://github.com/marquimRcc))  
@@ -8,7 +8,7 @@ Este é um protótipo local de **controle de tempo por reconhecimento facial** p
 
 O reconhecimento usa **OpenCV YuNet + SFace**, com vetores faciais armazenados localmente em **SQLite**. Nenhuma imagem da webcam é transmitida pelo FaceControlKidsPC. O programa permite testar a lógica sem bloquear o computador; o bloqueio efetivo é opt-in (`--lock`).
 
-> **Importante:** esta versão é uma prova de conceito, não um controle parental resistente a manipulação. Ainda não há interface gráfica, instalador, serviço Windows protegido ou reconhecimento antisspoof. Existe consulta periódica WTS para identificar sessão bloqueada/desbloqueada, mas falta validação em Windows real (uma fotografia pode enganar a câmera). Não foi testada com webcam real neste ambiente. A futura versão Linux/Regata OS é planejada, não validada.
+> **Importante:** esta versão é uma prova de conceito, não um controle parental resistente a manipulação. Já existe painel gráfico experimental; ainda não há instalador nem serviço Windows protegido ou reconhecimento antisspoof. Existe consulta periódica WTS para identificar sessão bloqueada/desbloqueada, mas falta validação em Windows real (uma fotografia pode enganar a câmera). Não foi testada com webcam real neste ambiente. A futura versão Linux/Regata OS é planejada, não validada.
 
 ## Instalação no Windows
 
@@ -76,7 +76,7 @@ Execute os 12 testes automatizados (incluem bloqueio/desbloqueio, suspensão ló
 1. Validar reconhecimento dos três filhos no Windows, com diferentes condições de iluminação.
 2. Validar a detecção periódica WTS em Windows 10/11 real e adicionar eventos nativos de sessão/suspensão (no protótipo a consulta ocorre a cada intervalo).
 3. Proteger configuração e histórico em serviço com permissões administrativas; iniciar automaticamente na conta `Filhos`.
-4. Criar interface gráfica para administração parental e instalador.
+4. Aprimorar a interface gráfica e criar instalador.
 5. Validar o bloqueio do KDE/Regata OS, mantendo o reconhecimento e o SQLite comuns às plataformas.
 6. Avaliar detecção de falsificação facial (liveness), segurança de dados biométricos e testes de câmera.
 
@@ -106,3 +106,22 @@ Os dados biométricos de crianças nunca devem ser commitados; `.gitignore` excl
 - O banco SQLite continua **na pasta do usuário atual**. Na versão 0.2, para teste, cadastre os perfis e inicie o programa na **mesma conta Windows** (idealmente a conta `Filhos`). A administração separada e protegida ainda será desenvolvida.
 
 **Validação:** 12 testes de lógica e persistência executados em ambiente Linux; ainda pendente teste de webcam e consulta WTS em Windows real. **Não considere este MVP uma proteção parental definitiva.**
+
+
+## MVP 0.3 — Painel dos pais
+
+A interface Tkinter permite cadastrar filhos, registrar seus rostos, configurar limite diário, dar **+15 minutos apenas no dia atual**, visualizar saldos e iniciar/parar a simulação do reconhecimento. Ela exige um PIN local para acesso às opções. O banco de dados mantém todas as informações da versão anterior.
+
+### Executar no Windows
+
+Instale as dependências seguindo as instruções acima. Na **conta Windows Filhos**, abra `abrir-facekids.bat` com dois cliques ou use:
+
+```powershell
+.\.venv\Scripts\python.exe -m facekids.gui
+```
+
+No primeiro acesso crie seu PIN de 4–12 dígitos e guarde-o: esta versão ainda não possui recuperação de PIN na interface. Clique em **Baixar modelos**, cadastre três crianças, use **Cadastrar rosto** individualmente e depois **Iniciar simulação**. A opção gráfica não chama `--lock`, portanto nunca executa bloqueio real; esse modo ainda só existe na CLI para testes supervisionados.
+
+**Atenção de segurança:** este painel deve ser executado na mesma conta onde o monitor opera (normalmente `Filhos`). O SQLite fica em `%LOCALAPPDATA%\FaceKids` desse usuário, não no seu perfil administrador. O PIN dificulta uso casual da interface, mas **não protege o banco contra alterações por alguém usando a conta Filhos**. Para impor restrições de verdade será necessário instalar um serviço com permissões adequadas. Também falta testar a webcam no Windows real.
+
+O workflow em `.github/workflows/tests.yml` executará os testes lógicos no Linux e Windows, sem câmera.
