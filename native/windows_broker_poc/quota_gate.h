@@ -83,6 +83,29 @@ inline bool self_test(facekids_quota::Store& quota) {
     session.token_from_os = true;
     if (check(session, sid, quota, 0, day) != GatePrerequisite::QuotaUnavailable)
         return false;
+    // The next checks use child 3, which still has positive quota.
+    // No WTS transition may inherit a previous successful precheck.
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::ReadyForFacialPolicy)
+        return false;
+    session.state = facekids_wts::LockView::Inactive;
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
+        return false;
+    session.state = facekids_wts::LockView::Unknown;
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
+        return false;
+    session.state = Locked;
+    session.actual_id = 8; // session switched since face capture
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
+        return false;
+    session.actual_id = 7;
+    session.token_sid = admin; // other Windows identity
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
+        return false;
+    session.token_sid = sid;
+    if (check(session, sid, quota, 3, "2026-02-30") != GatePrerequisite::QuotaUnavailable)
+        return false;
+    if (check(session, sid, quota, 3, day) != GatePrerequisite::ReadyForFacialPolicy)
+        return false;
     return true;
 }
 
