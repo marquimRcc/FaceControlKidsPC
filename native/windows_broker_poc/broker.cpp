@@ -155,7 +155,8 @@ static bool transfer(HANDLE pipe, bool read, void* buffer, DWORD size, DWORD* by
 }
 
 static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
-                     const std::wstring& target_sid = L"") {
+                     const std::wstring& target_sid = L"",
+                     const facekids_camera::DeviceInventory* camera = nullptr) {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!security_descriptor(&sd)) {
         g_error = GetLastError();
@@ -183,9 +184,19 @@ static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
             if (transfer(pipe, true, request, sizeof(request), &length)) {
                 const CallerRole role = authenticated_pipe_client(pipe);
                 const bool ping = length == 4 && std::memcmp(request, "PING", 4) == 0;
+                const bool askCamera = length == 4 &&
+                    std::memcmp(request, "CAM?", 4) == 0;
                 const char* answer="DENIED";
                 if (ping && role != CallerRole::None) {
                     answer="PONG";
+                } else if (askCamera && role != CallerRole::None && camera) {
+                    switch (camera->capability) {
+                        case facekids_camera::Capability::NoCamera:
+                            answer="CAMERA_NONE"; break;
+                        case facekids_camera::Capability::EnumeratedOnly:
+                            answer="CAMERA_ENUMERATED"; break;
+                        default: answer="CAMERA_UNAVAILABLE"; break;
+                    }
                 } else {
                     facekids_ipc::Request parsed={};
                     const bool valid=facekids_ipc::parse(
@@ -242,11 +253,15 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
         g_stop = nullptr;
         return; // fail closed: no service pipe without a protected quota DB
     }
+    // Device enumeration is performed in the actual LocalSystem process.
+    // Presence is informational ONLY: it is NOT liveness, face identity
+    // or evidence valid for the internal facial authorization model.
+    const auto camera = facekids_camera::enumerate();
     report(SERVICE_RUNNING);
     const std::wstring sid = configured_target_sid();
     // No target SID: diagnostic health PING remains possible, all
     // PRECHECK requests are denied, including those from SYSTEM.
-    const bool ok = run_pipe(false, &quotas, sid);
+    const bool ok = run_pipe(false, &quotas, sid, &camera);
     report(SERVICE_STOPPED, ok ? ERROR_SUCCESS : (g_error ? g_error : ERROR_GEN_FAILURE));
     CloseHandle(g_stop);
     g_stop = nullptr;
@@ -276,6 +291,30 @@ static int ping_client() {
         return 6;
     }
     std::puts("PASS: protected named pipe replied PONG (no login/credentials)");
+    return 0;
+}
+
+static int camera_status_client() {
+    if (!WaitNamedPipeW(kPipe, 5000)) return 4;
+    HANDLE h=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
+        OPEN_EXISTING, SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
+    if (h==INVALID_HANDLE_VALUE) return 5;
+    DWORD written=0, received=0;
+    char buffer[32]={};
+    bool ok=WriteFile(h, "CAM?", 4, &written, nullptr) && written==4 &&
+        ReadFile(h, buffer, sizeof(buffer), &received, nullptr);
+    CloseHandle(h);
+    // Positive enumeration means hardware visible, NOT liveness.
+    const bool expected=ok && (
+        (received==11 && std::memcmp(buffer,"CAMERA_NONE",11)==0) ||
+        (received==17 && std::memcmp(buffer,"CAMERA_ENUMERATED",17)==0) ||
+        (received==18 && std::memcmp(buffer,"CAMERA_UNAVAILABLE",18)==0));
+    if (!expected) {
+        std::puts("FAIL: protected camera inventory query unavailable");
+        return 6;
+    }
+    std::printf("PASS: service-side camera capability = %.*s (no image/authentication)\\n",
+                static_cast<int>(received), buffer);
     return 0;
 }
 
@@ -341,7 +380,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --camera-capability | --sessions | --console-once | --ping | --precheck-as-admin | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--camera-capability") == 0) {
@@ -366,11 +405,13 @@ int wmain(int argc, wchar_t** argv) {
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
+    if (std::wcscmp(argv[1], L"--camera-status") == 0) return camera_status_client();
     if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
     if (std::wcscmp(argv[1], L"--console-once") == 0) {
         g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stop) return 3;
-        bool success = run_pipe(true);
+        const auto camera=facekids_camera::enumerate();
+        bool success = run_pipe(true, nullptr, L"", &camera);
         CloseHandle(g_stop);
         g_stop = nullptr;
         if (!success) {
