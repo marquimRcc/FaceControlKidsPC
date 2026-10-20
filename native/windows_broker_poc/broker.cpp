@@ -328,6 +328,32 @@ static int camera_status_client() {
     return 0;
 }
 
+// Exercise malformed protocol bytes across a real named-pipe connection.
+// The broker must return DENIED without accessing quota or Windows login.
+static int malformed_request_client() {
+    if (!WaitNamedPipeW(kPipe, 5000)) return 4;
+    HANDLE pipe=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
+                            OPEN_EXISTING,
+                            SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
+    if (pipe==INVALID_HANDLE_VALUE) return 5;
+    facekids_ipc::Request request={};
+    request.magic=0; // invalid even though the remaining fields are plausible
+    request.session_id=7;
+    request.child_id=1;
+    DWORD sent=0, received=0;
+    char response[32]={};
+    bool ok=WriteFile(pipe, &request, sizeof(request), &sent, nullptr)
+        && sent==sizeof(request)
+        && ReadFile(pipe, response, sizeof(response), &received, nullptr);
+    CloseHandle(pipe);
+    if (!ok || received!=6 || std::memcmp(response,"DENIED",6)!=0) {
+        std::puts("FAIL: malformed protocol was not explicitly denied");
+        return 6;
+    }
+    std::puts("PASS: malformed binary protocol denied across named pipe");
+    return 0;
+}
+
 static int negative_precheck_client() {
     if (!WaitNamedPipeW(kPipe, 5000)) return 4;
     HANDLE pipe=CreateFileW(kPipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
@@ -390,7 +416,7 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --malformed-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
@@ -427,6 +453,7 @@ int wmain(int argc, wchar_t** argv) {
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
     if (std::wcscmp(argv[1], L"--camera-status") == 0) return camera_status_client();
     if (std::wcscmp(argv[1], L"--precheck-as-admin") == 0) return negative_precheck_client();
+    if (std::wcscmp(argv[1], L"--malformed-request") == 0) return malformed_request_client();
     if (std::wcscmp(argv[1], L"--console-once") == 0) {
         g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stop) return 3;
