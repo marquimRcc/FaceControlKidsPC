@@ -1,5 +1,6 @@
 """Interface de linha de comando para validar o MVP antes de automatizar o bloqueio."""
 import argparse
+import os
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -22,10 +23,13 @@ def main():
     e.add_argument("name");e.add_argument("--camera",type=int,default=0);e.add_argument("--samples",type=int,default=20)
     m=sub.add_parser("monitor",help="Identificar e simular bloqueios")
     m.add_argument("--camera",type=int,default=0);m.add_argument("--interval",type=float,default=5)
-    m.add_argument("--lock",action="store_true",help="Habilitar bloqueio REAL do sistema")
+    m.add_argument("--lock",action="store_true",help="Habilitar bloqueio REAL do Windows")
+    m.add_argument("--monitored-user",default="Filhos",help="Conta Windows monitorada (padrão: Filhos)")
     sub.add_parser("status",help="Ver saldo diário")
     sub.add_parser("download-models",help="Baixar modelos do repositório do CrySence")
     args=p.parse_args()
+    if args.cmd == "monitor" and args.lock and os.name != "nt":
+        p.error("Bloqueio real disponível apenas no Windows 10/11 nesta versão")
     if args.cmd=="download-models":
         args.models.mkdir(parents=True,exist_ok=True)
         for name,url in MODEL_FILES.items():
@@ -43,7 +47,7 @@ def main():
         elif args.cmd=="enroll":
             enroll(store,args.name,args.models,args.camera,args.samples)
         elif args.cmd=="monitor":
-            monitor(store,args.models,args.camera,args.interval,args.lock)
+            monitor(store,args.models,args.camera,args.interval,args.lock,args.monitored_user)
         elif args.cmd=="status":
             for pid,name,limit in store.people():
                 print(f"{name}: {int(store.remaining(pid))//60} min restantes de {limit//60} min/dia")

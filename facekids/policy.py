@@ -8,6 +8,7 @@ class Action(str, Enum):
     ALLOW = "allow"
     LOCK_QUOTA = "lock_quota"
     LOCK_UNCERTAIN = "lock_uncertain"
+    SESSION_PAUSED = "session_paused"
 
 @dataclass(frozen=True)
 class Decision:
@@ -21,6 +22,17 @@ class Policy:
             raise ValueError("Configurações de política inválidas")
         self.confirm_frames = confirm_frames
         self.uncertain_grace_sec = uncertain_grace_sec
+        self._candidate = None
+        self._streak = 0
+        self._active = None
+        self._last_at = None
+        self._uncertain_since = None
+
+    def pause(self):
+        """Descarta a contagem pendente ao bloquear ou desconectar.
+
+        Após o desbloqueio, exige nova identificação facial consecutiva.
+        """
         self._candidate = None
         self._streak = 0
         self._active = None
@@ -64,3 +76,20 @@ class Policy:
         if charge >= remaining and charge > 0:
             return Decision(Action.LOCK_QUOTA,confirmed,charge)
         return Decision(Action.ALLOW,confirmed,charge)
+
+
+class SessionAwarePolicy:
+    """Controla o cronômetro apenas com a sessão ativa do sistema."""
+
+    def __init__(self, confirm_frames: int = 2, uncertain_grace_sec: float = 30):
+        self.face_policy = Policy(confirm_frames, uncertain_grace_sec)
+
+    def pause(self):
+        self.face_policy.pause()
+
+    def step(self, now: float, session_active: bool, recognized: int | None,
+             remaining_by_id: dict[int, float]) -> Decision:
+        if not session_active:
+            self.pause()
+            return Decision(Action.SESSION_PAUSED)
+        return self.face_policy.step(now, recognized, remaining_by_id)

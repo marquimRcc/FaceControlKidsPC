@@ -47,45 +47,92 @@ def enroll(store: Storage, name: str, model_dir: Path, camera=0, samples=20):
     print(f"\nCadastro encerrado: {saved} amostras (os embeddings numéricos foram salvos).")
 
 
-def monitor(store: Storage, model_dir: Path, camera=0, interval=5, enable_lock=False):
-    if interval<=0 or interval>15:
-        raise ValueError("Intervalo válido: até 15 s")
-    recognizer=Recognizer(model_dir)
-    samples=store.embeddings()
+def monitor(store: Storage, model_dir: Path, camera=0, interval=5, enable_lock=False, monitored_user="Filhos"):
+    """Pausa cronômetro/câmera na tela bloqueada e reidentifica após desbloqueio."""
+    from .policy import SessionAwarePolicy
+    from .session import SessionState, current_session_state
+    import cv2
+
+    if interval <= 0 or interval > 15:
+        raise ValueError("Intervalo válido: 0 < segundos <= 15")
+    if enable_lock:
+        if os.name != "nt":
+            raise RuntimeError("--lock só está habilitado no Windows 10/11, por enquanto")
+        import getpass
+        if getpass.getuser().casefold() != monitored_user.casefold():
+            raise RuntimeError(f"Bloqueio impedido: execute na conta '{monitored_user}' "
+                               "para não bloquear sua conta administrativa")
+    recognizer = Recognizer(model_dir)
+    samples = store.embeddings()
     if not samples:
         raise RuntimeError("Nenhum rosto cadastrado. Use primeiro o comando enroll.")
-    policy=Policy(confirm_frames=2,uncertain_grace_sec=30)
-    people={pid:(name,lim) for pid,name,lim in store.people()}
-    cap=open_camera(camera)
-    last_lock_at=float("-inf")
+    policy = SessionAwarePolicy(confirm_frames=2, uncertain_grace_sec=30)
+    people = {pid: (name, limit) for pid, name, limit in store.people()}
+    cap = None
+    last_lock_at = float("-inf")
+    prior_state = None
     print(f"Monitorando... bloqueio {'ATIVADO' if enable_lock else 'SIMULADO'} (Ctrl+C para sair).")
-    print("A janela de terminal deve permanecer aberta neste protótipo.")
+    print("A janela do terminal deve permanecer aberta neste protótipo.")
+    if os.name != "nt":
+        print("AVISO: no Linux, a integração com sessões ainda não foi validada; apenas simulação.")
     try:
         while True:
-            now=time.monotonic()
-            ok,frame=cap.read()
-            recognized=None
-            if ok:
-                faces=recognizer.faces(frame)
-                if len(faces)==1:
-                    recognized,_=recognizer.identify(recognizer.features(frame,faces[0]),samples)
-            remain={pid:store.remaining(pid) for pid in people}
-            decision=policy.step(now,recognized,remain)
-            if decision.person_id is not None and decision.seconds_to_charge>0:
-                store.charge(decision.person_id,decision.seconds_to_charge)
-            who=people[decision.person_id][0] if decision.person_id in people else "desconhecido/ausente"
-            balance=int(store.remaining(decision.person_id)) if decision.person_id in people else "—"
-            print(f"{time.strftime('%H:%M:%S')} | {decision.action.value:15} | {who:20} | saldo {balance}s")
-            if decision.action in (Action.LOCK_QUOTA,Action.LOCK_UNCERTAIN):
-                if now-last_lock_at>=15:
+            now = time.monotonic()
+            state = current_session_state()
+            if prior_state != state:
+                print(f"Sessão: {state.value}")
+                prior_state = state
+            if state is not SessionState.ACTIVE:
+                policy.step(now, False, None, {})
+                if cap is not None:
+                    cap.release()
+                    cap = None
+                time.sleep(interval)
+                continue
+
+            recognized = None
+            try:
+                if cap is None:
+                    cap = open_camera(camera)
+                ok, frame = cap.read()
+                if not ok:
+                    cap.release()
+                    cap = None
+                else:
+                    faces = recognizer.faces(frame)
+                    # Não atribuir consumo se houver duas pessoas no enquadramento.
+                    if len(faces) == 1:
+                        recognized, _ = recognizer.identify(
+                            recognizer.features(frame, faces[0]), samples)
+            except (OSError, RuntimeError, cv2.error) as error:
+                print(f"Webcam indisponível: {error}")
+                if cap is not None:
+                    cap.release()
+                    cap = None
+            remain = {pid: store.remaining(pid) for pid in people}
+            decision = policy.step(now, True, recognized, remain)
+            if decision.person_id is not None and decision.seconds_to_charge > 0:
+                store.charge(decision.person_id, decision.seconds_to_charge)
+            who = people[decision.person_id][0] if decision.person_id in people else "não identificado"
+            balance = int(store.remaining(decision.person_id)) if decision.person_id in people else "—"
+            print(f"{time.strftime('%H:%M:%S')} | {decision.action.value:16} | "
+                  f"{who:20} | saldo {balance}s")
+
+            if decision.action in (Action.LOCK_QUOTA, Action.LOCK_UNCERTAIN):
+                if now - last_lock_at >= 15:
                     if enable_lock:
-                        print("Solicitando bloqueio do sistema operacional...")
+                        print("Solicitando bloqueio do Windows...")
                         lock_current_session()
                     else:
                         print("[SIMULAÇÃO] Neste ponto a sessão seria bloqueada.")
-                    last_lock_at=now
-            time.sleep(max(0.0,interval-(time.monotonic()-now)))
+                    last_lock_at = now
+                    policy.pause()
+                    if cap is not None:
+                        cap.release()
+                        cap = None
+            time.sleep(max(0.0, interval - (time.monotonic() - now)))
     except KeyboardInterrupt:
         print("\nMonitoramento encerrado.")
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
