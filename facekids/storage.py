@@ -69,14 +69,22 @@ class Storage:
             if cur.rowcount != 1: raise KeyError(person_id)
 
     def add_bonus(self, person_id: int, minutes: int, day: Optional[str] = None):
-        if not 1 <= minutes <= 480: raise ValueError("Bônus permitido: 1 a 480 minutos.")
+        if type(minutes) is not int or not 1 <= minutes <= 480:
+            raise ValueError("Bônus permitido: 1 a 480 minutos.")
+        day = day or date.today().isoformat()
+        if (not isinstance(day, str) or len(day) != 10
+                or date.fromisoformat(day).isoformat() != day):
+            raise ValueError("Dia inválido; informe YYYY-MM-DD.")
         if self.db.execute("SELECT 1 FROM people WHERE id=?", (person_id,)).fetchone() is None:
             raise KeyError(person_id)
         with self.db:
-            self.db.execute("""
+            changed = self.db.execute("""
                 INSERT INTO daily_bonus(person_id, day, seconds) VALUES (?, ?, ?)
                 ON CONFLICT(person_id, day) DO UPDATE SET seconds=seconds+excluded.seconds
-            """, (person_id, day or date.today().isoformat(), minutes * 60))
+                WHERE daily_bonus.seconds <= 28800 - excluded.seconds
+            """, (person_id, day, minutes * 60)).rowcount
+            if changed != 1:
+                raise ValueError("O bônus acumulado não pode ultrapassar 480 minutos por dia.")
 
     def enrollment_count(self, person_id: int) -> int:
         row=self.db.execute("SELECT COUNT(*) FROM embeddings WHERE person_id=?", (person_id,)).fetchone()
