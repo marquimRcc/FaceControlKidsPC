@@ -49,6 +49,10 @@ try {
             throw 'Nao foi encontrado Python 3.11, 3.12 ou 3.13. Instale Python e tente novamente.'
         }
     }
+    & $python -c 'import sys; sys.exit(0 if (3,11) <= sys.version_info[:2] < (3,14) else 1)'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'O .venv existente tem Python incompativel; precisa ser 3.11 a 3.13.'
+    }
     & $python -c 'import cv2,numpy'
     if ($LASTEXITCODE -ne 0) {
         Write-Host 'Instalando OpenCV e numpy APENAS no ambiente virtual do projeto...'

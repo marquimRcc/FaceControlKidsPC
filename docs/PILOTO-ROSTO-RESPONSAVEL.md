@@ -41,3 +41,7 @@ for interrompida na etapa de validação.
 
 O reconhecimento ao vivo não é prova de resistência a fotos, replay
 ou deepfake; nunca usar essa saída para conceder autenticação Windows.
+
+A saída `RESULTADO: ROSTO_RECONHECIDO_DEMO` exige três observações
+consecutivas reconhecidas. Caso contrário, o teste retorna status não
+zero e `INCONCLUSIVO_SEM_RECONHECIMENTO`, mesmo que a webcam abra.

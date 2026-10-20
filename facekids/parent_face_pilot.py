@@ -146,6 +146,7 @@ def _verify(camera, recognizer: Recognizer, store: Storage,
     print("Sem liveness; uma foto ou video ainda pode enganar este prototipo.")
     print("Nenhum bloqueio ou desbloqueio Windows sera executado.")
     last_state = None
+    demonstrated = False
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         ok, frame = camera.read()
@@ -157,6 +158,8 @@ def _verify(camera, recognizer: Recognizer, store: Storage,
             vector = recognizer.features(frame, faces[0])
             candidate, _ = recognizer.identify(vector, refs)
         result = window.observe(len(faces), candidate, time.monotonic())
+        if result is Outcome.VERIFIED_DEMO:
+            demonstrated = True
         if result != last_state:
             print("VALIDACAO:", result.value)
             last_state = result
@@ -166,6 +169,8 @@ def _verify(camera, recognizer: Recognizer, store: Storage,
             "NAO AUTORIZA LOGIN - ESC/Q encerra",
         ]):
             break
+    print("RESULTADO:", "ROSTO_RECONHECIDO_DEMO" if demonstrated else "INCONCLUSIVO_SEM_RECONHECIMENTO")
+    return demonstrated
 
 
 def main(argv=None) -> int:
@@ -213,9 +218,9 @@ def main(argv=None) -> int:
             if enrolled != REQUIRED_SAMPLES:
                 print("Para substituir cadastro incompleto, use --re-enroll.")
                 return 3
-        _verify(camera, recognizer, store, adult_id, args.verify_seconds)
+        verified = _verify(camera, recognizer, store, adult_id, args.verify_seconds)
         print("Teste finalizado. O login do Windows nao foi alterado.")
-        return 0
+        return 0 if verified else 4
     finally:
         if camera is not None:
             camera.release()
