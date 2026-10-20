@@ -4,6 +4,56 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Ciclo de recuperacao e endurecimento — P0-30 a P0-34 (20/10/2026)
+
+**P0-30 — falha fechada + recuperacao do SQLite: TESTADO.**
+No runner Windows descartavel, o SCM parou o broker, teve seu banco
+intencionalmente corrompido, confirmou que o servico nao inicia com
+o ledger invalido, restaurou os bytes originais com SHA-256 identico,
+reiniciou o servico e verificou PING. CI 39454046681 aprovado.
+Esse teste **nao e um snapshot de VM** nem substitui um rollback
+do LogonUI. Nao realiza autenticacao ou registro de Provider.
+
+**P0-31 — mensagem IPC excessiva: TESTADO.**
+Broker passa a testar frame de 128 bytes no pipe que aceita apenas
+32; nenhuma resposta positiva e aceita, mesmo se o servidor
+desconectar. CI 39454325991 aprovado.
+
+**P0-32 — API sintetica privada: TESTADO.**
+Removida a fabrica publica de politica facial artificial. Somente a
+funcao interna self_test e friend do construtor de diagnostico.
+Um static_assert bloqueia construcao sintetica por outros chamadores.
+A politica normal nega toda evidencia artificial.
+CI 39454667563 (broker) e 39454667627 (SCM) aprovados.
+
+**P0-33 — isolamento de conta sem privilegios: TESTADO.**
+Um token Windows restrito, com SID Administradores desabilitado,
+tenta abrir o pipe; o ACL nega. Admin legitimo ainda recebe PONG.
+Nenhuma conta Windows foi criada. CI 39455111448 aprovado.
+Nao e teste direto da conta Filhos no PC real.
+
+**P0-34 — preflight de runner virtual antes de testes SCM: EM VALIDACAO.**
+Adicionado scripts/Conferir-Ambiente-Isolado.ps1, apenas leitura.
+O workflow exige contexto GitHub-hosted e indicios WMI de Windows
+virtualizado antes de criar um servico de teste.
+O primeiro workflow falhou devido a verificacao errada de
+LASTEXITCODE de um script PowerShell; corrigido, preflight aprovado
+no run 39455686332. Verificar conclusao do restante do workflow.
+Virtualizacao detectada nao e evidencia de snapshot utilizavel.
+
+### Proxima fila tecnica
+
+1. Confirmar status completo de 39455686332 e corrigir se necessario.
+2. Preparar politica de recuperacao e preflight para VM Windows local
+   com snapshot verificado externamente, sem instalar o CP real.
+3. Testar limite de quota individual e reavaliacao de WTS em eventos
+   de troca/desconexao, somente com dados sinteticos.
+4. Captura facial REAL com worker protegido continua BLOQUEADA por
+   falta de teste de hardware, liveness e identidade do processo.
+5. Manter **main intacta**; nao instalar nada no Winlogon do PC real.
+
+---
+
 ## Ciclo seguinte — P0-26 a P0-28 (20/10/2026)
 
 - **P0-26 — diagnostico de frames em memoria:** o broker C++ adicionou
