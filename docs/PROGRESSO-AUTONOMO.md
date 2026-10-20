@@ -4,6 +4,54 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Ciclo de armazenamento biometrico e medicao — P0-36 a P0-42 (20/10/2026)
+
+- **P0-36:** esquema protegido no WinSQLite para ate cinco embeddings
+  SFace por crianca (128 floats finitos), sem imagens. Testes sinteticos
+  verificam persistencia, recusas por tamanho/conteudo e separacao de perfis.
+  CI SCM 39458291387 aprovado.
+- **P0-37:** teste com token Windows restrito comprova negacao de leitura
+  e gravacao no banco biometricos+quotas. CI SCM 39458659678 aprovado.
+- **P0-38:** API IPC binaria de exclusao de embeddings, somente para
+  administrador elevado realmente autenticado pelo token Windows;
+  nao altera quota nem gera credencial. CI SCM 39459008858 aprovado.
+- **P0-39:** verificacao nativa exige dono SYSTEM/Administrators, DACL
+  protegida, dois ACEs com acesso completo e sem outros grupos;
+  teste negativo de DACL so-leitura. CI SCM 39459378448 e
+  39459662068 aprovados.
+- **P0-40:** script scripts/Testar-Camera-WinL.ps1 prepara ambiente Python
+  e inicia diagnostico opt-in com um so comando, SEM salvar frames
+  ou alterar login. Teste em hardware fisico continua PENDENTE.
+- **P0-41:** exclusao de templates e respectiva auditoria anonima
+  sao feitas em uma unica transacao SQLite; registro persiste ao reabrir,
+  sem armazenar imagens/modelos em auditoria. CI SCM
+  39460501543 aprovado.
+- **P0-42:** simulador C++ de consumo monotônico por perfil e quota,
+  com bloqueio por WTS alterado, dia trocado, tempo regressivo,
+  saldo esgotado e separacao de criancas. A classe normal nega
+  ativacao por falta de identificacao facial confiavel; so autoteste
+  injeta perfis e relogio. CI Windows broker 39460971880
+  aprovado; conferir CI SCM 39460971872 para conclusao.
+
+**NAO esta concluido:** captura real de imagem com origem verificavel
+no Secure Desktop, liveness resistente a foto/video, binding facial
+a crianca, credencial Windows e desbloqueio de LogonUI. O bootstrap
+de webcam precisa ser executado voluntariamente no PC fisico.
+Nenhum codigo deste ciclo foi instalado no PC familiar ou na main.
+
+### Proximos trabalhos viaveis sem hardware
+
+1. Revisar retencao/backup e acesso administrativo aos embeddings
+   nativos e o fluxo transacional de auditoria.
+2. Implementar a camada de binding seguro entre worker protegido
+   de camera e medidor de tempo; manter runtime fechado por padrao.
+3. Fortalecer teste em runner VM de recuperacao do banco SQLite;
+   nao instalar o Credential Provider real ate haver snapshot testado.
+4. Obter resultado do diagnostico Win+L fisico antes de assumir
+   viabilidade da webcam para LogonUI.
+
+---
+
 ## Ciclo de seguranca adicional — P0-35 (20/10/2026)
 
 P0-35: ampliados os testes sinteticos do quota_gate nativo.

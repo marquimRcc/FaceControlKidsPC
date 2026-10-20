@@ -4,6 +4,26 @@
 
 ## Estado técnico — Windows (20/10/2026)
 
+### Avanco nativo P0-36 a P0-42
+
+O servico de teste agora possui armazenamento ACL para modelos
+SFace sinteticos (3 filhos, ate 5 por perfil), exclusao administrativa
+autenticada e auditoria transacional; o SQLite rejeita proprietarios
+inseguros e permissoes insuficientes. Um medidor C++ com relogio
+monotonico e quota independente foi testado com sessao WTS simulada,
+mas **fica inativo por padrao** ate existir origem facial confiavel.
+Em nenhum momento os testes forneceram credencial Windows.
+
+Um teste manual da webcam pode ser iniciado sem editar arquivos:
+
+\`\`\`powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Testar-Camera-WinL.ps1"
+\`\`\`
+
+Esse diagnostico nao salva imagens nem interfere no login.
+A prova no hardware real ainda e necessaria.
+
+
 - **Webcam durante Win+L:** diagnóstico na conta Filhos confirmou leitura de frames durante bloqueio do Windows. Isto não comprova execução dentro do LogonUI.
 - **Política individual:** 74 testes Python aprovados (face, sessão, 3 quotas, expiração e autorização de uso único).
 - **Credential Provider:** DLL COM diagnóstica compilada; enumera tile somente para SID autorizado, mas não serializa nenhuma credencial.
