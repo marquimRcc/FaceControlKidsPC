@@ -1,4 +1,26 @@
-# FaceControlKidsPC — MVP 0.4
+# FaceControlKidsPC — MVP 0.4 (branch experimental)
+
+> **Branch experimental: feature/face-access-gate.** O novo protótipo visual é uma simulação de liberação facial; não é o bloqueio seguro do Windows. A branch main permanece com o MVP 0.4.
+
+## Testar a identificacao facial pela webcam (novo)
+
+Com OpenCV, modelos baixados e os rostos cadastrados na conta Filhos, rode:
+
+    .\.venv\Scripts\python.exe -m facekids.gate_webcam_preview
+
+Ou abra testar-webcam-gate.bat. A tela reconhece rostos por YuNet/SFace,
+mostra estados e saldos, mas nao altera SQLite nem bloqueia o Windows.
+Pressione Esc para sair. Consulte docs/DEMO-WEBCAM-GATE.md.
+
+## Testar a tela de acesso facial sem webcam
+
+Use Python 3.11+ no Windows. Com a branch selecionada, execute:
+
+    py -3.11 -m facekids.gate_preview
+
+Ou abra **demonstrar-gate.bat** com dois cliques. Os botões simulam reconhecimentos e falhas. Não precisa cadastrar rostos nem instalar dependências externas. **Esc fecha a janela imediatamente.** Leia a documentação em [docs/DEMO-FACE-GATE.md](docs/DEMO-FACE-GATE.md).
+
+---
 
 **Projeto original:** [marquimRcc/FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
 **Autor e mantenedor original:** Marcos Queiroz Gomes ([@marquimRcc](https://github.com/marquimRcc))  
