@@ -14,6 +14,9 @@
 #include <cstdio>
 #include <cwchar>
 #include <cstring>
+#include <array>
+#include <cmath>
+#include <limits>
 
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "winsqlite3.lib")
@@ -147,6 +150,7 @@ public:
             !healthy_database(db_) ||
             !exec(db_, "PRAGMA journal_mode=DELETE;") ||
             !exec(db_, "PRAGMA foreign_keys=ON;") ||
+            !exec(db_, "PRAGMA secure_delete=ON;") ||
             !exec(db_, "PRAGMA busy_timeout=5000;") ||
             !exec(db_, "CREATE TABLE IF NOT EXISTS children("
                        "id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 3),"
@@ -157,12 +161,76 @@ public:
                        "used_seconds INTEGER NOT NULL DEFAULT 0 CHECK(used_seconds>=0),"
                        "bonus_seconds INTEGER NOT NULL DEFAULT 0 CHECK(bonus_seconds>=0),"
                        "PRIMARY KEY(child_id,day));") ||
+            !exec(db_, "CREATE TABLE IF NOT EXISTS face_templates("
+                       "template_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                       "child_id INTEGER NOT NULL REFERENCES children(id),"
+                       "embedding BLOB NOT NULL CHECK(length(embedding)=512));") ||
             !exec(db_, "INSERT OR IGNORE INTO children(id,limit_seconds) VALUES"
                        "(1,7200),(2,7200),(3,7200);")) {
             close(); return false;
         }
         return true;
     }
+    // P0-36: protected enrollment ledger. No caller-controlled IPC or
+    // Windows login uses this in the current proof of concept.
+    // Synthetic data tests ONLY; future APIs need verified parent identity.
+    bool add_template(int child, const std::array<float,128>& vector) {
+        if (!db_ || child<1 || child>3) return false;
+        double sum=0.0;
+        for(float value: vector) {
+            if(!std::isfinite(value)) return false;
+            sum+=double(value)*double(value);
+        }
+        if (!std::isfinite(sum) || sum<=1.0e-12) return false;
+        if (!exec(db_, "BEGIN IMMEDIATE;")) return false;
+        sqlite3_stmt* stmt=nullptr;
+        bool ok=false;
+        do {
+            if(sqlite3_prepare_v2(db_,
+               "INSERT INTO face_templates(child_id,embedding)"
+               " SELECT ?1,?2 WHERE"
+               " (SELECT COUNT(*) FROM face_templates WHERE child_id=?1)<5;",
+               -1, &stmt, nullptr)!=SQLITE_OK) break;
+            if(sqlite3_bind_int(stmt,1,child)!=SQLITE_OK ||
+               sqlite3_bind_blob(stmt,2,vector.data(),
+                                 static_cast<int>(sizeof(float)*vector.size()),
+                                 SQLITE_TRANSIENT)!=SQLITE_OK ||
+               sqlite3_step(stmt)!=SQLITE_DONE ||
+               sqlite3_changes(db_)!=1) break;
+            ok=true;
+        } while(false);
+        if(stmt) sqlite3_finalize(stmt);
+        if(ok) ok=exec(db_, "COMMIT;");
+        if(!ok) exec(db_, "ROLLBACK;");
+        return ok;
+    }
+
+    bool count_templates(int child, int* number) const {
+        if(!db_ || child<1 || child>3 || !number) return false;
+        sqlite3_stmt* statement=nullptr;
+        if(sqlite3_prepare_v2(db_,
+           "SELECT COUNT(*) FROM face_templates WHERE child_id=?1;",
+           -1,&statement,nullptr)!=SQLITE_OK) return false;
+        bool ok=sqlite3_bind_int(statement,1,child)==SQLITE_OK &&
+                sqlite3_step(statement)==SQLITE_ROW;
+        if(ok) *number=sqlite3_column_int(statement,0);
+        sqlite3_finalize(statement);
+        return ok;
+    }
+
+    bool erase_templates(int child, int* erased) {
+        if(!db_ || child<1 || child>3 || !erased) return false;
+        sqlite3_stmt* statement=nullptr;
+        if(sqlite3_prepare_v2(db_,
+           "DELETE FROM face_templates WHERE child_id=?1;",
+           -1,&statement,nullptr)!=SQLITE_OK) return false;
+        bool ok=sqlite3_bind_int(statement,1,child)==SQLITE_OK &&
+                sqlite3_step(statement)==SQLITE_DONE;
+        if(ok) *erased=sqlite3_changes(db_);
+        sqlite3_finalize(statement);
+        return ok;
+    }
+
     bool remaining(int child, const char* day, sqlite3_int64* seconds) const {
         if (!db_ || child < 1 || child > 3 || !seconds ||
             !facekids_date::valid(day)) return false;
@@ -364,12 +432,39 @@ inline bool self_test() {
             !store.remaining(1, "2026-13-01", &remain) &&
             !store.add_bonus(2, "2026-02-29", 1);
     }
+    // Synthetic embedding vectors: no child photos or actual biometrics.
+    {
+        Store store;
+        int count=-1, erased=-1;
+        std::array<float,128> first={}, sibling={}, invalid={};
+        first[0]=1.0f;
+        sibling[1]=1.0f;
+        invalid[0]=std::numeric_limits<float>::quiet_NaN();
+        success = success && store.open(folder) &&
+            store.add_template(1,first) &&
+            store.add_template(2,sibling) &&
+            !store.add_template(1,invalid) &&
+            !store.add_template(1,std::array<float,128>{}) &&
+            store.count_templates(1,&count) && count==1 &&
+            store.count_templates(2,&count) && count==1;
+        for(int i=0;i<4 && success;++i) success=store.add_template(1,first);
+        success=success && !store.add_template(1,first) &&
+            store.count_templates(1,&count) && count==5 &&
+            store.erase_templates(1,&erased) && erased==5 &&
+            store.count_templates(1,&count) && count==0 &&
+            store.count_templates(2,&count) && count==1 &&
+            !store.count_templates(4,&count) &&
+            !store.erase_templates(4,&erased) &&
+            store.remaining(1,today,&remain) && remain==3600;
+    }
     {
         Store reopened;
+        int count_verify=-1;
         success = success && reopened.open(folder) &&
             reopened.remaining(1, today, &remain) && remain == 3600 &&
             reopened.remaining(2, today, &remain) && remain == 0 &&
-            reopened.remaining(3, today, &remain) && remain == 3600;
+            reopened.remaining(3, today, &remain) && remain == 3600 &&
+            reopened.count_templates(2, &count_verify) && count_verify == 1;
     }
     success = success && allowed_acl(folder, true) && allowed_acl(dbPath, false);
     success = success && reject_permissive_directory(folder + L"_loose");
