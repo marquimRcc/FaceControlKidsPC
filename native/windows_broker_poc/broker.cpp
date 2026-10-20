@@ -14,6 +14,7 @@
 #include "quota_gate.h"
 #include "facial_policy.h"
 #include "camera_capability.h"
+#include "service_identity.h"
 #include "ipc_contract.h"
 #include <vector>
 #include <string>
@@ -243,6 +244,15 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
         return;
     }
     report(SERVICE_START_PENDING);
+    // A misconfigured SCM account must never expose the protected broker.
+    // Elevated Administrators are NOT equivalent to LocalSystem.
+    if (facekids_service_identity::current_process_identity() !=
+        facekids_service_identity::ServiceIdentity::LocalSystem) {
+        report(SERVICE_STOPPED, ERROR_ACCESS_DENIED);
+        CloseHandle(g_stop);
+        g_stop = nullptr;
+        return;
+    }
     // Service-only persistent quota DB. This path is NEVER touched by tests,
     // --sessions or any unprivileged client operation.
     facekids_quota::Store quotas;
@@ -380,8 +390,17 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --sessions | --console-once | --ping | --camera-status | --precheck-as-admin | --service");
         return 2;
+    }
+    if (std::wcscmp(argv[1], L"--service-identity") == 0) {
+        const auto id=facekids_service_identity::current_process_identity();
+        if (id==facekids_service_identity::ServiceIdentity::LocalSystem)
+            std::puts("SYSTEM");
+        else if (id==facekids_service_identity::ServiceIdentity::NotLocalSystem)
+            std::puts("NOT_SYSTEM");
+        else std::puts("IDENTITY_UNAVAILABLE");
+        return id==facekids_service_identity::ServiceIdentity::Unavailable ? 4 : 0;
     }
     if (std::wcscmp(argv[1], L"--camera-capability") == 0) {
         const auto inventory=facekids_camera::enumerate();
@@ -400,7 +419,8 @@ int wmain(int argc, wchar_t** argv) {
         if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
             !facekids_quota::self_test() || !quota_gate_self_test() ||
             !facekids_ipc::self_test() || !facial_policy_self_test() ||
-            !facekids_camera::self_test()) return 3;
+            !facekids_camera::self_test() ||
+            !facekids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
     }
