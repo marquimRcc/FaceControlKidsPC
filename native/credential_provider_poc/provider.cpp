@@ -118,7 +118,7 @@ public:
 static const CLSID kClassId =
     {0xfac0d041, 0x3dd0, 0x4a8c, {0x9f,0x18,0x44,0x0c,0x44,0x33,0x0c,0x10}};
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, LPVOID* result) {
+extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsGetClassObject(REFCLSID clsid, REFIID iid, LPVOID* result) {
     if (!result) return E_POINTER;
     *result = nullptr;
     if (!IsEqualCLSID(clsid, kClassId)) return CLASS_E_CLASSNOTAVAILABLE;
@@ -128,7 +128,7 @@ extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID cl
     factory->Release();
     return status;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow() {
+extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsCanUnloadNow() {
     return (g_objects == 0 && g_locks == 0) ? S_OK : S_FALSE;
 }
 BOOL APIENTRY DllMain(HMODULE module, DWORD why, LPVOID) {
