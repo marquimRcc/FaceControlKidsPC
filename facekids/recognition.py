@@ -29,15 +29,27 @@ class Recognizer:
     @staticmethod
     def identify(vec: np.ndarray, reference: list[tuple[int,np.ndarray]], threshold=0.50, min_margin=0.07):
         """Compara 1:N; exige bom score e margem contra o segundo colocado."""
-        v = np.asarray(vec,dtype=np.float32).reshape(-1)
+        try:
+            v = np.asarray(vec, dtype=np.float32).reshape(-1)
+        except (ValueError, TypeError, OverflowError):
+            return None, None
+        if v.size != 128 or not np.all(np.isfinite(v)):
+            return None, None
+        v_norm = float(np.linalg.norm(v))
+        if not np.isfinite(v_norm) or v_norm <= 1e-8:
+            return None, None
         scores = {}
         for pid, ref in reference:
             r = np.asarray(ref,dtype=np.float32).reshape(-1)
-            if r.shape != v.shape: continue
-            denom = float(np.linalg.norm(v)*np.linalg.norm(r))
-            if denom == 0: continue
-            sim = float(np.dot(v,r)/denom)
-            scores[pid] = max(scores.get(pid,-1.0),sim)
+            if r.shape != v.shape or not np.all(np.isfinite(r)):
+                continue
+            r_norm = float(np.linalg.norm(r))
+            if not np.isfinite(r_norm) or r_norm <= 1e-8:
+                continue
+            sim = float(np.dot(v, r) / (v_norm * r_norm))
+            if not np.isfinite(sim):
+                continue
+            scores[pid] = max(scores.get(pid, -1.0), sim)
         ranked = sorted(scores.items(),key=lambda it:it[1],reverse=True)
         if not ranked or ranked[0][1] < threshold:
             return None, (ranked[0][1] if ranked else None)
