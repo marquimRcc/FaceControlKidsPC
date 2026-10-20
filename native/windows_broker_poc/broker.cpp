@@ -18,6 +18,7 @@
 #include "face_quota_bridge.h"
 #include "face_consensus.h"
 #include "lock_decision.h"
+#include "protected_camera_worker.h"
 #include "camera_capability.h"
 #include "camera_frame_probe.h"
 #include "service_identity.h"
@@ -278,7 +279,10 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     // Device enumeration is performed in the actual LocalSystem process.
     // Presence is informational ONLY: it is NOT liveness, face identity
     // or evidence valid for the internal facial authorization model.
-    const auto camera = facekids_camera::enumerate();
+    const auto worker = facekids_protected_camera::inspect_local_system();
+    // OS token is checked at service startup and again inside this worker.
+    // Its enumeration status is informational, never an auth grant.
+    const auto camera = worker.inventory;
     report(SERVICE_RUNNING);
     const std::wstring sid = configured_target_sid();
     // No target SID: diagnostic health PING remains possible, all
@@ -673,6 +677,7 @@ int wmain(int argc, wchar_t** argv) {
             !face_quota_bridge_self_test() ||
             !facekids_consensus::self_test() ||
             !facekids_lock_policy::self_test() ||
+            !facekids_protected_camera::self_test() ||
             !facekids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
