@@ -27,6 +27,43 @@ jobs:
           if errorlevel 1 exit /b 1
           FaceKidsBrokerPoc.exe --camera-capability
           if errorlevel 1 exit /b 1
+      - name: Reject non-SYSTEM SCM account before opening ProgramData
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'FaceKidsBrokerPoc'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw 'Unexpected existing FaceKidsBrokerPoc service'
+          }
+          if (Test-Path $root) { throw 'Refusing to touch existing data directory' }
+          $image = '"' + $exe + '" --service'
+          & sc.exe create $name binPath= $image start= demand obj= 'NT AUTHORITY\LocalService'
+          if ($LASTEXITCODE -ne 0) { throw 'Creating temporary LocalService test failed' }
+          try {
+            try { Start-Service -Name $name -ErrorAction Stop } catch {
+              Write-Host 'Expected start denial for non-SYSTEM SCM account'
+            }
+            Start-Sleep -Seconds 1
+            $state = (Get-Service -Name $name -ErrorAction Stop).Status
+            if ($state -ne 'Stopped') {
+              throw "FAIL: non-SYSTEM service unexpectedly entered $state"
+            }
+            if (Test-Path $root) {
+              throw 'FAIL: non-SYSTEM service created protected ProgramData'
+            }
+            Write-Host 'PASS: LocalService refused and created no quota database'
+          } finally {
+            if ((Get-Service -Name $name -ErrorAction SilentlyContinue)?.Status -ne 'Stopped') {
+              & sc.exe stop $name | Out-Host
+            }
+            & sc.exe delete $name | Out-Host
+            Start-Sleep -Seconds 1
+          }
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw 'SCM test service not removed after denial'
+          }
       - name: Register/start/test/stop/delete LocalSystem service on ephemeral runner ONLY
         shell: pwsh
         run: |
