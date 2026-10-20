@@ -306,6 +306,24 @@ inline bool reject_permissive_database(const std::wstring& path) {
     return rejected;
 }
 
+inline bool reject_unreadable_sqlite(const std::wstring& folder) {
+    if (!make_secure_directory(folder)) return false;
+    const std::wstring path=folder + L"\\quota.sqlite3";
+    HANDLE handle=CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle==INVALID_HANDLE_VALUE) return false;
+    const char text[]="not-an-sqlite-database";
+    DWORD bytes=0;
+    BOOL written=WriteFile(handle, text, sizeof(text), &bytes, nullptr);
+    CloseHandle(handle);
+    Store store;
+    bool success=written && bytes==sizeof(text) && !store.open(folder);
+    store.close();
+    DeleteFileW(path.c_str());
+    RemoveDirectoryW(folder.c_str());
+    return success;
+}
+
 inline bool self_test() {
     if (!trusted_root_self_test() || !facekids_date::self_test()) return false;
     wchar_t tmp[MAX_PATH] = {};
@@ -356,6 +374,7 @@ inline bool self_test() {
     success = success && allowed_acl(folder, true) && allowed_acl(dbPath, false);
     success = success && reject_permissive_directory(folder + L"_loose");
     success = success && reject_permissive_database(folder + L"_unsafe_db");
+    success = success && reject_unreadable_sqlite(folder + L"_invalid_db");
     DeleteFileW(dbPath.c_str());
     RemoveDirectoryW(folder.c_str());
     // No ProgramData writes or service installation happen during --self-test.
