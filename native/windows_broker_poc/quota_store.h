@@ -234,6 +234,20 @@ inline std::wstring program_data_root() {
     CoTaskMemFree(folder);
     return result;
 }
+inline bool trusted_root_self_test() {
+    const std::wstring expected=program_data_root();
+    if (expected.empty()) return false;
+    wchar_t original[32768]={};
+    DWORD chars=GetEnvironmentVariableW(L"ProgramData", original, 32768);
+    if (chars>=32768) return false;
+    if (!SetEnvironmentVariableW(L"ProgramData", L"C:\\fake-untrusted-root"))
+        return false;
+    const std::wstring actual=program_data_root();
+    const BOOL restored=SetEnvironmentVariableW(
+        L"ProgramData", chars==0 ? nullptr : original);
+    return restored && actual==expected;
+}
+
 // Negative ACL tests are performed under isolated temporary directories.
 inline bool reject_permissive_directory(const std::wstring& path) {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
@@ -273,6 +287,7 @@ inline bool reject_permissive_database(const std::wstring& path) {
 }
 
 inline bool self_test() {
+    if (!trusted_root_self_test()) return false;
     wchar_t tmp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, tmp)) return false;
     wchar_t testPath[MAX_PATH] = {};
