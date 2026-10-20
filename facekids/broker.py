@@ -76,6 +76,18 @@ class Broker:
             else:
                 self.store.add_bonus(pid, mins)
             return {"ok": True}
+        if op == "remove_faces":
+            pid = req.get("id")
+            if type(pid) is not int:
+                raise ValueError("Expected child ID")
+            count = self.store.remove_embeddings(pid)
+            if self.enroll_id == pid:
+                self.enroll_id = None
+                self.enroll_count = 0
+                self.enroll_until = 0.0
+            # A previously recognized face cannot keep the demo "open".
+            self.policy.pause()
+            return {"ok": True, "removed": count}
         if op == "enroll":
             pid = req.get("id")
             if type(pid) is not int or pid not in {p[0] for p in self.store.people()}:

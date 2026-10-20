@@ -1,0 +1,27 @@
+name: Windows live WTS diagnostic
+on:
+  push:
+    paths:
+      - 'facekids/windows_session_diagnostic.py'
+      - 'facekids/session.py'
+      - 'scripts/Testar-Integracao-Windows.ps1'
+      - '.github/workflows/windows-wts-runtime.yml'
+  pull_request:
+    paths:
+      - 'facekids/windows_session_diagnostic.py'
+      - 'facekids/session.py'
+      - 'scripts/Testar-Integracao-Windows.ps1'
+      - '.github/workflows/windows-wts-runtime.yml'
+jobs:
+  read-only-wts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Query actual WTS session inventory, without changing Windows login
+        shell: pwsh
+        run: |
+          python -m facekids.windows_session_diagnostic
+          if ($LASTEXITCODE -ne 0) { throw "WTS diagnostic failed ($LASTEXITCODE)" }

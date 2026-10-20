@@ -1,0 +1,177 @@
+name: Windows LocalSystem service lifecycle on ephemeral runner
+on:
+  push:
+    paths:
+      - 'native/windows_broker_poc/**'
+      - '.github/workflows/windows-broker-scm-vm.yml'
+  pull_request:
+    paths:
+      - 'native/windows_broker_poc/**'
+      - '.github/workflows/windows-broker-scm-vm.yml'
+jobs:
+  local-system-lifecycle:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse privileged SCM experiments outside disposable GitHub VM
+        shell: pwsh
+        env:
+          FACEKIDS_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\Conferir-Ambiente-Isolado.ps1 -RequireGitHubHosted
+          if (-not $?) { throw 'VM safety preflight did not pass' }
+      - name: Compile broker using MSVC and WinSQLite
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          if not defined VSROOT exit /b 1
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:FaceKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib ole32.lib mfplat.lib mf.lib mfuuid.lib shell32.lib mfreadwrite.lib
+          if errorlevel 1 exit /b 1
+          FaceKidsBrokerPoc.exe --self-test
+          if errorlevel 1 exit /b 1
+          FaceKidsBrokerPoc.exe --camera-capability
+          if errorlevel 1 exit /b 1
+      - name: Reject non-SYSTEM SCM account before opening ProgramData
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'FaceKidsBrokerPoc'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw 'Unexpected existing FaceKidsBrokerPoc service'
+          }
+          if (Test-Path $root) { throw 'Refusing to touch existing data directory' }
+          $image = '"' + $exe + '" --service'
+          & sc.exe create $name binPath= $image start= demand obj= 'NT AUTHORITY\LocalService'
+          if ($LASTEXITCODE -ne 0) { throw 'Creating temporary LocalService test failed' }
+          try {
+            try { Start-Service -Name $name -ErrorAction Stop } catch {
+              Write-Host 'Expected start denial for non-SYSTEM SCM account'
+            }
+            Start-Sleep -Seconds 1
+            $state = (Get-Service -Name $name -ErrorAction Stop).Status
+            if ($state -ne 'Stopped') {
+              throw "FAIL: non-SYSTEM service unexpectedly entered $state"
+            }
+            if (Test-Path $root) {
+              throw 'FAIL: non-SYSTEM service created protected ProgramData'
+            }
+            Write-Host 'PASS: LocalService refused and created no quota database'
+          } finally {
+            if ((Get-Service -Name $name -ErrorAction SilentlyContinue)?.Status -ne 'Stopped') {
+              & sc.exe stop $name | Out-Host
+            }
+            & sc.exe delete $name | Out-Host
+            Start-Sleep -Seconds 1
+          }
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw 'SCM test service not removed after denial'
+          }
+      - name: Register/start/test/stop/delete LocalSystem service on ephemeral runner ONLY
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'FaceKidsBrokerPoc'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          $db = Join-Path $root 'quota.sqlite3'
+          if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            throw "Service $name unexpectedly already exists"
+          }
+          if (Test-Path $root) {
+            throw "Refusing to touch pre-existing ProgramData folder"
+          }
+          $image = '"' + $exe + '" --service'
+          & sc.exe create $name binPath= $image start= demand obj= LocalSystem
+          if ($LASTEXITCODE -ne 0) {
+            throw "SCM CreateService failed: $LASTEXITCODE"
+          }
+          try {
+            Start-Service -Name $name -ErrorAction Stop
+            # The broker now refuses SCM accounts other than LocalSystem.
+            # Reaching RUNNING proves its process token passed that check.
+            $service = Get-Service -Name $name
+            $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+            if ($service.Status -ne 'Running') {
+              throw "Broker did not enter SERVICE_RUNNING"
+            }
+            if (-not (Test-Path $db)) { throw "SQLite database missing from ProgramData" }
+            Write-Host 'PASS: LocalSystem created SQLite quota database in ProgramData'
+            & $exe --restricted-db-test
+            if ($LASTEXITCODE -ne 0) { throw "Restricted Windows token could access protected quota/templates database" }
+            Write-Host 'PASS: restricted token cannot read/write biometric or quota storage'
+            # Newly installed demo has zero templates. A parent admin must
+            # be able to request a safe scoped erase (never a credential).
+            & $exe --erase-templates 1
+            if ($LASTEXITCODE -ne 0) { throw "Protected parent-only template erase failed" }
+            & $exe --erase-templates 4
+            if ($LASTEXITCODE -ne 2) { throw "Out-of-range template erase was not rejected" }
+            Write-Host 'PASS: admin scoped biometric erasure and invalid ID rejected'
+            & $exe --ping
+            if ($LASTEXITCODE -ne 0) { throw "Privileged PING failed ($LASTEXITCODE)" }
+            & $exe --camera-status
+            if ($LASTEXITCODE -ne 0) { throw "Camera status from broker failed" }
+            & $exe --precheck-as-admin
+            if ($LASTEXITCODE -ne 0) { throw "Admin was not rejected ($LASTEXITCODE)" }
+            Write-Host 'PASS: Windows SCM lifecycle and negative CP precheck'
+            Write-Host 'Testing recoverability after simulated corrupted quota DB'
+            # Intentionally exercise corruption ONLY on this disposable runner.
+            & sc.exe stop $name | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to stop test service' }
+            (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+            $originalBytes = [System.IO.File]::ReadAllBytes($db)
+            if ($originalBytes.Length -lt 100) { throw 'Unexpectedly short SQLite database' }
+            $originalHash = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash
+            [System.IO.File]::WriteAllBytes($db, [Text.Encoding]::ASCII.GetBytes('INVALID_FACEKIDS_SQLITE_TEST_ONLY'))
+            try {
+              $refused = $false
+              try { Start-Service -Name $name -ErrorAction Stop } catch { $refused = $true }
+              Start-Sleep -Seconds 1
+              $status = (Get-Service -Name $name -ErrorAction Stop).Status
+              if ($status -ne 'Stopped') {
+                throw "FAIL: broker accepted a corrupted SQLite ledger ($status)"
+              }
+              Write-Host 'PASS: corrupted SQLite prevents SCM service from running'
+            } finally {
+              if ((Get-Service -Name $name -ErrorAction Stop).Status -ne 'Stopped') {
+                & sc.exe stop $name | Out-Host
+                (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+              }
+              # Restore the original bytes exactly; never reset lost quotas.
+              [System.IO.File]::WriteAllBytes($db, $originalBytes)
+            }
+            if ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash -ne $originalHash) {
+              throw 'Database restoration hash mismatch'
+            }
+            Start-Service -Name $name -ErrorAction Stop
+            (Get-Service -Name $name).WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+            & $exe --ping
+            if ($LASTEXITCODE -ne 0) { throw "Recovered broker PING failed ($LASTEXITCODE)" }
+            Write-Host 'PASS: original quotas restored byte-for-byte and service recovered'
+
+          } finally {
+            $service = Get-Service -Name $name -ErrorAction SilentlyContinue
+            if ($service) {
+              if ($service.Status -ne 'Stopped') {
+                & sc.exe stop $name | Out-Host
+                try {
+                  (Get-Service -Name $name).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+                } catch {
+                  Write-Warning "Service stop timeout"
+                }
+              }
+              & sc.exe delete $name | Out-Host
+            }
+            if ((Get-Service -Name $name -ErrorAction SilentlyContinue)?.Status -eq 'Running') {
+              throw "Service still running after rollback"
+            }
+            if (Test-Path $root) {
+              Remove-Item -LiteralPath $root -Recurse -Force
+            }
+            Write-Host 'Cleanup: test service and ProgramData folder removed'
+          }

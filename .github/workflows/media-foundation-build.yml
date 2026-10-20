@@ -1,0 +1,37 @@
+name: Native Media Foundation webcam PoC
+on:
+  push:
+    paths:
+      - 'native/media_foundation_probe/**'
+      - '.github/workflows/media-foundation-build.yml'
+  pull_request:
+    paths:
+      - 'native/media_foundation_probe/**'
+      - '.github/workflows/media-foundation-build.yml'
+jobs:
+  native-webcam:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile standalone Media Foundation webcam probe
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          if not defined VSROOT exit /b 1
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 native\media_foundation_probe\probe.cpp /link /OUT:FaceKidsMFProbe.exe
+          if errorlevel 1 exit /b 1
+      - name: Check standalone program usage (no webcam required)
+        shell: cmd
+        run: |
+          FaceKidsMFProbe.exe 0
+          if not errorlevel 1 exit /b 1
+          FaceKidsMFProbe.exe 120 -1
+          if not errorlevel 1 exit /b 1
+          exit /b 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FaceKidsMFProbe-windows-x64
+          path: FaceKidsMFProbe.exe
+          retention-days: 14

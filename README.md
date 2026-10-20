@@ -1,6 +1,59 @@
-# FaceControlKidsPC — MVP 0.4 (branch experimental)
+# FaceControlKidsPC — MVP e Windows Native Unlock PoC
 
-> **Branch experimental: feature/face-access-gate.** O novo protótipo visual é uma simulação de liberação facial; não é o bloqueio seguro do Windows. A branch main permanece com o MVP 0.4.
+> **Estado:** o repositório contém o MVP e os componentes experimentais da integração nativa Windows. A branch `feature/windows-native-unlock-poc` conserva o histórico dos experimentos. **O desbloqueio facial real ainda não está implementado.** Fazer merge do código na `main` **não instala serviços, não registra um Credential Provider e não altera senhas nem o login do computador.** Só executar diagnósticos explicitamente e testar uma futura integração ao LogonUI em VM descartável com snapshot e recuperação confirmada.
+
+## Estado técnico — Windows (20/10/2026)
+
+### Avanco nativo P0-36 a P0-42
+
+O servico de teste agora possui armazenamento ACL para modelos
+SFace sinteticos (3 filhos, ate 5 por perfil), exclusao administrativa
+autenticada e auditoria transacional; o SQLite rejeita proprietarios
+inseguros e permissoes insuficientes. Um medidor C++ com relogio
+monotonico e quota independente foi testado com sessao WTS simulada,
+mas **fica inativo por padrao** ate existir origem facial confiavel.
+Em nenhum momento os testes forneceram credencial Windows.
+
+Um teste manual da webcam pode ser iniciado sem editar arquivos:
+
+\`\`\`powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Testar-Camera-WinL.ps1"
+\`\`\`
+
+Esse diagnostico nao salva imagens nem interfere no login.
+A prova no hardware real ainda e necessaria.
+
+
+- **Webcam durante Win+L:** diagnóstico na conta Filhos confirmou leitura de frames durante bloqueio do Windows. Isto não comprova execução dentro do LogonUI.
+- **Política individual:** 74 testes Python aprovados (face, sessão, 3 quotas, expiração e autorização de uso único).
+- **Credential Provider:** DLL COM diagnóstica compilada; enumera tile somente para SID autorizado, mas não serializa nenhuma credencial.
+- **Broker Windows P0-5:** estrutura SCM C++ compilada com named pipe local que admite apenas SYSTEM/administradores elevados e responde somente PING. Testado no GitHub Actions sem instalar serviço.
+- **Quotas nativas P0-8:** WinSQLite protegido por DACL SYSTEM/administradores em ProgramData (somente quando o serviço SCM for instalado em VM); testes offline com 3 saldos, débitos atômicos, virada de dia, persistência e rejeição de ACLs permissivas. O broker combina validação de SID/WTS com saldo antes de considerar uma solicitação para análise facial.
+- **IPC de pré-verificação P0-9:** protocolo binário de 16 bytes; somente um cliente cujo token Windows seja exatamente LocalSystem pode passar à avaliação de pré-condições WTS/quota. Administrador comum recebe DENIED. Resposta positiva PRECHECK_ONLY **não concede login**.
+- **SCM em VM descartável P0-10:** Windows GitHub Actions registrou o serviço LocalSystem, abriu o banco protegido em ProgramData, validou comunicação e negativa por administrador e removeu serviço e pasta ao terminar. Nada instalado no PC.
+- **Cliente de diagnóstico CP P0-11:** a DLL COM de teste conversou com o broker pelo protocolo P0-9 e recebeu DENIED corretamente. A DLL normal ainda nunca serializa credenciais.
+- **Política facial nativa P0-12:** máquina de estados interna C++ exercita evidência facial simulada, 3 crianças, WTS/SID, saldo protegido, validade de 3 segundos para a amostra e rechecagem única em até 8 segundos. Sem novo comando IPC ou serialização de credenciais.
+- **Câmera P0-13/14:** broker enumera webcams com Media Foundation sem abrir frames ou reconhecer pessoas. O serviço LocalSystem mantém estado de capacidade apenas em memória e o expõe pelo pipe administrativo CAM?. A simples presença do dispositivo não comprova liveness nem permite login.
+
+
+- **Ainda faltam:** provar autenticação específica do processo LogonUI (SID SYSTEM sozinho não identifica o processo), câmera/liveness com origem confiável, ligação do rosto ao saldo, cofre seguro da credencial Filhos e registro/recuperação do Credential Provider em VM. O SCM foi validado apenas em runner Windows descartável; nada foi instalado no PC.
+
+### Repositório local da conta principal
+
+O clone fica em `C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC`.
+
+Para atualizar e testar sem alterar o login:
+
+```powershell
+$p="C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC"; git -C $p pull --ff-only; if($LASTEXITCODE -ne 0){throw "Falha ao atualizar"}; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$p\scripts\Testar-Integracao-Windows.ps1"
+```
+
+Os binários C++ de diagnóstico são compilados e testados automaticamente no GitHub Actions. **Não registrar manualmente Credential Provider ou instalar o serviço experimental no PC.**
+
+Veja [Arquitetura nativa](docs/ADR-003-WINDOWS-REAL-FACE-UNLOCK.md), [associação de SID](docs/POC-004-WINDOWS-SID-BINDING.md), [autorização por quota](docs/POC-005-OFFLINE-UNLOCK-COORDINATOR.md) e [broker C++](native/windows_broker_poc/README.md).
+
+---
+
 
 ## Testar a identificacao facial pela webcam (novo)
 
