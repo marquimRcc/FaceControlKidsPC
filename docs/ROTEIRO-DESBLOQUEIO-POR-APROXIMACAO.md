@@ -64,3 +64,55 @@ o LoginUI foi testado ou que uma operacao de autenticacao ocorreu.
 
 Este teste nao instala servico nem Credential Provider, nao
 salva videos, nao altera senha e nao tenta desbloquear o Windows.
+
+
+## Evidência física: reconhecimento durante Win+L (20/10/2026)
+
+Piloto local confirmado voluntariamente com Windows 11 Pro build 26300
+e webcam XWF-1080P usando a conta do responsável. Registro contém
+SOMENTE estatísticas fornecidas pelo operador, sem fotos, nome ou
+vetores faciais.
+
+Resultado do script Testar-Reconhecimento-WinL.ps1:
+- Testes unitários locais: 7 aprovados
+- Amostras totais: 90
+- Amostras WTS bloqueadas: 45
+- Frames obtidos nas amostras bloqueadas: 45
+- Frames com um único rosto: 45
+- Correspondências com o cadastro adulto: 44 (97,8% **nessa amostra**)
+- Sequências positivas de 3 frames: 8
+- Erros de câmera: 0
+- Estados WTS desconhecidos: 0
+- Veredicto: MATCH_OBSERVED_DURING_WIN_L_DIAGNOSTIC_ONLY
+
+Esse resultado documenta que o reconhecedor YuNet/SFace que roda
+no processo da sessão de usuário identificou vetores semelhantes
+ao modelo cadastrado enquanto WTS reportava LOCKED. Não demonstra
+funcionamento no Secure Desktop, prova de liveness, proteção contra
+foto/replay, disponibilidade ao iniciar o computador, nem desbloqueio
+autenticado de uma conta Windows. A porcentagem observada não é
+métrica de precisão biométrica ou taxa de falso aceite.
+
+### Próxima barreira: autenticação Windows em VM recuperável
+
+O Credential Provider deste projeto ainda é estritamente
+diagnóstico: GetSerialization não produz credenciais e não
+pode desbloquear o Windows. Mesmo o resultado físico positivo não
+autoriza registrar o Provider no computador da família.
+
+O CI passa a validar também a DLL real de distribuição sem registro
+COM, exigindo ausência de exports exclusivos dos autotestes e
+nenhum tile de login quando o sistema não fornece usuário vinculado.
+Testes não verificam LogonUI real. São apenas regressões negativas.
+
+Antes de considerar um Provider realmente autenticante, exigir:
+1. VM Windows com console do hipervisor, snapshot testado e conta
+   administrativa alternativa recuperável.
+2. Contrato de identidade baseado em token do SO e sessão, não
+   identificadores fornecidos por cliente Python.
+3. Worker de captura confiável, política de liveness e resistência a
+   replay validadas com a câmera e cenário físico.
+4. Estratégia segura de credenciais por mecanismo suportado pelo SO:
+   uma correspondência facial comum não equivale a credencial Windows.
+5. Ensaios de rollback após falhas no LogonUI. Nunca eliminar as
+   opções padrão de autenticação e recuperação.
