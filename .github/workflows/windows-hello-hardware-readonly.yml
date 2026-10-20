@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'scripts/Diagnosticar-Hello-Presenca.ps1'
+      - 'scripts/Testar-Camera-WinL.ps1'
       - '.github/workflows/windows-hello-hardware-readonly.yml'
   pull_request:
     paths:
       - 'scripts/Diagnosticar-Hello-Presenca.ps1'
+      - 'scripts/Testar-Camera-WinL.ps1'
       - '.github/workflows/windows-hello-hardware-readonly.yml'
 
 jobs:
@@ -26,6 +28,13 @@ jobs:
           if ($errors.Count -gt 0) {
             $errors | ForEach-Object { Write-Error $_.Message }
             throw "PowerShell syntax failed"
+          }
+          $cameraPath = (Resolve-Path 'scripts/Testar-Camera-WinL.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $cameraPath, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "Camera Win+L diagnostic syntax failed"
           }
           & $scriptPath
           if (-not $?) { throw "Windows Hello read-only preflight failed" }
