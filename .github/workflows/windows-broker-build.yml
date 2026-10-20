@@ -24,10 +24,21 @@ jobs:
           if errorlevel 1 exit /b 1
           FaceKidsBrokerPoc.exe --self-test
           if errorlevel 1 exit /b 1
+          FaceKidsBrokerPoc.exe --service-identity
+          if errorlevel 1 exit /b 1
           FaceKidsBrokerPoc.exe --camera-capability
           if errorlevel 1 exit /b 1
           FaceKidsBrokerPoc.exe --sessions
           if errorlevel 1 exit /b 1
+      - name: Reject non-SYSTEM broker identity in interactive admin runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $result = & .\FaceKidsBrokerPoc.exe --service-identity
+          if ($LASTEXITCODE -ne 0 -or $result -ne 'NOT_SYSTEM') {
+            throw "Elevated runner token was unexpectedly treated as SYSTEM: $result"
+          }
+          Write-Host 'PASS: interactive administrator is NOT LocalSystem'
       - name: Verify SYSTEM/admin pipe and one-shot reply (no service registration)
         shell: pwsh
         run: |

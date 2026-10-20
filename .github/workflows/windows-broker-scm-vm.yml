@@ -48,6 +48,8 @@ jobs:
           }
           try {
             Start-Service -Name $name -ErrorAction Stop
+            # The broker now refuses SCM accounts other than LocalSystem.
+            # Reaching RUNNING proves its process token passed that check.
             $service = Get-Service -Name $name
             $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
             if ($service.Status -ne 'Running') {
