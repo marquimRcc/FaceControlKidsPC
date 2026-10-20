@@ -40,7 +40,7 @@ class StorageTest(unittest.TestCase):
         with TemporaryDirectory() as d:
             db = Storage(Path(d) / "quotas.sqlite3")
             child = db.add_person("Filho", 120)
-            for invalid in ("2026-02-30", "2026-13-01", "2026-2-1"):
+            for invalid in ("2026-02-30", "2026-13-01", "2026-2-1", ""):
                 with self.subTest(day=invalid), self.assertRaises(ValueError):
                     db.add_bonus(child, 30, invalid)
             with self.assertRaises(ValueError):

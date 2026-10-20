@@ -71,7 +71,7 @@ class Storage:
     def add_bonus(self, person_id: int, minutes: int, day: Optional[str] = None):
         if type(minutes) is not int or not 1 <= minutes <= 480:
             raise ValueError("Bônus permitido: 1 a 480 minutos.")
-        day = day or date.today().isoformat()
+        day = date.today().isoformat() if day is None else day
         if (not isinstance(day, str) or len(day) != 10
                 or date.fromisoformat(day).isoformat() != day):
             raise ValueError("Dia inválido; informe YYYY-MM-DD.")
