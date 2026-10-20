@@ -20,7 +20,7 @@ jobs:
           if not defined VSROOT exit /b 1
           call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
           if errorlevel 1 exit /b 1
-          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:FaceKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib ole32.lib mfplat.lib mf.lib mfuuid.lib
+          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:FaceKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib ole32.lib mfplat.lib mf.lib mfuuid.lib shell32.lib
           if errorlevel 1 exit /b 1
           FaceKidsBrokerPoc.exe --self-test
           if errorlevel 1 exit /b 1
