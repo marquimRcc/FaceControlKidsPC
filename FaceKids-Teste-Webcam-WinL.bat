@@ -127,7 +127,7 @@ try {
 
     Write-Step 'Instalando apenas as dependencias de webcam no ambiente virtual...'
     Start-Python -exe $venvPython -prefix @() -arguments @('-m', 'pip', '--disable-pip-version-check', 'install', '--only-binary=:all:', '-r', (Join-Path $source 'requirements.txt'))
-    Start-Python -exe $venvPython -prefix @() -arguments @('-c', 'import cv2,numpy;print("[OK] OpenCV",cv2.__version__,"NumPy",numpy.__version__)')
+    Start-Python -exe $venvPython -prefix @() -arguments @('-c', 'import cv2,numpy;print(cv2.__version__,numpy.__version__)')
 
     Write-Host "`n[PRONTO] O teste sera iniciado por 120 segundos." -ForegroundColor Green
     Write-Host '1. Assim que o cronometro comecar, pressione Win + L.' -ForegroundColor Yellow
