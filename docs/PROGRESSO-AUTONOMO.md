@@ -26,8 +26,9 @@
   consulta WTS pela sessao de processo do Windows e saida que distingue
   falta de amostras, camera sem frames e frames preliminares durante
   bloqueio. Nao salva imagens, nao altera login.
-  Evidencia de CI Python: 39451750368 (validacao sintetica);
-  capturas da webcam real PENDENTES em equipamento fisico.
+  Evidencia de CI Python: 39451750368 (validacao sintetica),
+  aprovado em Windows e Linux; capturas da webcam real PENDENTES
+  em equipamento fisico.
 
 ### Prioridade na proxima execucao automatica
 
@@ -36,11 +37,17 @@
 2. Prosseguir P0-29: separar testes de liveness demonstrativos de
    prova real anti-foto/video; impedir promocao de flag nao confiavel
    em qualquer fluxo de autorizacao nativa.
-3. Inspecionar falhas do SCM/IPC e revisar limites/timeout/cancelamento
+3. **P0-29 concluida no codigo e em CI:** InternalFacePolicy agora
+   nega por padrao qualquer evidencia com booleanos simulados, mesmo
+   que origin/liveness/camera venham como positivos. Factory de testes
+   permite apenas verificacoes sinteticas, nao login. Provas CI Windows:
+   39452149478 (broker) e 39452149379 (SCM).
+   A resistencia real a fotos/videos e a origem segura continuam PENDENTES.
+4. Inspecionar falhas do SCM/IPC e revisar limites/timeout/cancelamento
    de diagnosticos, priorizando operacoes que nao bloqueiem LogonUI.
-4. P0-30: VM com snapshot, teste de recuperacao da conta administrativa
+5. P0-30: VM com snapshot, teste de recuperacao da conta administrativa
    e apenas depois estudo de serializacao Windows; nunca no PC real.
-5. Revisar retenção/protecao dos embeddings e nao capturar dados de
+6. Revisar retencao/protecao dos embeddings e nao capturar dados de
    menores no GitHub Actions.
 
 Leia primeiro este documento, compare HEAD e suites GitHub; faca
