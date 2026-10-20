@@ -7,6 +7,7 @@
 #include <aclapi.h>
 #include <sddl.h>
 #include <winsqlite/winsqlite3.h>
+#include "date_validation.h"
 #include <shlobj.h>
 #include <string>
 #include <cstdint>
@@ -146,8 +147,8 @@ public:
         return true;
     }
     bool remaining(int child, const char* day, sqlite3_int64* seconds) const {
-        if (!db_ || child < 1 || child > 3 || !day || !seconds ||
-            std::strlen(day) != 10) return false;
+        if (!db_ || child < 1 || child > 3 || !seconds ||
+            !facekids_date::valid(day)) return false;
         return statement_int(db_,
             "SELECT max(0,c.limit_seconds + coalesce(q.bonus_seconds,0)"
             " - coalesce(q.used_seconds,0)) FROM children c"
@@ -168,7 +169,7 @@ public:
         return ok;
     }
     bool charge(int child, const char* day, int seconds) {
-        if (!db_ || child < 1 || child > 3 || !day || std::strlen(day) != 10 ||
+        if (!db_ || child < 1 || child > 3 || !facekids_date::valid(day) ||
             seconds <= 0 || seconds > 86400) return false;
         if (!exec(db_, "BEGIN IMMEDIATE;")) return false;
         bool ok = false;
@@ -202,19 +203,21 @@ public:
         return ok;
     }
     bool add_bonus(int child, const char* day, int minutes) {
-        if (!db_ || child < 1 || child > 3 || !day || std::strlen(day) != 10 ||
+        if (!db_ || child < 1 || child > 3 || !facekids_date::valid(day) ||
             minutes <= 0 || minutes > 480) return false;
         sqlite3_stmt* stmt = nullptr;
         if (sqlite3_prepare_v2(db_,
             "INSERT INTO daily_quota(child_id,day,bonus_seconds)"
             " VALUES(?1,?2,?3)"
             " ON CONFLICT(child_id,day) DO UPDATE SET"
-            " bonus_seconds=bonus_seconds+excluded.bonus_seconds;",
+            " bonus_seconds=bonus_seconds+excluded.bonus_seconds"
+            " WHERE bonus_seconds <= 28800-excluded.bonus_seconds;",
             -1, &stmt, nullptr) != SQLITE_OK) return false;
         bool ok = sqlite3_bind_int(stmt, 1, child) == SQLITE_OK &&
                   sqlite3_bind_text(stmt, 2, day, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
                   sqlite3_bind_int(stmt, 3, minutes * 60) == SQLITE_OK &&
-                  sqlite3_step(stmt) == SQLITE_DONE;
+                  sqlite3_step(stmt) == SQLITE_DONE &&
+                  sqlite3_changes(db_) == 1;
         sqlite3_finalize(stmt);
         return ok;
     }
@@ -287,7 +290,7 @@ inline bool reject_permissive_database(const std::wstring& path) {
 }
 
 inline bool self_test() {
-    if (!trusted_root_self_test()) return false;
+    if (!trusted_root_self_test() || !facekids_date::self_test()) return false;
     wchar_t tmp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, tmp)) return false;
     wchar_t testPath[MAX_PATH] = {};
@@ -320,7 +323,11 @@ inline bool self_test() {
             store.remaining(1, tomorrow, &remain) && remain == 7200 &&
             !store.charge(1, today, -1) &&
             !store.set_limit(1, 0) &&
-            !store.add_bonus(2, today, 481);
+            !store.add_bonus(2, today, 481) &&
+            !store.add_bonus(2, today, 480) &&
+            !store.charge(1, "2026-02-30", 1) &&
+            !store.remaining(1, "2026-13-01", &remain) &&
+            !store.add_bonus(2, "2026-02-29", 1);
     }
     {
         Store reopened;
