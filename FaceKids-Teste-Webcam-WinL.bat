@@ -21,6 +21,7 @@ $branch = 'feature/windows-native-unlock-poc'
 $archiveUrl = 'https://github.com/' + $repository + '/archive/refs/heads/' + $branch + '.zip'
 $pythonUrl = 'https://www.python.org/ftp/python/3.13.12/python-3.13.12-amd64.exe'
 $pythonVersion = '3.13.12'
+$probeBackend = if ($env:FACEKIDS_BOOTSTRAP_MODE -eq '--msmf') { 'msmf' } else { 'dshow' }
 
 function Write-Step([string] $message) {
     Write-Host "`n[FaceKids] $message" -ForegroundColor Cyan
@@ -137,7 +138,8 @@ try {
     Start-Sleep -Seconds 7
     Push-Location $source
     try {
-        Start-Python -exe $venvPython -prefix @() -arguments @('-m', 'facekids.windows_lock_probe', '--duration', '120')
+        Write-Host "Camera backend: $probeBackend" -ForegroundColor Cyan
+    Start-Python -exe $venvPython -prefix @() -arguments @('-m', 'facekids.windows_lock_probe', '--duration', '120', '--backend', $probeBackend)
     } finally {
         Pop-Location
     }
