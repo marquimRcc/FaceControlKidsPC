@@ -1,0 +1,31 @@
+name: Windows Hello and presence read-only hardware diagnostic
+
+on:
+  push:
+    paths:
+      - 'scripts/Diagnosticar-Hello-Presenca.ps1'
+      - '.github/workflows/windows-hello-hardware-readonly.yml'
+  pull_request:
+    paths:
+      - 'scripts/Diagnosticar-Hello-Presenca.ps1'
+      - '.github/workflows/windows-hello-hardware-readonly.yml'
+
+jobs:
+  preflight:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse diagnostic and verify read-only inspection works on disposable Windows
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          $scriptPath = (Resolve-Path 'scripts/Diagnosticar-Hello-Presenca.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $scriptPath, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "PowerShell syntax failed"
+          }
+          & $scriptPath
+          if (-not $?) { throw "Windows Hello read-only preflight failed" }
