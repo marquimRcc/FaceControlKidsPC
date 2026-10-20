@@ -13,6 +13,7 @@
 #include "quota_store.h"
 #include "quota_gate.h"
 #include "facial_policy.h"
+#include "camera_capability.h"
 #include "ipc_contract.h"
 #include <vector>
 #include <string>
@@ -340,8 +341,16 @@ static bool quota_gate_self_test() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --sessions | --console-once | --ping | --precheck-as-admin | --service");
+        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --camera-capability | --sessions | --console-once | --ping | --precheck-as-admin | --service");
         return 2;
+    }
+    if (std::wcscmp(argv[1], L"--camera-capability") == 0) {
+        const auto inventory=facekids_camera::enumerate();
+        std::printf("FaceKids Windows camera capability: %s | devices=%u | hr=0x%08lx\n",
+                    facekids_camera::describe(inventory.capability),
+                    inventory.device_count, static_cast<unsigned long>(inventory.code));
+        std::puts("No image sampled, no face recognition, no login authorization.");
+        return inventory.usable_for_authentication() ? 3 : 0;
     }
     if (std::wcscmp(argv[1], L"--sessions") == 0)
         return facekids_wts::dump_local_sessions();
@@ -351,7 +360,8 @@ int wmain(int argc, wchar_t** argv) {
         if (sd) LocalFree(sd);
         if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
             !facekids_quota::self_test() || !quota_gate_self_test() ||
-            !facekids_ipc::self_test() || !facial_policy_self_test()) return 3;
+            !facekids_ipc::self_test() || !facial_policy_self_test() ||
+            !facekids_camera::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
     }
