@@ -4,6 +4,28 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Ciclo de seguranca adicional — P0-35 (20/10/2026)
+
+P0-35: ampliados os testes sinteticos do quota_gate nativo.
+Novos casos negativos incluem:
+- WTS INACTIVE e UNKNOWN
+- SID de token diferente da conta Filhos
+- session_id trocado entre captura e consulta
+- dia de quota invalido
+- nova verificacao positiva apenas apos restaurar todas as precondicoes
+
+Codigo no commit bd127034; conferir workflows Windows broker
+39456205834 e SCM 39456205889 antes de declarar ambos aprovados.
+Esses testes usam snapshots simulados, nao a tela segura real.
+
+Proxima prioridade concreta: proteger a origem da captura facial
+com worker sob controle do servico Windows, sem aceitar embeddings,
+'camera_healthy' ou 'liveness_passed' da conta Filhos.
+Testes de foto/video e LogonUI reais seguem dependentes de hardware
+e ambiente VM recuperavel.
+
+---
+
 ## Ciclo de recuperacao e endurecimento — P0-30 a P0-34 (20/10/2026)
 
 **P0-30 — falha fechada + recuperacao do SQLite: TESTADO.**
@@ -32,13 +54,13 @@ tenta abrir o pipe; o ACL nega. Admin legitimo ainda recebe PONG.
 Nenhuma conta Windows foi criada. CI 39455111448 aprovado.
 Nao e teste direto da conta Filhos no PC real.
 
-**P0-34 — preflight de runner virtual antes de testes SCM: EM VALIDACAO.**
+**P0-34 — preflight de runner virtual antes de testes SCM: APROVADO.**
 Adicionado scripts/Conferir-Ambiente-Isolado.ps1, apenas leitura.
 O workflow exige contexto GitHub-hosted e indicios WMI de Windows
 virtualizado antes de criar um servico de teste.
 O primeiro workflow falhou devido a verificacao errada de
-LASTEXITCODE de um script PowerShell; corrigido, preflight aprovado
-no run 39455686332. Verificar conclusao do restante do workflow.
+LASTEXITCODE de um script PowerShell; corrigido. Run 39455686332:
+preflight, compilacao e ciclo completo do SCM APROVADOS.
 Virtualizacao detectada nao e evidencia de snapshot utilizavel.
 
 ### Proxima fila tecnica
