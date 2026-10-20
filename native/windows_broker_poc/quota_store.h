@@ -7,6 +7,7 @@
 #include <aclapi.h>
 #include <sddl.h>
 #include <winsqlite/winsqlite3.h>
+#include <shlobj.h>
 #include <string>
 #include <cstdint>
 #include <cstdio>
@@ -219,12 +220,19 @@ public:
     }
 };
 
+// Resolve the real Windows known folder, not an overridable process
+// environment variable (which may point to an unsafe directory).
 inline std::wstring program_data_root() {
-    wchar_t base[32768] = {};
-    DWORD length = GetEnvironmentVariableW(L"ProgramData", base,
-                                           static_cast<DWORD>(sizeof(base)/sizeof(base[0])));
-    if (!length || length >= sizeof(base)/sizeof(base[0])) return {};
-    return std::wstring(base) + L"\\FaceControlKidsPC";
+    PWSTR folder=nullptr;
+    HRESULT hr=SHGetKnownFolderPath(FOLDERID_ProgramData, KF_FLAG_DEFAULT,
+                                    nullptr, &folder);
+    if (FAILED(hr) || !folder) {
+        if (folder) CoTaskMemFree(folder);
+        return {};
+    }
+    const std::wstring result=std::wstring(folder)+L"\\FaceControlKidsPC";
+    CoTaskMemFree(folder);
+    return result;
 }
 // Negative ACL tests are performed under isolated temporary directories.
 inline bool reject_permissive_directory(const std::wstring& path) {
