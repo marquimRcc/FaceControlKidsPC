@@ -10,6 +10,7 @@
 #include <cwchar>
 #include "wts_diagnostic.h"
 #include "session_guard.h"
+#include "quota_store.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -174,6 +175,16 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
         return;
     }
     report(SERVICE_START_PENDING);
+    // Service-only persistent quota DB. This path is NEVER touched by tests,
+    // --sessions or any unprivileged client operation.
+    facekids_quota::Store quotas;
+    const std::wstring root = facekids_quota::program_data_root();
+    if (root.empty() || !quotas.open(root)) {
+        report(SERVICE_STOPPED, ERROR_ACCESS_DENIED);
+        CloseHandle(g_stop);
+        g_stop = nullptr;
+        return; // fail closed: no service pipe without a protected quota DB
+    }
     report(SERVICE_RUNNING);
     const bool ok = run_pipe(false);
     report(SERVICE_STOPPED, ok ? ERROR_SUCCESS : (g_error ? g_error : ERROR_GEN_FAILURE));
@@ -219,8 +230,9 @@ int wmain(int argc, wchar_t** argv) {
         PSECURITY_DESCRIPTOR sd = nullptr;
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
-        if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test()) return 3;
-        std::puts("PASS: SCM shell, restricted pipe ACL and fail-closed session SID guard");
+        if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
+            !facekids_quota::self_test()) return 3;
+        std::puts("PASS: SCM, restricted pipe, trusted session guard and SQLite quota persistence");
         return 0;
     }
     if (std::wcscmp(argv[1], L"--ping") == 0) return ping_client();
