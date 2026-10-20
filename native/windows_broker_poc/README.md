@@ -126,3 +126,26 @@ NAO envia consultas e NAO autentica o usuario Windows.
 Antes de usar a interface com autorizacao real, precisamos distinguir
 processos LogonUI de outros programas SYSTEM, integrar liveness e
 preparar VM com snapshot, instalacao/rollback e credenciais protegidas.
+
+
+## P0-12 — Politica facial interna (prova sintetica)
+
+facial_policy.h introduz uma maquina de estados interna no broker,
+exclusivamente testada em --self-test. Ela recusa:
+- dois rostos, nenhuma face ou identificacao fora dos tres perfis
+- liveness negativo, camera indisponivel e confirmacoes insuficientes
+- amostras faciais antigas (>3 segundos) ou com timestamp futuro
+- divergencia de SID/sessao ou sessao ja desbloqueada
+- saldo esgotado no instante do reconhecimento ou do recheck
+- resposta reaproveitada, expirada (>8 segundos) ou cancelada
+
+As tres quotas independentes sao verificadas em uma base SQLite
+temporaria protegida. A segunda validacao consulta o saldo outra vez.
+Os testes rodam no CI Windows e no ciclo SCM LocalSystem.
+
+IMPORTANTE: EvidenceOrigin::ProtectedWorker e apenas uma etiqueta
+de teste, nao uma prova de origem. O projeto ainda NAO tem worker
+de camera confiavel nem antisspoof real. Essa politica nao foi
+conectada ao named pipe (que continua PING/PRECHECK) nem gera
+credenciais de login. READY_FOR_ADDITIONAL_CONTROLS significa
+somente que faltam controles antes de uma autorizacao de Windows.

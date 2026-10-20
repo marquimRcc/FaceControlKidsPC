@@ -12,6 +12,7 @@
 - **IPC de pré-verificação P0-9:** protocolo binário de 16 bytes; somente um cliente cujo token Windows seja exatamente LocalSystem pode passar à avaliação de pré-condições WTS/quota. Administrador comum recebe DENIED. Resposta positiva PRECHECK_ONLY **não concede login**.
 - **SCM em VM descartável P0-10:** Windows GitHub Actions registrou o serviço LocalSystem, abriu o banco protegido em ProgramData, validou comunicação e negativa por administrador e removeu serviço e pasta ao terminar. Nada instalado no PC.
 - **Cliente de diagnóstico CP P0-11:** a DLL COM de teste conversou com o broker pelo protocolo P0-9 e recebeu DENIED corretamente. A DLL normal ainda nunca serializa credenciais.
+- **Política facial nativa P0-12:** máquina de estados interna C++ exercita evidência facial simulada, 3 crianças, WTS/SID, saldo protegido, validade de 3 segundos para a amostra e rechecagem única em até 8 segundos. Sem novo comando IPC ou serialização de credenciais.
 
 - **Ainda faltam:** provar autenticação específica do processo LogonUI (SID SYSTEM sozinho não identifica o processo), câmera/liveness com origem confiável, ligação do rosto ao saldo, cofre seguro da credencial Filhos e registro/recuperação do Credential Provider em VM. O SCM foi validado apenas em runner Windows descartável; nada foi instalado no PC.
 
