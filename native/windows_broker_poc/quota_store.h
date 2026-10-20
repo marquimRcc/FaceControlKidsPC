@@ -226,6 +226,44 @@ inline std::wstring program_data_root() {
     if (!length || length >= sizeof(base)/sizeof(base[0])) return {};
     return std::wstring(base) + L"\\FaceControlKidsPC";
 }
+// Negative ACL tests are performed under isolated temporary directories.
+inline bool reject_permissive_directory(const std::wstring& path) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;WD)",
+        SDDL_REVISION_1, &descriptor, nullptr)) return false;
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), descriptor, FALSE};
+    BOOL created = CreateDirectoryW(path.c_str(), &sa);
+    LocalFree(descriptor);
+    if (!created) return false;
+    bool rejected = !allowed_acl(path, true);
+    Store store;
+    rejected = rejected && !store.open(path);
+    RemoveDirectoryW(path.c_str());
+    return rejected;
+}
+
+inline bool reject_permissive_database(const std::wstring& path) {
+    if (!make_secure_directory(path)) return false;
+    const std::wstring file = path + L"\\quota.sqlite3";
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        L"D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;WD)",
+        SDDL_REVISION_1, &descriptor, nullptr)) return false;
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), descriptor, FALSE};
+    HANDLE handle = CreateFileW(file.c_str(), GENERIC_WRITE, 0, &sa,
+                                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    LocalFree(descriptor);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+    CloseHandle(handle);
+    bool rejected = !allowed_acl(file, false);
+    Store store;
+    rejected = rejected && !store.open(path);
+    DeleteFileW(file.c_str());
+    RemoveDirectoryW(path.c_str());
+    return rejected;
+}
+
 inline bool self_test() {
     wchar_t tmp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, tmp)) return false;
@@ -269,6 +307,8 @@ inline bool self_test() {
             reopened.remaining(3, today, &remain) && remain == 3600;
     }
     success = success && allowed_acl(folder, true) && allowed_acl(dbPath, false);
+    success = success && reject_permissive_directory(folder + L"_loose");
+    success = success && reject_permissive_database(folder + L"_unsafe_db");
     DeleteFileW(dbPath.c_str());
     RemoveDirectoryW(folder.c_str());
     // No ProgramData writes or service installation happen during --self-test.
