@@ -2,6 +2,16 @@
 
 > **Branch experimental: feature/face-access-gate.** O novo protótipo visual é uma simulação de liberação facial; não é o bloqueio seguro do Windows. A branch main permanece com o MVP 0.4.
 
+## Testar a identificacao facial pela webcam (novo)
+
+Com OpenCV, modelos baixados e os rostos cadastrados na conta Filhos, rode:
+
+    .\.venv\Scripts\python.exe -m facekids.gate_webcam_preview
+
+Ou abra testar-webcam-gate.bat. A tela reconhece rostos por YuNet/SFace,
+mostra estados e saldos, mas nao altera SQLite nem bloqueia o Windows.
+Pressione Esc para sair. Consulte docs/DEMO-WEBCAM-GATE.md.
+
 ## Testar a tela de acesso facial sem webcam
 
 Use Python 3.11+ no Windows. Com a branch selecionada, execute:
