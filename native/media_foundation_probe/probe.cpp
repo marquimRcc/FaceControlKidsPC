@@ -2,6 +2,7 @@
 // No credentials, no Credential Provider installation, no saved photos or video.
 // The user manually presses Win+L while this tool collects numeric statistics.
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <mfapi.h>
 #include <mfidl.h>

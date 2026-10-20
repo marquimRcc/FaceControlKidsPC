@@ -15,7 +15,7 @@ static const CLSID kProviderId =
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::fwprintf(stderr, L"usage: FaceKidsProviderHost.exe path-to-DLL\n");
+        fwprintf(stderr, L"usage: FaceKidsProviderHost.exe path-to-DLL\n");
         return 2;
     }
     HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
