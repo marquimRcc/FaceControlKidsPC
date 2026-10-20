@@ -19,6 +19,7 @@
 #include "face_consensus.h"
 #include "lock_decision.h"
 #include "protected_camera_worker.h"
+#include "one_use_preflight.h"
 #include "camera_capability.h"
 #include "camera_frame_probe.h"
 #include "service_identity.h"
@@ -551,6 +552,23 @@ static bool facial_policy_self_test() {
     return passed;
 }
 
+static bool one_use_preflight_self_test() {
+    wchar_t temporary[MAX_PATH]={},unique[MAX_PATH]={};
+    if(!GetTempPathW(MAX_PATH,temporary) ||
+       !GetTempFileNameW(temporary,L"FOT",0,unique) ||
+       !DeleteFileW(unique)) return false;
+    const std::wstring root(unique);
+    if(!facekids_quota::make_secure_directory(root)) return false;
+    bool ok=false;
+    {
+        facekids_quota::Store quota;
+        ok=quota.open(root) && facekids_ticket::self_test(quota);
+    }
+    DeleteFileW((root+L"\\quota.sqlite3").c_str());
+    RemoveDirectoryW(root.c_str());
+    return ok;
+}
+
 static bool face_quota_bridge_self_test() {
     wchar_t temporary[MAX_PATH]={},unique[MAX_PATH]={};
     if(!GetTempPathW(MAX_PATH,temporary) ||
@@ -675,6 +693,7 @@ int wmain(int argc, wchar_t** argv) {
             !usage_meter_self_test() ||
             !matcher_self_test() ||
             !face_quota_bridge_self_test() ||
+            !one_use_preflight_self_test() ||
             !facekids_consensus::self_test() ||
             !facekids_lock_policy::self_test() ||
             !facekids_protected_camera::self_test() ||
