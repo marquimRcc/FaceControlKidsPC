@@ -7,6 +7,8 @@
 #include <new>
 #include <cwchar>
 #include <cstring>
+#include <string>
+#include <sddl.h>
 static volatile LONG objects=0, locks=0;
 
 static HRESULT clone_text(PCWSTR src, PWSTR* out) {
@@ -19,18 +21,28 @@ static HRESULT clone_text(PCWSTR src, PWSTR* out) {
     return S_OK;
 }
 
-class DiagnosticCredential final : public ICredentialProviderCredential {
+class DiagnosticCredential final : public ICredentialProviderCredential2 {
+    std::wstring bound_sid_;
     volatile LONG references=1;
 public:
     DiagnosticCredential() { InterlockedIncrement(&objects); }
     ~DiagnosticCredential() { InterlockedDecrement(&objects); }
+    void BindSid(const std::wstring& sid) { bound_sid_=sid; }
+    HRESULT STDMETHODCALLTYPE GetUserSid(PWSTR* sid) override {
+        if (!sid) return E_POINTER;
+        *sid=nullptr;
+        return bound_sid_.empty() ? E_UNEXPECTED : clone_text(bound_sid_.c_str(),sid);
+    }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** out) override {
         if (!out) return E_POINTER;
         *out=nullptr;
         if (iid==IID_IUnknown || iid==IID_ICredentialProviderCredential) {
             *out=static_cast<ICredentialProviderCredential*>(this);
-            AddRef();
-            return S_OK;
+            AddRef(); return S_OK;
+        }
+        if (iid==IID_ICredentialProviderCredential2) {
+            *out=static_cast<ICredentialProviderCredential2*>(this);
+            AddRef(); return S_OK;
         }
         return E_NOINTERFACE;
     }
@@ -90,7 +102,38 @@ public:
     }
 };
 
-class DiagnosticProvider final : public ICredentialProvider {
+// Never enumerate a tile without matching the administratively provisioned SID.
+// The isolated COM test build can inject a fake SID, but never authenticates.
+#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+static std::wstring g_host_test_sid;
+extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsSetDiagnosticSidForHost(PCWSTR sid) {
+    if (!sid) return E_POINTER;
+    PSID binary=nullptr;
+    if (!ConvertStringSidToSidW(sid,&binary)) return E_INVALIDARG;
+    LocalFree(binary);
+    g_host_test_sid=sid;
+    return S_OK;
+}
+#endif
+static std::wstring load_target_sid() {
+#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+    return g_host_test_sid;
+#else
+    WCHAR sid[256]={};
+    DWORD bytes=sizeof(sid);
+    LONG rc=RegGetValueW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\FaceControlKidsPC\\CredentialProvider",
+        L"TargetUserSid",RRF_RT_REG_SZ,nullptr,sid,&bytes);
+    if (rc!=ERROR_SUCCESS || !sid[0]) return {};
+    PSID binary=nullptr;
+    if (!ConvertStringSidToSidW(sid,&binary)) return {};
+    LocalFree(binary);
+    return sid;
+#endif
+}
+
+class DiagnosticProvider final : public ICredentialProvider, public ICredentialProviderSetUserArray {
+    bool eligible_=false;
     volatile LONG references=1;
     DiagnosticCredential* credential;
 public:
@@ -107,8 +150,11 @@ public:
         *out=nullptr;
         if (iid==IID_IUnknown || iid==IID_ICredentialProvider) {
             *out=static_cast<ICredentialProvider*>(this);
-            AddRef();
-            return S_OK;
+            AddRef(); return S_OK;
+        }
+        if (iid==IID_ICredentialProviderSetUserArray) {
+            *out=static_cast<ICredentialProviderSetUserArray*>(this);
+            AddRef(); return S_OK;
         }
         return E_NOINTERFACE;
     }
@@ -126,6 +172,30 @@ public:
     }
     HRESULT STDMETHODCALLTYPE Advise(ICredentialProviderEvents*,UINT_PTR) override { return S_OK; }
     HRESULT STDMETHODCALLTYPE UnAdvise() override { return S_OK; }
+    // The Windows-provided user list is consulted for an exact SID match.
+    HRESULT STDMETHODCALLTYPE SetUserArray(ICredentialProviderUserArray* users) override {
+        eligible_=false;
+        if (credential) credential->BindSid(L"");
+        if (!users) return E_POINTER;
+        const std::wstring allowed=load_target_sid();
+        if (allowed.empty() || !credential) return S_OK; // fail closed
+        DWORD count=0;
+        if (FAILED(users->GetCount(&count))) return S_OK;
+        for (DWORD i=0;i<count;++i) {
+            ICredentialProviderUser* user=nullptr;
+            if (FAILED(users->GetAt(i,&user)) || !user) continue;
+            PWSTR sid=nullptr;
+            HRESULT hr=user->GetSid(&sid);
+            if (SUCCEEDED(hr) && sid && _wcsicmp(sid,allowed.c_str())==0) {
+                credential->BindSid(sid);
+                eligible_=true;
+            }
+            CoTaskMemFree(sid);
+            user->Release();
+            if (eligible_) break;
+        }
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE GetFieldDescriptorCount(DWORD* count) override {
         if (!count) return E_POINTER;
         *count=2;
@@ -148,7 +218,7 @@ public:
     }
     HRESULT STDMETHODCALLTYPE GetCredentialCount(DWORD* count,DWORD* def,BOOL* autoLogon) override {
         if (!count || !def || !autoLogon) return E_POINTER;
-        *count=credential ? 1 : 0;
+        *count=(credential && eligible_) ? 1 : 0;
         *def=CREDENTIAL_PROVIDER_NO_DEFAULT;
         *autoLogon=FALSE;
         return S_OK;
@@ -156,7 +226,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetCredentialAt(DWORD id,ICredentialProviderCredential** out) override {
         if (!out) return E_POINTER;
         *out=nullptr;
-        if (id!=0 || !credential) return E_INVALIDARG;
+        if (id!=0 || !credential || !eligible_) return E_INVALIDARG;
         return credential->QueryInterface(IID_ICredentialProviderCredential,reinterpret_cast<void**>(out));
     }
 };
