@@ -43,6 +43,21 @@ jobs:
           } finally {
             if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
           }
+      - name: Check non-biometric camera capability over local broker pipe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
+          $server = Start-Process -FilePath $exe -ArgumentList '--console-once' -PassThru -NoNewWindow
+          try {
+            Start-Sleep -Milliseconds 600
+            & $exe --camera-status
+            if ($LASTEXITCODE -ne 0) { throw "Camera query failed: $LASTEXITCODE" }
+            if (-not $server.WaitForExit(12000)) { throw 'Broker pipe timeout' }
+            if ($server.ExitCode -ne 0) { throw "Broker server failed" }
+          } finally {
+            if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
       - name: Reject precheck from administrator (never issue credential)
         shell: pwsh
         run: |
