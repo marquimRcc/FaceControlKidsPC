@@ -32,14 +32,14 @@ logger = logging.getLogger("FaceKidsWelcome")
 
 def load_programs_config() -> dict:
     default_config = {
-        "enabled": False,
+        "enabled": True,
         "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
         "programs": [
             {
-                "name": "Navegador de Internet",
-                "executable": "msedge.exe",
-                "arguments": "https://www.google.com.br",
-                "enabled": False,
+                "name": "Brave - YouTube Kids",
+                "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                "arguments": "https://www.youtubekids.com",
+                "enabled": True,
             }
         ],
     }
@@ -58,7 +58,21 @@ def load_programs_config() -> dict:
         return default_config
 
 
+_programs_launched = False
+
+
 def launch_configured_programs():
+    global _programs_launched
+    if _programs_launched:
+        return
+    _programs_launched = True
+
+    # Evita abrir programas na conta dos pais caso o administrador esteja apenas testando o visual
+    current_user = os.environ.get("USERNAME", "")
+    if current_user.casefold() == "marcosminipc":
+        logger.info("Conta do administrador detectada: programas automaticos dos filhos nao serao abertos aqui.")
+        return
+
     cfg = load_programs_config()
     if not cfg.get("enabled", False):
         return
@@ -74,6 +88,7 @@ def launch_configured_programs():
         try:
             cmd = f'"{exe}" {args}' if args else f'"{exe}"'
             subprocess.Popen(cmd, shell=True)
+            logger.info("Programa iniciado com sucesso: %s", exe)
         except Exception as e:
             logger.warning("Falha ao iniciar programa '%s': %s", exe, e)
 
@@ -322,6 +337,8 @@ class WelcomeWindow:
 
 
 def show_welcome():
+    # Inicializa programas em segundo plano para ja estarem carregados quando o filho comecar
+    launch_configured_programs()
     child_id, child_name, remaining_seconds = get_current_child_info()
     root = tk.Tk()
     app = WelcomeWindow(root, child_id, child_name, remaining_seconds)

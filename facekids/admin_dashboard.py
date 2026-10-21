@@ -99,14 +99,14 @@ class ProgramsConfigDialog(tk.Toplevel):
 
     def _load(self) -> dict:
         default = {
-            "enabled": False,
+            "enabled": True,
             "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
             "programs": [
                 {
-                    "name": "Navegador de Internet",
-                    "executable": "msedge.exe",
-                    "arguments": "https://www.google.com.br",
-                    "enabled": False,
+                    "name": "Brave - YouTube Kids",
+                    "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                    "arguments": "https://www.youtubekids.com",
+                    "enabled": True,
                 }
             ],
         }
