@@ -63,3 +63,17 @@ class StorageTest(unittest.TestCase):
             with self.assertRaises(KeyError):
                 db.remove_embeddings(987)
             db.close()
+
+    def test_update_person_name(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            cid = db.add_person("Crianca 1", 120)
+            self.assertEqual(db.get_person("Crianca 1")[0], cid)
+            db.update_person_name(cid, "Lucas")
+            self.assertIsNone(db.get_person("Crianca 1"))
+            self.assertEqual(db.get_person("Lucas")[0], cid)
+            with self.assertRaises(ValueError):
+                db.update_person_name(cid, "   ")
+            with self.assertRaises(KeyError):
+                db.update_person_name(9999, "Novo")
+            db.close()

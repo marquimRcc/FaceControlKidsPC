@@ -17,6 +17,18 @@ def ensure_avatar_dir() -> Path:
     return AVATAR_DIR
 
 
+def load_image_any_path(path: str) -> Optional[np.ndarray]:
+    """Carrega imagem de qualquer caminho no Windows (incluindo acentos e espacos)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        arr = np.frombuffer(data, dtype=np.uint8)
+        return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        logger.warning("Falha ao abrir arquivo de imagem '%s': %s", path, e)
+        return None
+
+
 def save_child_photo(child_id: int, frame: np.ndarray, face_box: Optional[list | np.ndarray] = None) -> Optional[Path]:
     """Salva a foto cortada do rosto da crianca e gera o PNG circular correspondente."""
     try:
@@ -71,6 +83,73 @@ def generate_circular_png(bgr_img: np.ndarray, size: int = 120) -> np.ndarray:
     # Borda circular estilizada (Azul vibrante/ciano moderno: B=240, G=180, R=56)
     cv2.circle(bgra, (size // 2, size // 2), radius, (240, 180, 56, 255), 3, cv2.LINE_AA)
     return bgra
+
+
+class PhotoUpdateResult:
+    """Resultado detalhado da atualizacao de foto."""
+    def __init__(self, success: bool, message: str, avatar_path: Optional[Path] = None):
+        self.success = success
+        self.message = message
+        self.avatar_path = avatar_path
+
+    def __bool__(self) -> bool:
+        return self.success
+
+    def __iter__(self):
+        yield self.success
+        yield self.message
+
+
+def set_child_photo_from_file(
+    child_id: int,
+    file_path: str,
+    models_dir: Optional[Path] = None,
+    store=None,
+    update_biometrics: bool = True,
+) -> PhotoUpdateResult:
+    """Define a foto da crianca a partir de um arquivo do computador e extrai biometria se possivel."""
+    img = load_image_any_path(file_path)
+    if img is None or img.size == 0:
+        return PhotoUpdateResult(False, "Não foi possível carregar a imagem selecionada.")
+
+    face_box = None
+    bio_msg = ""
+    if models_dir is not None:
+        try:
+            from .recognition import Recognizer
+            rec = Recognizer(models_dir)
+            faces = rec.faces(img)
+            if len(faces) >= 1:
+                face_box = max(faces, key=lambda f: float(f[2]) * float(f[3]))
+                if update_biometrics and store is not None:
+                    feat = rec.features(img, face_box)
+                    store.add_embedding(child_id, feat)
+                    bio_msg = " Rosto detectado e biometria atualizada com sucesso!"
+                    logger.info("Novo embedding extraido e adicionado da foto para a crianca %d", child_id)
+            else:
+                bio_msg = " Foto salva como avatar (nenhum rosto nítido detectado para biometria)."
+        except Exception as e:
+            logger.warning("Aviso ao extrair biometria da foto selecionada: %s", e)
+            bio_msg = f" Foto salva como avatar (aviso biometria: {e})."
+
+    res = save_child_photo(child_id, img, face_box)
+    if res is not None:
+        return PhotoUpdateResult(True, f"Foto atualizada!{bio_msg}", res)
+    return PhotoUpdateResult(False, "Falha ao processar e salvar imagem recortada.")
+
+
+def remove_child_avatar_files(child_id: int) -> bool:
+    """Remove os arquivos de foto e avatar da crianca do disco."""
+    removed = False
+    for fname in [f"crianca_{child_id}_avatar.png", f"crianca_{child_id}.jpg"]:
+        p = AVATAR_DIR / fname
+        if p.exists():
+            try:
+                p.unlink()
+                removed = True
+            except Exception as e:
+                logger.warning("Falha ao remover arquivo %s: %s", p, e)
+    return removed
 
 
 def get_child_avatar_path(child_id: int) -> Optional[Path]:

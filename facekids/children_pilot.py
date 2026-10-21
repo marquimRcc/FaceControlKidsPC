@@ -58,6 +58,9 @@ def validate_real_lock(os_type: str, account: str, *, confirmed: bool) -> None:
 def _child_id(store: Storage, index: int) -> int:
     if index not in (1, 2, 3):
         raise ValueError("Indice de crianca deve ser de 1 a 3")
+    for p in store.people():
+        if p[0] == index:
+            return int(p[0])
     row = store.get_person(CHILD_LABELS[index - 1])
     if row is None:
         raise RuntimeError("Cadastre os tres perfis antes de iniciar.")

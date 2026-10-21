@@ -69,6 +69,14 @@ class Storage:
                                   (minutes * 60, person_id))
             if cur.rowcount != 1: raise KeyError(person_id)
 
+    def update_person_name(self, person_id: int, new_name: str):
+        cleaned = new_name.strip()
+        if not cleaned or len(cleaned) > 80:
+            raise ValueError("Nome de pessoa inválido.")
+        with self.db:
+            cur = self.db.execute("UPDATE people SET name=? WHERE id=?", (cleaned, person_id))
+            if cur.rowcount != 1: raise KeyError(person_id)
+
     def add_bonus(self, person_id: int, minutes: int, day: Optional[str] = None):
         if type(minutes) is not int or not 1 <= minutes <= 480:
             raise ValueError("Bônus permitido: 1 a 480 minutos.")
