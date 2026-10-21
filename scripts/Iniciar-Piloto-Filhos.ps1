@@ -40,7 +40,7 @@ try {
     }
     $currentUser=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     Write-Host ''
-    Write-Host "FaceKids Piloto Infantil — usuario $currentUser" -ForegroundColor Cyan
+    Write-Host "FaceKids Piloto Infantil - usuario $currentUser" -ForegroundColor Cyan
     Write-Host 'Nenhum bloqueio Windows sera executado neste menu.'
     Write-Host 'Cadastro facial e quotas sao LOCAIS desta conta e ainda nao antiviolacao.'
     Write-Host 'Acompanhe pessoalmente cada cadastro e confirme consentimento dos responsaveis.'

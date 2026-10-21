@@ -3,13 +3,26 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Push-Location $scriptDir
 try {
-    $gpp = 'C:\Users\MarcosMiniPC\w64devkit\w64devkit\bin\g++.exe'
-    if (-not (Test-Path $gpp)) {
-        throw "Compilador g++ nao encontrado em $gpp"
+    $gpp = $null
+    if (Get-Command g++.exe -ErrorAction SilentlyContinue) {
+        $gpp = (Get-Command g++.exe).Source
+    } elseif (Test-Path 'C:\Users\MarcosMiniPC\w64devkit\w64devkit\bin\g++.exe') {
+        $gpp = 'C:\Users\MarcosMiniPC\w64devkit\w64devkit\bin\g++.exe'
+    } elseif (Test-Path 'C:\msys64\mingw64\bin\g++.exe') {
+        $gpp = 'C:\msys64\mingw64\bin\g++.exe'
+    } elseif (Test-Path 'C:\msys64\ucrt64\bin\g++.exe') {
+        $gpp = 'C:\msys64\ucrt64\bin\g++.exe'
+    } elseif (Test-Path 'C:\ProgramData\mingw64\bin\g++.exe') {
+        $gpp = 'C:\ProgramData\mingw64\bin\g++.exe'
+    }
+    if (-not $gpp) {
+        throw "Compilador g++ nao encontrado no PATH nem nos locais padrao."
     }
 
+    Write-Host "[FaceKids] Usando compilador: $gpp" -ForegroundColor Cyan
+
     Write-Host "[FaceKids] Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Cyan
-    & $gpp -shared -std=c++17 -O2 -DINITGUID `
+    & $gpp -shared -std=c++17 -O2 `
       dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
       -o FaceKidsCredentialProvider.dll `
       -lole32 -ladvapi32 -lsecur32 -luuid -lcredui

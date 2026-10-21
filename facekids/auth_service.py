@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from typing import Optional, Tuple
@@ -34,16 +35,32 @@ from .recognition import Recognizer
 from .storage import Storage
 from .avatar_utils import save_child_photo
 
-log_dir = Path("C:/ProgramData/FaceKids")
-log_dir.mkdir(parents=True, exist_ok=True)
+if sys.platform == "win32":
+    log_dir = Path(os.environ.get("PROGRAMDATA", "C:/ProgramData")) / "FaceKids"
+else:
+    log_dir = Path(tempfile.gettempdir()) / "FaceKids"
+
+try:
+    log_dir.mkdir(parents=True, exist_ok=True)
+except OSError:
+    log_dir = Path(tempfile.gettempdir()) / "FaceKids"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
 log_file = log_dir / "auth_service.log"
 
-logging.basicConfig(
-    filename=str(log_file),
-    level=logging.INFO,
-    format="[%(asctime)s] [FaceKidsService] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+try:
+    logging.basicConfig(
+        filename=str(log_file),
+        level=logging.INFO,
+        format="[%(asctime)s] [FaceKidsService] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+except OSError:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] [FaceKidsService] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 logger = logging.getLogger("FaceKidsAuthService")
 
 PIPE_NAME = r"\\.\pipe\FaceKidsAuthPipe"
@@ -62,9 +79,9 @@ SDDL_PERMISSIVE = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)"
 
 class SECURITY_ATTRIBUTES(ctypes.Structure):
     _fields_ = [
-        ("nLength", wintypes.DWORD),
-        ("lpSecurityDescriptor", wintypes.LPVOID),
-        ("bInheritHandle", wintypes.BOOL),
+        ("nLength", wintypes.DWORD if hasattr(wintypes, "DWORD") else ctypes.c_ulong),
+        ("lpSecurityDescriptor", wintypes.LPVOID if hasattr(wintypes, "LPVOID") else ctypes.c_void_p),
+        ("bInheritHandle", wintypes.BOOL if hasattr(wintypes, "BOOL") else ctypes.c_int),
     ]
 
 
@@ -72,23 +89,37 @@ def create_security_attributes() -> SECURITY_ATTRIBUTES:
     sa = SECURITY_ATTRIBUTES()
     sa.nLength = ctypes.sizeof(sa)
     sa.bInheritHandle = False
-    p_sd = wintypes.LPVOID()
-    advapi32 = ctypes.windll.advapi32
-    if advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        SDDL_PERMISSIVE, 1, ctypes.byref(p_sd), None
-    ):
-        sa.lpSecurityDescriptor = p_sd
+    advapi32 = getattr(getattr(ctypes, "windll", None), "advapi32", None)
+    if advapi32 is not None:
+        p_sd = wintypes.LPVOID()
+        if advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            SDDL_PERMISSIVE, 1, ctypes.byref(p_sd), None
+        ):
+            sa.lpSecurityDescriptor = p_sd
+        else:
+            logger.warning("Falha ao criar SDDL customizado; usando seguranca padrao.")
+            sa.lpSecurityDescriptor = None
     else:
-        logger.warning("Falha ao criar SDDL customizado; usando seguranca padrao.")
         sa.lpSecurityDescriptor = None
     return sa
 
 
 class FaceAuthenticator:
-    def __init__(self, models_dir: Path, db_path: Path):
-        self.models_dir = models_dir
-        self.db_path = db_path
-        self.recognizer = Recognizer(models_dir)
+    def __init__(
+        self,
+        models_dir: Path,
+        db_path: Path,
+        recognizer: Optional[Recognizer] = None,
+    ):
+        self.models_dir = Path(models_dir)
+        self.db_path = Path(db_path)
+        self._recognizer = recognizer
+
+    @property
+    def recognizer(self) -> Recognizer:
+        if self._recognizer is None:
+            self._recognizer = Recognizer(self.models_dir)
+        return self._recognizer
 
     def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5) -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
@@ -102,10 +133,17 @@ class FaceAuthenticator:
             if not references:
                 return "DENY_NO_ENROLLMENT", {"message": "Nenhum rosto cadastrado"}
 
+            try:
+                rec = self.recognizer
+            except Exception as e:
+                logger.error("Falha ao inicializar Recognizer: %s", e)
+                return "ERROR", {"message": f"Modelos faciais indisponiveis: {e}"}
+
             # Mapeamento ID -> Nome
             names = {pid: name for pid, name, _ in store.people()}
 
-            cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+            backend = cv2.CAP_DSHOW if sys.platform == "win32" else 0
+            cap = cv2.VideoCapture(camera_index, backend)
             if not cap.isOpened():
                 return "ERROR_CAMERA", {"message": "Nao foi possivel abrir a webcam"}
 
@@ -122,12 +160,12 @@ class FaceAuthenticator:
                         time.sleep(0.05)
                         continue
 
-                    faces = self.recognizer.faces(frame)
+                    faces = rec.faces(frame)
                     if len(faces) >= 1:
                         # Prioriza o rosto mais proximo da camera (maior area)
                         largest_face = max(faces, key=lambda f: float(f[2]) * float(f[3]))
-                        features = self.recognizer.features(frame, largest_face)
-                        candidate_id, score = self.recognizer.identify(
+                        features = rec.features(frame, largest_face)
+                        candidate_id, score = rec.identify(
                             features, references, threshold=0.38, min_margin=0.04
                         )
                         if candidate_id is not None:
@@ -199,7 +237,9 @@ class FaceAuthenticator:
                     "remaining_seconds": remaining_seconds,
                     "timestamp": time.time(),
                 }
-                Path("C:/ProgramData/FaceKids/last_unlock.json").write_text(
+                unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
+                unlock_path.parent.mkdir(parents=True, exist_ok=True)
+                unlock_path.write_text(
                     json.dumps(unlock_data, indent=2, ensure_ascii=False),
                     encoding="utf-8",
                 )
@@ -226,7 +266,11 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
     logger.info("Modelos: %s", models)
     logger.info("Banco: %s", db)
 
-    kernel32 = ctypes.windll.kernel32
+    kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+    if kernel32 is None:
+        logger.error("Servico Named Pipe requer ambiente Windows.")
+        return
+
     h_mutex = kernel32.CreateMutexW(None, False, "Global\\FaceKidsAuthServiceMutex")
     if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         logger.info("Outra instancia de FaceKids Auth Service ja esta em execucao. Encerrando duplicata.")
