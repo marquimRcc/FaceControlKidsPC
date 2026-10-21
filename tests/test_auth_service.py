@@ -93,8 +93,17 @@ class TestAuthService(unittest.TestCase):
 
     def test_session_zero_and_camera_probe(self):
         from facekids.auth_service import is_session_zero_or_system, probe_camera_access
-        with patch.dict("os.environ", {"USERNAME": "SYSTEM"}):
+        # Em plataformas nao-Windows, deve retornar False
+        with patch("facekids.auth_service.sys.platform", "linux"):
+            self.assertFalse(is_session_zero_or_system())
+
+        # No Windows como SYSTEM, deve retornar True
+        with patch("facekids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "SYSTEM"}):
             self.assertTrue(is_session_zero_or_system())
+
+        # No Windows como usuario interativo comum, deve retornar False
+        with patch("facekids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "MarcosMiniPC"}):
+            self.assertFalse(is_session_zero_or_system())
 
         with patch("cv2.VideoCapture") as mock_cap_cls:
             mock_cap = MagicMock()
