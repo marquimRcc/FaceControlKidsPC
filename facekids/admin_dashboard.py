@@ -736,6 +736,62 @@ class AdminDashboard(tk.Tk):
             )
             b_btn.pack(side=tk.LEFT, padx=2)
 
+        # Campo personalizado para digitar os minutos de bônus
+        custom_bonus_var = tk.StringVar()
+        bonus_entry = tk.Entry(
+            bonus_frame,
+            textvariable=custom_bonus_var,
+            font=("Segoe UI", 8, "bold"),
+            width=4,
+            bg="#11111B",
+            fg=ACCENT_YELLOW,
+            insertbackground=ACCENT_YELLOW,
+            highlightbackground=BORDER_DEFAULT,
+            highlightcolor=ACCENT_YELLOW,
+            highlightthickness=1,
+            relief=tk.FLAT,
+            justify="center",
+        )
+        bonus_entry.pack(side=tk.LEFT, padx=(6, 2))
+
+        tk.Label(
+            bonus_frame,
+            text="min",
+            font=("Segoe UI", 8),
+            fg=TEXT_SUB,
+            bg=BG_BOX,
+        ).pack(side=tk.LEFT, padx=(0, 3))
+
+        def _apply_custom_bonus(cid=child_id, var=custom_bonus_var):
+            val = var.get().strip()
+            if not val:
+                return
+            try:
+                m = int(val)
+                if not (1 <= m <= 480):
+                    raise ValueError("Informe entre 1 e 480 minutos.")
+                self._give_bonus(cid, m)
+                var.set("")
+            except ValueError as err:
+                messagebox.showerror("Bônus Inválido", f"Valor inválido: {err}", parent=self)
+
+        apply_btn = tk.Button(
+            bonus_frame,
+            text="+",
+            font=("Segoe UI", 8, "bold"),
+            bg=ACCENT_YELLOW,
+            fg="#0B0B12",
+            activebackground="#FFF0BA",
+            activeforeground="#0B0B12",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=6,
+            pady=1,
+            command=_apply_custom_bonus,
+        )
+        apply_btn.pack(side=tk.LEFT, padx=1)
+        bonus_entry.bind("<Return>", lambda e: _apply_custom_bonus())
+
     def _draw_fallback_avatar(self, parent, name: str):
         """Desenha avatar circular placeholder com a inicial quando nao ha foto."""
         canvas = tk.Canvas(parent, width=100, height=100, bg=BG_CARD, highlightthickness=0)
