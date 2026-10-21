@@ -21,10 +21,12 @@ public:
         *outAuthPackage = 0;
 
         std::wstring fullUser;
-        if (domain && wcslen(domain) > 0 && wcscmp(domain, L".") != 0) {
+        if (wcschr(username, L'\\') != nullptr) {
+            fullUser = username;
+        } else if (domain && wcslen(domain) > 0) {
             fullUser = std::wstring(domain) + L"\\" + username;
         } else {
-            fullUser = username;
+            fullUser = std::wstring(L".\\") + username;
         }
 
         DWORD cbPacked = 0;
