@@ -1,12 +1,17 @@
 #pragma once
 #include "common.h"
-#include "FaceKidsCredential.h"
+
+class FaceKidsCredential;
 
 class FaceKidsProvider final : public ICredentialProvider, public ICredentialProviderSetUserArray {
 private:
     volatile LONG m_cRef = 1;
     FaceKidsCredential* m_pCredential = nullptr;
+    ICredentialProviderEvents* m_pEvents = nullptr;
+    UINT_PTR m_upAdviseContext = 0;
+    CRITICAL_SECTION m_cs;
     bool m_eligible = false;
+    bool m_readyToAutoLogon = false;
     std::wstring m_targetSid;
 
     std::wstring ResolveTargetSid();
@@ -16,6 +21,8 @@ public:
     ~FaceKidsProvider();
 
     bool IsValid() const { return m_pCredential != nullptr; }
+    void NotifyAuthSuccess();
+    bool IsAutoLogonReady() const;
 
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override;

@@ -1,17 +1,20 @@
 #include "FaceKidsCredential.h"
+#include "FaceKidsProvider.h"
 #include <process.h>
 
 extern volatile LONG g_cObjects;
 
-FaceKidsCredential::FaceKidsCredential() {
+FaceKidsCredential::FaceKidsCredential(FaceKidsProvider* pProvider) : m_pProvider(pProvider) {
     InterlockedIncrement(&g_cObjects);
     InitializeCriticalSection(&m_cs);
     m_statusText = L"Olhe para a webcam para desbloquear...";
+    LogCP(L"[FaceKidsCredential] Construtor");
 }
 
 FaceKidsCredential::~FaceKidsCredential() {
     DeleteCriticalSection(&m_cs);
     InterlockedDecrement(&g_cObjects);
+    LogCP(L"[FaceKidsCredential] Destrutor");
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::QueryInterface(REFIID riid, void** ppv) {
@@ -41,14 +44,19 @@ ULONG STDMETHODCALLTYPE FaceKidsCredential::Release() {
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredentialEvents* pcpce) {
+    LogCP(L"[FaceKidsCredential] Advise");
     EnterCriticalSection(&m_cs);
     m_pEvents = pcpce;
     if (m_pEvents) m_pEvents->AddRef();
     LeaveCriticalSection(&m_cs);
+
+    // Dispara a autenticacao imediatamente assim que o tile e criado pelo LogonUI
+    TriggerAsyncAuth();
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::UnAdvise() {
+    LogCP(L"[FaceKidsCredential] UnAdvise");
     EnterCriticalSection(&m_cs);
     if (m_pEvents) {
         m_pEvents->Release();
@@ -67,13 +75,19 @@ static unsigned __stdcall AuthThreadProc(void* param) {
 
 void FaceKidsCredential::TriggerAsyncAuth() {
     EnterCriticalSection(&m_cs);
+    if (m_isAuthenticating || m_lastAuth.success) {
+        LeaveCriticalSection(&m_cs);
+        return;
+    }
+    m_isAuthenticating = true;
     m_statusText = L"Identificando... Olhe para a webcam.";
     ICredentialProviderCredentialEvents* events = m_pEvents;
     if (events) events->AddRef();
     LeaveCriticalSection(&m_cs);
 
+    LogCP(L"[FaceKidsCredential] TriggerAsyncAuth disparado");
     if (events) {
-        events->OnCreatingWindow(nullptr);
+        events->SetFieldString(this, FIELD_STATUS, L"Identificando... Olhe para a webcam.");
         events->Release();
     }
 
@@ -82,15 +96,22 @@ void FaceKidsCredential::TriggerAsyncAuth() {
     if (hThread) {
         CloseHandle(reinterpret_cast<HANDLE>(hThread));
     } else {
+        EnterCriticalSection(&m_cs);
+        m_isAuthenticating = false;
+        LeaveCriticalSection(&m_cs);
         Release();
     }
 }
 
 void FaceKidsCredential::PerformAuthentication() {
+    LogCP(L"[FaceKidsCredential] Solicitando autenticacao ao FaceKidsPipeClient...");
     AuthResult auth = FaceKidsPipeClient::RequestAuthentication();
+    LogCP(L"[FaceKidsCredential] Resposta recebida: success=%d, user=%s, msg=%s",
+          auth.success, auth.user.c_str(), auth.message.c_str());
 
     EnterCriticalSection(&m_cs);
     m_lastAuth = auth;
+    m_isAuthenticating = false;
     if (auth.success) {
         if (!auth.childName.empty()) {
             m_statusText = L"Ola, " + auth.childName + L"! Desbloqueando...";
@@ -98,27 +119,39 @@ void FaceKidsCredential::PerformAuthentication() {
             m_statusText = L"Rosto reconhecido! Desbloqueando...";
         }
     } else {
-        m_statusText = auth.message.empty() ? L"Rosto nao reconhecido. Tente novamente." : auth.message;
+        m_statusText = auth.message.empty() ? L"Rosto nao reconhecido. Clique para tentar." : auth.message;
     }
 
     ICredentialProviderCredentialEvents* events = m_pEvents;
     if (events) events->AddRef();
+    FaceKidsProvider* provider = m_pProvider;
     LeaveCriticalSection(&m_cs);
 
     if (events) {
-        events->OnCreatingWindow(nullptr);
+        events->SetFieldString(this, FIELD_STATUS, m_statusText.c_str());
         events->Release();
+    }
+
+    if (auth.success && provider) {
+        LogCP(L"[FaceKidsCredential] Notificando FaceKidsProvider sobre sucesso facial...");
+        provider->NotifyAuthSuccess();
     }
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetSelected(BOOL* pbAutoLogon) {
+    LogCP(L"[FaceKidsCredential] SetSelected");
     if (!pbAutoLogon) return E_POINTER;
-    *pbAutoLogon = FALSE;
-    TriggerAsyncAuth();
+    if (m_pProvider && m_pProvider->IsAutoLogonReady()) {
+        *pbAutoLogon = TRUE;
+    } else {
+        *pbAutoLogon = FALSE;
+        TriggerAsyncAuth();
+    }
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetDeselected() {
+    LogCP(L"[FaceKidsCredential] SetDeselected");
     return S_OK;
 }
 
@@ -167,7 +200,12 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetCheckboxValue(DWORD, BOOL) { re
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetComboBoxSelectedValue(DWORD, DWORD) { return E_NOTIMPL; }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::CommandLinkClicked(DWORD dwFieldID) {
+    LogCP(L"[FaceKidsCredential] CommandLinkClicked: field=%lu", dwFieldID);
     if (dwFieldID == FIELD_RETRY_BUTTON) {
+        EnterCriticalSection(&m_cs);
+        m_lastAuth = {};
+        m_isAuthenticating = false;
+        LeaveCriticalSection(&m_cs);
         TriggerAsyncAuth();
         return S_OK;
     }
@@ -179,6 +217,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::GetSerialization(
     CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcs,
     PWSTR* ppszOptionalStatusText,
     CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon) {
+    LogCP(L"[FaceKidsCredential] GetSerialization chamado pelo LogonUI");
     if (!pcpgsr || !pcpcs || !ppszOptionalStatusText || !pcpsiOptionalStatusIcon) return E_POINTER;
 
     *pcpgsr = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
@@ -193,6 +232,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::GetSerialization(
     LeaveCriticalSection(&m_cs);
 
     if (ok && !user.empty() && !pass.empty()) {
+        LogCP(L"[FaceKidsCredential] Empacotando credencial do usuario: %s", user.c_str());
         HRESULT hr = FaceKidsSerialization::SerializeKerbInteractiveLogon(
             L".",
             user.c_str(),
@@ -207,8 +247,13 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::GetSerialization(
             *pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
             clone_text(L"Acesso Facial Autorizado!", ppszOptionalStatusText);
             *pcpsiOptionalStatusIcon = CPSI_SUCCESS;
+            LogCP(L"[FaceKidsCredential] CPGSR_RETURN_CREDENTIAL_FINISHED entregue ao Windows!");
             return S_OK;
+        } else {
+            LogCP(L"[FaceKidsCredential] ERRO ao serializar credencial: 0x%lx", hr);
         }
+    } else {
+        LogCP(L"[FaceKidsCredential] GetSerialization chamado sem autenticacao previa (ok=%d)", ok);
     }
 
     return S_OK;

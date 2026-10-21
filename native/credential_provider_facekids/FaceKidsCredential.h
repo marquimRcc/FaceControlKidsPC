@@ -3,22 +3,26 @@
 #include "FaceKidsPipeClient.h"
 #include "FaceKidsSerialization.h"
 
+class FaceKidsProvider;
+
 class FaceKidsCredential final : public ICredentialProviderCredential2 {
 private:
     volatile LONG m_cRef = 1;
+    FaceKidsProvider* m_pProvider = nullptr;
     ICredentialProviderCredentialEvents* m_pEvents = nullptr;
     std::wstring m_boundSid;
     std::wstring m_statusText;
     AuthResult m_lastAuth;
     CRITICAL_SECTION m_cs;
-
-    void TriggerAsyncAuth();
+    volatile bool m_isAuthenticating = false;
 
 public:
-    FaceKidsCredential();
+    FaceKidsCredential(FaceKidsProvider* pProvider = nullptr);
     ~FaceKidsCredential();
 
+    void SetProvider(FaceKidsProvider* pProvider) { m_pProvider = pProvider; }
     void BindSid(const std::wstring& sid) { m_boundSid = sid; }
+    void TriggerAsyncAuth();
     void PerformAuthentication();
 
     // IUnknown

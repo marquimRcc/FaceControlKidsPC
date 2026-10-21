@@ -32,6 +32,7 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppv) override {
+        LogCP(L"[dllmain] ProviderFactory::CreateInstance");
         if (!ppv) return E_POINTER;
         *ppv = nullptr;
         if (pUnkOuter) return CLASS_E_NOAGGREGATION;
@@ -59,6 +60,7 @@ public:
 };
 
 extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
+    LogCP(L"[dllmain] DllGetClassObject called");
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
     if (rclsid != CLSID_FaceKidsProvider) return CLASS_E_CLASSNOTAVAILABLE;
@@ -112,11 +114,9 @@ extern "C" __declspec(dllexport) HRESULT __stdcall DllRegisterServer() {
 }
 
 extern "C" __declspec(dllexport) HRESULT __stdcall DllUnregisterServer() {
-    // 1. Remover do Credential Providers
     std::wstring cpKey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\" + std::wstring(kClsidString);
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, cpKey.c_str());
 
-    // 2. Remover do CLSID
     std::wstring inprocKey = L"CLSID\\" + std::wstring(kClsidString) + L"\\InprocServer32";
     RegDeleteKeyW(HKEY_CLASSES_ROOT, inprocKey.c_str());
     std::wstring clsidKey = L"CLSID\\" + std::wstring(kClsidString);
@@ -129,6 +129,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID) {
     if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
+        LogCP(L"[dllmain] DllMain: DLL_PROCESS_ATTACH");
     }
     return TRUE;
 }

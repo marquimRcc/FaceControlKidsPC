@@ -12,7 +12,7 @@ try {
     & $gpp -shared -std=c++17 -O2 -DINITGUID `
       dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
       -o FaceKidsCredentialProvider.dll `
-      -lole32 -ladvapi32 -lsecur32 -luuid
+      -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar FaceKidsCredentialProvider.dll" }
 
     Write-Host "[FaceKids] Compilando TestProviderHost.exe..." -ForegroundColor Cyan

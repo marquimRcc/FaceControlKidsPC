@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 #include <cwchar>
+#include <cstdio>
+#include <cstdarg>
 
 // CLSID: {FAC0D042-3DD0-4A8C-9F18-440C44330C20}
 static const CLSID CLSID_FaceKidsProvider = {
@@ -20,6 +22,23 @@ enum FIELD_ID {
     FIELD_RETRY_BUTTON = 2,
     FIELD_COUNT = 3
 };
+
+static void LogCP(const WCHAR* fmt, ...) {
+    WCHAR buf[1024] = {};
+    va_list args;
+    va_start(args, fmt);
+    _vsnwprintf(buf, 1024, fmt, args);
+    va_end(args);
+    OutputDebugStringW(buf);
+
+    FILE* f = _wfopen(L"C:\\ProgramData\\FaceKids\\provider_debug.log", L"a, ccs=UTF-8");
+    if (f) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        fwprintf(f, L"[%02d:%02d:%02d] %ls\n", st.wHour, st.wMinute, st.wSecond, buf);
+        fclose(f);
+    }
+}
 
 static HRESULT clone_text(PCWSTR src, PWSTR* out) {
     if (!out) return E_POINTER;

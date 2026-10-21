@@ -85,7 +85,7 @@ class FaceAuthenticator:
         self.db_path = db_path
         self.recognizer = Recognizer(models_dir)
 
-    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 3.5) -> Tuple[str, dict]:
+    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5) -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
             return "ERROR", {"message": "Banco de dados nao encontrado"}
@@ -116,10 +116,19 @@ class FaceAuthenticator:
                         continue
 
                     faces = self.recognizer.faces(frame)
-                    if len(faces) == 1:
-                        features = self.recognizer.features(frame, faces[0])
-                        candidate_id, score = self.recognizer.identify(features, references)
+                    if len(faces) >= 1:
+                        # Prioriza o rosto mais proximo da camera (maior area)
+                        largest_face = max(faces, key=lambda f: float(f[2]) * float(f[3]))
+                        features = self.recognizer.features(frame, largest_face)
+                        candidate_id, score = self.recognizer.identify(
+                            features, references, threshold=0.38, min_margin=0.04
+                        )
                         if candidate_id is not None:
+                            logger.info(
+                                "Rosto candidato detectado: %s (score=%.3f)",
+                                names.get(candidate_id, candidate_id),
+                                score or 0.0,
+                            )
                             if candidate_id == best_candidate:
                                 consecutive_matches += 1
                                 if consecutive_matches >= 2:

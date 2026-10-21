@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include <wincred.h>
 
 class FaceKidsSerialization {
 public:
@@ -11,7 +12,7 @@ public:
         DWORD* outBufferSize,
         ULONG* outAuthPackage)
     {
-        if (!domain || !username || !password || !outBuffer || !outBufferSize || !outAuthPackage) {
+        if (!username || !password || !outBuffer || !outBufferSize || !outAuthPackage) {
             return E_INVALIDARG;
         }
 
@@ -19,9 +20,49 @@ public:
         *outBufferSize = 0;
         *outAuthPackage = 0;
 
+        std::wstring fullUser;
+        if (domain && wcslen(domain) > 0 && wcscmp(domain, L".") != 0) {
+            fullUser = std::wstring(domain) + L"\\" + username;
+        } else {
+            fullUser = username;
+        }
+
+        DWORD cbPacked = 0;
+        CredPackAuthenticationBufferW(
+            0,
+            const_cast<LPWSTR>(fullUser.c_str()),
+            const_cast<LPWSTR>(password),
+            nullptr,
+            &cbPacked
+        );
+
+        if (cbPacked == 0) {
+            LogCP(L"[FaceKidsSerialization] Falha ao consultar tamanho do buffer: erro=%lu", GetLastError());
+            return E_FAIL;
+        }
+
+        BYTE* buffer = static_cast<BYTE*>(CoTaskMemAlloc(cbPacked));
+        if (!buffer) {
+            return E_OUTOFMEMORY;
+        }
+
+        if (!CredPackAuthenticationBufferW(
+            0,
+            const_cast<LPWSTR>(fullUser.c_str()),
+            const_cast<LPWSTR>(password),
+            buffer,
+            &cbPacked
+        )) {
+            LogCP(L"[FaceKidsSerialization] CredPackAuthenticationBufferW falhou: erro=%lu", GetLastError());
+            CoTaskMemFree(buffer);
+            return E_FAIL;
+        }
+
         HANDLE lsaHandle = nullptr;
         NTSTATUS status = LsaConnectUntrusted(&lsaHandle);
         if (status != 0 || !lsaHandle) {
+            LogCP(L"[FaceKidsSerialization] LsaConnectUntrusted falhou: status=0x%lx", status);
+            CoTaskMemFree(buffer);
             return E_FAIL;
         }
 
@@ -36,52 +77,15 @@ public:
         LsaDeregisterLogonProcess(lsaHandle);
 
         if (status != 0) {
+            LogCP(L"[FaceKidsSerialization] LsaLookupAuthenticationPackage falhou: status=0x%lx", status);
+            CoTaskMemFree(buffer);
             return E_FAIL;
         }
 
-        const DWORD domainLen = static_cast<DWORD>(wcslen(domain));
-        const DWORD userLen = static_cast<DWORD>(wcslen(username));
-        const DWORD passLen = static_cast<DWORD>(wcslen(password));
-
-        const DWORD domainBytes = domainLen * sizeof(WCHAR);
-        const DWORD userBytes = userLen * sizeof(WCHAR);
-        const DWORD passBytes = passLen * sizeof(WCHAR);
-
-        const DWORD totalSize = sizeof(KERB_INTERACTIVE_LOGON) + domainBytes + userBytes + passBytes;
-        BYTE* buffer = static_cast<BYTE*>(CoTaskMemAlloc(totalSize));
-        if (!buffer) {
-            return E_OUTOFMEMORY;
-        }
-        ZeroMemory(buffer, totalSize);
-
-        KERB_INTERACTIVE_LOGON* pLogon = reinterpret_cast<KERB_INTERACTIVE_LOGON*>(buffer);
-        pLogon->MessageType = KerbInteractiveLogon;
-
-        BYTE* cursor = buffer + sizeof(KERB_INTERACTIVE_LOGON);
-
-        // Domain
-        pLogon->LogonDomainName.Length = static_cast<USHORT>(domainBytes);
-        pLogon->LogonDomainName.MaximumLength = static_cast<USHORT>(domainBytes);
-        pLogon->LogonDomainName.Buffer = reinterpret_cast<PWSTR>(cursor);
-        memcpy(cursor, domain, domainBytes);
-        cursor += domainBytes;
-
-        // User
-        pLogon->UserName.Length = static_cast<USHORT>(userBytes);
-        pLogon->UserName.MaximumLength = static_cast<USHORT>(userBytes);
-        pLogon->UserName.Buffer = reinterpret_cast<PWSTR>(cursor);
-        memcpy(cursor, username, userBytes);
-        cursor += userBytes;
-
-        // Password
-        pLogon->Password.Length = static_cast<USHORT>(passBytes);
-        pLogon->Password.MaximumLength = static_cast<USHORT>(passBytes);
-        pLogon->Password.Buffer = reinterpret_cast<PWSTR>(cursor);
-        memcpy(cursor, password, passBytes);
-
         *outBuffer = buffer;
-        *outBufferSize = totalSize;
+        *outBufferSize = cbPacked;
         *outAuthPackage = authPackage;
+        LogCP(L"[FaceKidsSerialization] Buffer serializado com sucesso: bytes=%lu, authPackage=%lu", cbPacked, authPackage);
         return S_OK;
     }
 };

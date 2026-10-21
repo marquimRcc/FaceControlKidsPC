@@ -33,7 +33,7 @@ if (-not (Test-Path -LiteralPath $dllSource)) {
         & $gpp -shared -std=c++17 -O2 -DINITGUID `
           dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
           -o FaceKidsCredentialProvider.dll `
-          -lole32 -ladvapi32 -lsecur32 -luuid
+          -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
         if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
     } finally {
         Pop-Location
@@ -73,39 +73,38 @@ try {
 # 5. Configurar inicializacao automatica do servico (Named Pipe)
 Write-Host "Configurando servico em segundo plano (Named Pipe)..." -ForegroundColor Yellow
 
+# Limpeza: Remover qualquer script legado do Startup global (para nao afetar a conta padrao dos Filhos)
+$globalStartupVbs = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\FaceKidsAuthService.vbs'
+if (Test-Path -LiteralPath $globalStartupVbs) {
+    Remove-Item -LiteralPath $globalStartupVbs -Force -ErrorAction SilentlyContinue
+    Write-Host "Script legado removido do Startup global." -ForegroundColor Green
+}
+
+# Limpeza: Remover chave de Run global HKLM para evitar execucao redundante na conta dos Filhos
+try {
+    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "FaceKidsAuthService" -Force -ErrorAction SilentlyContinue
+} catch {}
+
+# Instalar script de inicializacao exclusivamente no perfil do Administrador (MarcosMiniPC)
+$userStartup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "$root"
 WshShell.Run """$pythonw"" -m facekids.auth_service", 0, False
 "@
 
-# Tentar Startup de todos os usuarios ou Startup do usuario atual
-$globalStartup = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp'
-$userStartup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-
-$vbsInstalled = $false
 try {
-    $globalVbs = Join-Path $globalStartup 'FaceKidsAuthService.vbs'
-    Set-Content -Path $globalVbs -Value $vbsContent -Encoding ASCII -ErrorAction Stop
-    $vbsInstalled = $true
+    $userVbs = Join-Path $userStartup 'FaceKidsAuthService.vbs'
+    Set-Content -Path $userVbs -Value $vbsContent -Encoding ASCII -Force
+    Write-Host "Inicializacao automatica configurada para o administrador ($userVbs)." -ForegroundColor Green
 } catch {
-    try {
-        $userVbs = Join-Path $userStartup 'FaceKidsAuthService.vbs'
-        Set-Content -Path $userVbs -Value $vbsContent -Encoding ASCII -ErrorAction Stop
-        $vbsInstalled = $true
-    } catch {}
+    Write-Host "Aviso ao salvar no Startup do usuario: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
-
-# Chave Run no Registro
-try {
-    $runKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-    $runCommand = "`"$pythonw`" -m facekids.auth_service"
-    Set-ItemProperty -Path $runKey -Name "FaceKidsAuthService" -Value $runCommand -Force -ErrorAction SilentlyContinue
-} catch {}
 
 # 6. Iniciar o servico agora mesmo em segundo plano
 Write-Host "Iniciando servico de reconhecimento facial..." -ForegroundColor Yellow
-Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*auth_service*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+& taskkill.exe /f /im pythonw.exe 2>$null
+Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1
 
