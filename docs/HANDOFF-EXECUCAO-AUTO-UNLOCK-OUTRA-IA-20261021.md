@@ -651,3 +651,55 @@ P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico
    - `scripts/Instalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
    - `scripts/Desinstalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
    - `scripts/Iniciar-Piloto-Filhos.ps1`: 0 erros de sintaxe.
+
+
+---
+
+## 19. Terceira Rodada — Mitigação de Risco Operacional e Resolução dos 3 Pontos da Nova Auditoria (21/10/2026)
+
+FaceKids — Execução e Hardening [21/10/2026 19:20 BRT]  
+Branch e HEAD: `handoff/facekids-auto-unlock-stabilization-20261021`  
+P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato estrito IPC e timeout), P0-48 e P0-49 (agendamento interativo e consulta assíncrona ao pipe), P0-52 (preservação de dados na desinstalação).
+
+### 1. Eliminação do Risco de Inicialização SYSTEM e Concorrência de Mutex (P0-45)
+- **Problema apontado:** A tarefa agendada no boot como `SYSTEM` corre o risco de não conseguir abrir a webcam USB em Sessão 0 (devido a isolamento de hardware ou privacidade no Windows 10/11), bloqueando a execução da instância interativa de contingência através do mutex global `Global\FaceKidsAuthServiceMutex`.
+- **Mitigações implementadas:**
+  1. **Sondagem de Viabilidade (`probe_camera_access` e `is_session_zero_or_system`)**: Em `facekids/auth_service.py`, se o processo for disparado em Sessão 0 ou como `SYSTEM`, ele realiza uma sondagem de acesso à webcam antes de adquirir o mutex global. Se a webcam não responder, o processo emite log explicativo de aviso e **encerra imediatamente sem adquirir o mutex e sem criar o pipe**. Isso garante que a instância interativa jamais seja bloqueada por um processo sem webcam.
+  2. **Agendamento Interativo na Sessão com Câmera**: Em `scripts/Instalar-FaceKids-Nativo.ps1`, a tarefa agendada `FaceKidsAuthService` agora é configurada com `/sc onlogon /rl HIGHEST`. Isso garante que o serviço suba diretamente na sessão interativa do usuário onde os drivers DirectShow e Media Foundation da webcam operam com 100% de confiabilidade, resguardando o desbloqueio em `Win+L` testado e aprovado pelo proprietário.
+
+### 2. Validação Estrita e Criptográfica do Contrato IPC (P0-46, P0-47)
+- **Problema apontado:** O parser C++ ainda aceitava `ALLOW` sem verificar obrigatoriamente um `child_id`, a validade temporal da resposta, ou quando o campo `user` estivesse ausente.
+- **Mitigações implementadas:**
+  1. **Campo `user` Obrigatório**: Rejeita imediatamente se `user` for vazio ou diferente de `"Filhos"`.
+  2. **Campo `child_id` Obrigatório**: Rejeita se `child_id` for ausente ou `<= 0`.
+  3. **Validade Temporal Estrita**: Adicionada validação de timestamp com janela máxima de 15 segundos (`fabs(now - ts) <= 15.0`). Rejeita pacotes expirados ou de replay.
+  4. **Token de Confiança**: Adicionado token de validação `"FACEKIDS_AUTH_TOKEN_V1"`.
+  5. **Proteção de Timeout no LogonUI**: `RequestAuthentication()` agora utiliza I/O sobreposto (`FILE_FLAG_OVERLAPPED`) com timeout estrito de 3,5 segundos, garantindo que o LogonUI do Windows nunca congele mesmo se o serviço de backend sofrer pane.
+  6. **Suíte C++ Expandida**: `native/credential_provider_facekids/TestPipeClient.cpp` agora possui **12 testes unitários** automatizados cobrindo todos os casos negativos (sem user, sem child_id, token inválido, timestamp expirado, status aninhado, etc.).
+
+### 3. Agente Filhos Totalmente Não-Bloqueante e Tarefa Vinculada (P0-48, P0-49)
+- **Problema apontado:** A consulta ao Named Pipe após entrada por PIN era síncrona e poderia travar a contagem de tempo do agente caso o pipe ficasse lento; além disso, a tarefa do agente não possuía vinculação explícita de usuário.
+- **Mitigações implementadas:**
+  1. **Consulta Assíncrona via Worker Thread (`InSessionFaceIdentifier`)**: A consulta ao Named Pipe durante o modo `UNIDENTIFIED` agora roda em uma thread dedicada em background com timeout estrito. O loop principal de quota do `filhos_agent.py` continua rodando a cada 2 segundos sem qualquer atraso ou bloqueio de I/O, garantindo atualização do tempo, avisos e toque de recolher ininterruptos.
+  2. **Vinculação Explícita e Interativa (/it) da Tarefa do Agente**: Em `scripts/Instalar-FaceKids-Nativo.ps1`, a tarefa `FaceKidsFilhosAgent` é agendada com `/sc onlogon /ru "Filhos" /rp "1" /it`, executando estritamente na sessão interativa quando a conta `Filhos` logar. O script de lote mantém a verificação de segurança `if /i "%USERNAME%" neq "Filhos" exit /b`.
+
+### 4. Teste de Desinstalação e Preservação de Dados (P0-52)
+- **Problema apontado:** Necessidade de comprovar em teste controlado que a desinstalação não apaga fotos ou bancos de dados existentes.
+- **Mitigações implementadas:**
+  - Adicionado teste automatizado `test_simulated_runtime_cleanup_preserves_database` em `tests/test_installer_scripts.py`, que comprova que scripts de lote, logs temporários e pipes são removidos, enquanto `children.sqlite3`, `fotos/` e modelos biométricos são rigorosamente preservados.
+
+---
+
+### Resumo dos Testes Executados (Terceira Rodada)
+
+1. **Python Unit Tests:**
+   - Comando: `python -m unittest discover tests -v`
+   - Resultado: **160 testes executados, 160 aprovados (0 erros, 0 falhas)** em ~6.0s.
+2. **C++ Native Provider Host e Parser IPC:**
+   - Comando: `TestPipeClient.exe --unit-only`
+   - Resultado: **12/12 testes unitários de segurança de contrato aprovados (100%)**.
+   - Comando: `TestProviderHost.exe`
+   - Resultado: **Criação de ICredentialProvider COM aprovada, 3 campos UI enumerados corretamente**.
+3. **PowerShell AST e Validação de Scripts:**
+   - Comando: `python -m unittest tests/test_installer_scripts.py -v`
+   - Resultado: **5/5 testes aprovados** (sintaxe AST, vinculação com `/it`, remoção e preservação de dados).

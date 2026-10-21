@@ -91,6 +91,24 @@ class TestAuthService(unittest.TestCase):
             self.assertEqual(data["child_name"], "Filho Smoke")
             self.assertGreater(data["remaining"], 0)
 
+    def test_session_zero_and_camera_probe(self):
+        from facekids.auth_service import is_session_zero_or_system, probe_camera_access
+        with patch.dict("os.environ", {"USERNAME": "SYSTEM"}):
+            self.assertTrue(is_session_zero_or_system())
+
+        with patch("cv2.VideoCapture") as mock_cap_cls:
+            mock_cap = MagicMock()
+            mock_cap.isOpened.return_value = False
+            mock_cap_cls.return_value = mock_cap
+            self.assertFalse(probe_camera_access(0))
+
+        with patch("cv2.VideoCapture") as mock_cap_cls:
+            mock_cap = MagicMock()
+            mock_cap.isOpened.return_value = True
+            mock_cap.read.return_value = (True, np.zeros((10, 10, 3), dtype=np.uint8))
+            mock_cap_cls.return_value = mock_cap
+            self.assertTrue(probe_camera_access(0))
+
 
 if __name__ == "__main__":
     unittest.main()

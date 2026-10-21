@@ -163,14 +163,19 @@ def trigger_welcome_screen():
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
 
-def query_auth_service() -> Optional[dict]:
-    """Solicita identificacao facial ao FaceKidsAuthService via Named Pipe de forma segura."""
+def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
+    """Solicita identificacao facial ao FaceKidsAuthService via Named Pipe de forma segura e com timeout."""
     if sys.platform != "win32":
         return None
     kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
     if kernel32 is None:
         return None
     pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
+
+    if hasattr(kernel32, "WaitNamedPipeW"):
+        if not kernel32.WaitNamedPipeW(pipe_name, 300):
+            return None
+
     h_pipe = kernel32.CreateFileW(
         pipe_name,
         0xC0000000,
@@ -197,6 +202,40 @@ def query_auth_service() -> Optional[dict]:
     finally:
         kernel32.CloseHandle(h_pipe)
     return None
+
+
+class InSessionFaceIdentifier:
+    """Realiza consultas assincronas ao servico facial sem bloquear o loop de quota."""
+
+    def __init__(self, interval_seconds: float = 15.0):
+        self.interval = interval_seconds
+        self.last_query_mono = 0.0
+        self.thread: Optional[threading.Thread] = None
+        self.pending_result: Optional[dict] = None
+        self._lock = threading.Lock()
+
+    def check_result(self) -> Optional[dict]:
+        with self._lock:
+            res = self.pending_result
+            self.pending_result = None
+            return res
+
+    def trigger_if_due(self):
+        now = time.monotonic()
+        if (now - self.last_query_mono) < self.interval:
+            return
+        if self.thread and self.thread.is_alive():
+            return
+
+        self.last_query_mono = now
+
+        def _worker():
+            res = query_auth_service(timeout_seconds=2.0)
+            with self._lock:
+                self.pending_result = res
+
+        self.thread = threading.Thread(target=_worker, daemon=True)
+        self.thread.start()
 
 
 def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
@@ -354,7 +393,7 @@ def run_agent():
         )
 
     last_active_time = time.monotonic()
-    last_pipe_query_time = 0.0
+    identifier = InSessionFaceIdentifier(interval_seconds=15.0)
     today = date.today().isoformat()
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
@@ -399,26 +438,27 @@ def run_agent():
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
 
-            # Se em modo UNIDENTIFIED e sessao ativa, tenta identificacao periodica via pipe
+            # Se em modo UNIDENTIFIED e sessao ativa, verifica resultado e agenda identificacao em background
             if tracker.current_child_id is None and state is SessionState.ACTIVE:
-                now_m = time.monotonic()
-                if (now_m - last_pipe_query_time) >= 20.0:
-                    last_pipe_query_time = now_m
-                    pipe_resp = query_auth_service()
-                    if pipe_resp and pipe_resp.get("status") == "ALLOW":
-                        p_data = pipe_resp.get("data", {})
-                        cid = p_data.get("child_id")
-                        cname = p_data.get("child_name", f"Crianca {cid}")
+                pipe_resp = identifier.check_result()
+                if pipe_resp:
+                    status = pipe_resp.get("status")
+                    if status == "ALLOW":
+                        cid = pipe_resp.get("child_id") or pipe_resp.get("data", {}).get("child_id")
+                        cname = pipe_resp.get("child_name") or pipe_resp.get("data", {}).get("child_name", f"Crianca {cid}")
                         if cid is not None:
                             logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
                             tracker.switch_child(int(cid), str(cname))
                             last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
                             trigger_welcome_screen()
-                    elif pipe_resp and pipe_resp.get("status") in ("DENY_QUOTA", "DENY_CURFEW"):
+                    elif status in ("DENY_QUOTA", "DENY_CURFEW"):
                         msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
                         show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
                         time.sleep(1.2)
                         lock_current_session()
+
+                if tracker.current_child_id is None:
+                    identifier.trigger_if_due()
             # Checar se horario de dormir / curfew esta ativo
             is_curfew, curfew_msg = store.is_curfew_active()
             if is_curfew and state is SessionState.ACTIVE:

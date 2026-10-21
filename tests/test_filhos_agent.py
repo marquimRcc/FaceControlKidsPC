@@ -132,6 +132,24 @@ class TestFilhosAgent(unittest.TestCase):
             tracker.check_notifications_and_lock(500)
             self.assertTrue(tracker.warned_10m)
 
+    def test_in_session_face_identifier_async(self):
+        from facekids.filhos_agent import InSessionFaceIdentifier
+        identifier = InSessionFaceIdentifier(interval_seconds=0.1)
+        self.assertIsNone(identifier.check_result())
+
+        # Mock query_auth_service
+        fake_payload = {"status": "ALLOW", "child_id": 2, "child_name": "Crianca 2"}
+        with patch("facekids.filhos_agent.query_auth_service", return_value=fake_payload):
+            identifier.trigger_if_due()
+            # Aguarda a thread de background concluir
+            if identifier.thread:
+                identifier.thread.join(timeout=1.0)
+            res = identifier.check_result()
+            self.assertIsNotNone(res)
+            self.assertEqual(res["child_id"], 2)
+            # Apos consumir, deve retornar None
+            self.assertIsNone(identifier.check_result())
+
 
 if __name__ == "__main__":
     unittest.main()

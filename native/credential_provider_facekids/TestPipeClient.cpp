@@ -2,81 +2,122 @@
 #include "FaceKidsPipeClient.h"
 #include <iostream>
 #include <cassert>
+#include <ctime>
 
 static int RunParsingUnitTests() {
     std::wcout << L"[FaceKids Pipe Unit Tests] Executando testes unitarios do parser...\n";
 
-    // 1. ALLOW valido
-    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_name\": \"Crianca 2\", \"remaining\": 7200}";
+    time_t now = time(nullptr);
+    std::string nowTs = std::to_string(now);
+
+    // 1. ALLOW valido completo com user, child_id, token e timestamp fresco
+    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r1 = FaceKidsPipeClient::ParseResponse(allowJson);
-    if (!r1.success || r1.user != L"Filhos" || r1.password != L"1" || r1.childName != L"Crianca 2") {
-        std::wcerr << L"[FALHA] Teste 1 (ALLOW valido) falhou!\n";
+    if (!r1.success || r1.user != L"Filhos" || r1.password != L"1" || r1.childId != 2 || r1.childName != L"Crianca 2") {
+        std::wcerr << L"[FALHA] Teste 1 (ALLOW valido) falhou! Msg: " << r1.message << L"\n";
         return 1;
     }
     std::wcout << L"  [PASS] 1. ALLOW valido reconhecido corretamente.\n";
 
-    // 2. Fake ALLOW no corpo da mensagem deve ser NEGADO
-    std::string fakeAllowJson = "{\"status\": \"DENY_UNKNOWN\", \"data\": {\"message\": \"Cannot ALLOW this user\"}}";
-    AuthResult r2 = FaceKidsPipeClient::ParseResponse(fakeAllowJson);
+    // 2. Rejeicao de ALLOW sem o campo "user"
+    std::string noUserJson = "{\"status\": \"ALLOW\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    AuthResult r2 = FaceKidsPipeClient::ParseResponse(noUserJson);
     if (r2.success) {
-        std::wcerr << L"[FALHA] Teste 2 (Fake ALLOW) foi aceito incorretamente!\n";
+        std::wcerr << L"[FALHA] Teste 2 (ALLOW sem user) foi aceito incorretamente!\n";
         return 2;
     }
-    std::wcout << L"  [PASS] 2. Fake ALLOW na mensagem rejeitado com seguranca.\n";
+    std::wcout << L"  [PASS] 2. ALLOW sem campo 'user' rejeitado com seguranca.\n";
 
-    // 3. DENY_QUOTA
-    std::string quotaJson = "{\"status\": \"DENY_QUOTA\", \"data\": {\"remaining\": 0}}";
-    AuthResult r3 = FaceKidsPipeClient::ParseResponse(quotaJson);
+    // 3. Rejeicao de ALLOW sem child_id
+    std::string noCidJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    AuthResult r3 = FaceKidsPipeClient::ParseResponse(noCidJson);
     if (r3.success) {
-        std::wcerr << L"[FALHA] Teste 3 (DENY_QUOTA) foi aceito!\n";
+        std::wcerr << L"[FALHA] Teste 3 (ALLOW sem child_id) foi aceito incorretamente!\n";
         return 3;
     }
-    std::wcout << L"  [PASS] 3. DENY_QUOTA rejeitado com status correto.\n";
+    std::wcout << L"  [PASS] 3. ALLOW sem 'child_id' valido rejeitado com seguranca.\n";
 
-    // 4. DENY_CURFEW
-    std::string curfewJson = "{\"status\": \"DENY_CURFEW\", \"data\": {\"message\": \"Horario nao permitido\"}}";
-    AuthResult r4 = FaceKidsPipeClient::ParseResponse(curfewJson);
+    // 4. Rejeicao de ALLOW com token ausente ou invalido
+    std::string badTokenJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"auth_token\": \"INVALID_TOKEN\", \"timestamp\": " + nowTs + "}";
+    AuthResult r4 = FaceKidsPipeClient::ParseResponse(badTokenJson);
     if (r4.success) {
-        std::wcerr << L"[FALHA] Teste 4 (DENY_CURFEW) foi aceito!\n";
+        std::wcerr << L"[FALHA] Teste 4 (ALLOW com token invalido) foi aceito!\n";
         return 4;
     }
-    std::wcout << L"  [PASS] 4. DENY_CURFEW rejeitado com status correto.\n";
+    std::wcout << L"  [PASS] 4. Token invalido rejeitado com seguranca.\n";
 
-    // 5. JSON vazio / invalido
-    AuthResult r5 = FaceKidsPipeClient::ParseResponse("");
+    // 5. Rejeicao de timestamp expirado (60 segundos atras)
+    std::string expiredTs = std::to_string(now - 60);
+    std::string staleJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + expiredTs + "}";
+    AuthResult r5 = FaceKidsPipeClient::ParseResponse(staleJson);
     if (r5.success) {
-        std::wcerr << L"[FALHA] Teste 5 (JSON vazio) foi aceito!\n";
+        std::wcerr << L"[FALHA] Teste 5 (Timestamp expirado) foi aceito!\n";
         return 5;
     }
-    std::wcout << L"  [PASS] 5. JSON vazio tratado com seguranca.\n";
+    std::wcout << L"  [PASS] 5. Timestamp expirado rejeitado com seguranca.\n";
 
-    // 6. JSON sem delimitadores validos
-    AuthResult r6 = FaceKidsPipeClient::ParseResponse("status: ALLOW, user: Filhos");
+    // 6. Fake ALLOW no corpo da mensagem deve ser NEGADO
+    std::string fakeAllowJson = "{\"status\": \"DENY_UNKNOWN\", \"data\": {\"message\": \"Cannot ALLOW this user\"}}";
+    AuthResult r6 = FaceKidsPipeClient::ParseResponse(fakeAllowJson);
     if (r6.success) {
-        std::wcerr << L"[FALHA] Teste 6 (JSON sem delimitadores) foi aceito!\n";
+        std::wcerr << L"[FALHA] Teste 6 (Fake ALLOW) foi aceito incorretamente!\n";
         return 6;
     }
-    std::wcout << L"  [PASS] 6. JSON sem delimitadores rejeitado com seguranca.\n";
+    std::wcout << L"  [PASS] 6. Fake ALLOW na mensagem rejeitado com seguranca.\n";
 
-    // 7. Rejeicao de usuario que nao seja Filhos (ex: Administrador)
-    std::string adminJson = "{\"status\": \"ALLOW\", \"user\": \"Administrator\", \"password\": \"1\", \"child_name\": \"Hacker\"}";
-    AuthResult r7 = FaceKidsPipeClient::ParseResponse(adminJson);
+    // 7. DENY_QUOTA
+    std::string quotaJson = "{\"status\": \"DENY_QUOTA\", \"data\": {\"remaining\": 0}}";
+    AuthResult r7 = FaceKidsPipeClient::ParseResponse(quotaJson);
     if (r7.success) {
-        std::wcerr << L"[FALHA] Teste 7 (ALLOW para Administrator) foi aceito incorretamente!\n";
+        std::wcerr << L"[FALHA] Teste 7 (DENY_QUOTA) foi aceito como sucesso!\n";
         return 7;
     }
-    std::wcout << L"  [PASS] 7. Rejeicao de conta que nao seja 'Filhos' aprovada.\n";
+    std::wcout << L"  [PASS] 7. DENY_QUOTA rejeitado com status correto.\n";
 
-    // 8. Fake status ALLOW em objeto aninhado data
-    std::string nestedFakeJson = "{\"data\": {\"status\": \"ALLOW\"}, \"status\": \"DENY_UNKNOWN\"}";
-    AuthResult r8 = FaceKidsPipeClient::ParseResponse(nestedFakeJson);
+    // 8. DENY_CURFEW
+    std::string curfewJson = "{\"status\": \"DENY_CURFEW\", \"data\": {\"message\": \"Horario nao permitido\"}}";
+    AuthResult r8 = FaceKidsPipeClient::ParseResponse(curfewJson);
     if (r8.success) {
-        std::wcerr << L"[FALHA] Teste 8 (Status aninhado) foi aceito incorretamente como ALLOW!\n";
+        std::wcerr << L"[FALHA] Teste 8 (DENY_CURFEW) foi aceito como sucesso!\n";
         return 8;
     }
-    std::wcout << L"  [PASS] 8. Status aninhado em data rejeitado com sucesso.\n";
+    std::wcout << L"  [PASS] 8. DENY_CURFEW rejeitado com status correto.\n";
 
-    std::wcout << L"[OK] Todos os testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+    // 9. JSON vazio / invalido
+    AuthResult r9 = FaceKidsPipeClient::ParseResponse("");
+    if (r9.success) {
+        std::wcerr << L"[FALHA] Teste 9 (JSON vazio) foi aceito!\n";
+        return 9;
+    }
+    std::wcout << L"  [PASS] 9. JSON vazio tratado com seguranca.\n";
+
+    // 10. JSON sem delimitadores validos
+    AuthResult r10 = FaceKidsPipeClient::ParseResponse("status: ALLOW, user: Filhos");
+    if (r10.success) {
+        std::wcerr << L"[FALHA] Teste 10 (JSON sem delimitadores) foi aceito!\n";
+        return 10;
+    }
+    std::wcout << L"  [PASS] 10. JSON sem delimitadores rejeitado com seguranca.\n";
+
+    // 11. Rejeicao de usuario que nao seja Filhos (ex: Administrator)
+    std::string adminJson = "{\"status\": \"ALLOW\", \"user\": \"Administrator\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    AuthResult r11 = FaceKidsPipeClient::ParseResponse(adminJson);
+    if (r11.success) {
+        std::wcerr << L"[FALHA] Teste 11 (ALLOW para Administrator) foi aceito incorretamente!\n";
+        return 11;
+    }
+    std::wcout << L"  [PASS] 11. Rejeicao de conta que nao seja 'Filhos' aprovada.\n";
+
+    // 12. Fake status ALLOW em objeto aninhado data
+    std::string nestedFakeJson = "{\"data\": {\"status\": \"ALLOW\"}, \"status\": \"DENY_UNKNOWN\"}";
+    AuthResult r12 = FaceKidsPipeClient::ParseResponse(nestedFakeJson);
+    if (r12.success) {
+        std::wcerr << L"[FALHA] Teste 12 (Status aninhado) foi aceito incorretamente como ALLOW!\n";
+        return 12;
+    }
+    std::wcout << L"  [PASS] 12. Status aninhado em data rejeitado com sucesso.\n";
+
+    std::wcout << L"[OK] Todos os 12 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
@@ -86,7 +127,6 @@ int main(int argc, char* argv[]) {
         return testRc;
     }
 
-    // Se chamado apenas para testes unitarios, encerra aqui
     if (argc > 1 && std::string(argv[1]) == "--unit-only") {
         return 0;
     }
@@ -97,7 +137,7 @@ int main(int argc, char* argv[]) {
     std::wcout << L"[Mensagem] " << res.message << L"\n";
     if (res.success) {
         std::wcout << L"[Usuario]  " << res.user << L"\n";
-        std::wcout << L"[Filho]    " << res.childName << L"\n";
+        std::wcout << L"[Filho]    " << res.childName << L" (ID: " << res.childId << L")\n";
     }
     return 0;
 }

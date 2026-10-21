@@ -257,6 +257,39 @@ class FaceAuthenticator:
             store.close()
 
 
+def probe_camera_access(camera_index: int = 0) -> bool:
+    """Verifica se o contexto atual de execucao tem permissao e capacidade de abrir a webcam."""
+    try:
+        backend = cv2.CAP_DSHOW if sys.platform == "win32" else 0
+        cap = cv2.VideoCapture(camera_index, backend)
+        if not cap.isOpened():
+            return False
+        ret, frame = cap.read()
+        cap.release()
+        return bool(ret and frame is not None)
+    except Exception as e:
+        logger.warning("Falha na sondagem da webcam: %s", e)
+        return False
+
+
+def is_session_zero_or_system() -> bool:
+    """Detecta se o processo esta executando como SYSTEM ou na Sessao 0 (sem desktop interativo)."""
+    if sys.platform != "win32":
+        return False
+    user = os.environ.get("USERNAME", "").upper()
+    if user in ("SYSTEM", ""):
+        return True
+    try:
+        kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+        if kernel32 and hasattr(kernel32, "ProcessIdToSessionId"):
+            session_id = wintypes.DWORD()
+            if kernel32.ProcessIdToSessionId(kernel32.GetCurrentProcessId(), ctypes.byref(session_id)):
+                return session_id.value == 0
+    except Exception:
+        pass
+    return False
+
+
 def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] = None, once: bool = False):
     root = Path(__file__).resolve().parent.parent
     models = models_dir or (root / "models")
@@ -265,6 +298,16 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
     logger.info("Iniciando FaceKids Auth Service...")
     logger.info("Modelos: %s", models)
     logger.info("Banco: %s", db)
+
+    # Verificacao de viabilidade de webcam no contexto de execucao (Sessao 0 vs Interativa)
+    if is_session_zero_or_system():
+        logger.info("Detectado contexto SYSTEM / Sessao 0. Realizando sondagem de acesso a webcam...")
+        if not probe_camera_access(0):
+            logger.error(
+                "AVISO CRÍTICO: Contexto SYSTEM / Sessao 0 nao possui acesso aos dispositivos DirectShow de webcam. "
+                "Encerrando processo para liberar a execucao interativa no login do usuario sem bloquear o mutex."
+            )
+            return
 
     kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
     if kernel32 is None:
@@ -337,6 +380,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                 response_payload["child_id"] = data.get("child_id")
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")
+                response_payload["auth_token"] = "FACEKIDS_AUTH_TOKEN_V1"
 
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")

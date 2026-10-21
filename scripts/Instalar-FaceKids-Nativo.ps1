@@ -86,8 +86,8 @@ start "" "$pythonw" -m facekids.auth_service
 Set-Content -Path $serviceBat -Value $serviceContent -Encoding ASCII -Force
 
 try {
-    & schtasks.exe /create /tn "FaceKidsAuthService" /tr "cmd.exe /c \`"$serviceBat\`"" /sc onstart /ru "SYSTEM" /rl HIGHEST /f 2>&1 | Out-Null
-    Write-Host "Tarefa agendada FaceKidsAuthService configurada no boot (independente de login administrativo)." -ForegroundColor Green
+    & schtasks.exe /create /tn "FaceKidsAuthService" /tr "cmd.exe /c \`"$serviceBat\`"" /sc onlogon /rl HIGHEST /f 2>&1 | Out-Null
+    Write-Host "Tarefa agendada FaceKidsAuthService configurada no Logon interativo (com acesso a webcam e privilegios elevados)." -ForegroundColor Green
 } catch {
     Write-Host "Aviso ao agendar tarefa FaceKidsAuthService: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
@@ -120,12 +120,13 @@ start "" "$pythonw" -m facekids.filhos_agent
 "@
 Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
 
-# Agendar no Logon da conta Filhos
+# Agendar exclusivamente no Logon da conta Filhos de forma interativa (/it)
 try {
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c `"$agentBat`"" /sc onlogon /f 2>&1 | Out-Null
-    Write-Host "Agente dos Filhos agendado com sucesso no Windows!" -ForegroundColor Green
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /ru "Filhos" /rp "1" /it /f 2>&1 | Out-Null
+    Write-Host "Agente dos Filhos agendado com sucesso vinculado exclusivamente a conta 'Filhos' (/it)." -ForegroundColor Green
 } catch {
-    Write-Host "Aviso ao agendar tarefa dos Filhos: $($_.Exception.Message)" -ForegroundColor DarkGray
+    Write-Host "Aviso ao agendar tarefa vinculada com senha: $($_.Exception.Message)" -ForegroundColor DarkGray
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /f 2>&1 | Out-Null
 }
 
 # 7. Iniciar os servicos em segundo plano
