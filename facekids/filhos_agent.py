@@ -159,14 +159,23 @@ def trigger_welcome_screen():
 
 
 def read_last_unlock_child() -> Tuple[Optional[int], str]:
-    """Le as informacoes do ultimo filho identificado."""
+    """Le as informacoes do ultimo filho identificado se recente e de hoje."""
     if LAST_UNLOCK_FILE.exists():
         try:
             data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            cid = data.get("child_id")
-            cname = data.get("child_name", f"Crianca {cid}")
-            if cid is not None:
-                return int(cid), str(cname)
+            ts = float(data.get("timestamp", 0))
+            is_fresh = True
+            if ts > 0:
+                if (time.time() - ts) >= 600:
+                    is_fresh = False
+                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
+                    is_fresh = False
+
+            if is_fresh:
+                cid = data.get("child_id")
+                cname = data.get("child_name", f"Crianca {cid}")
+                if cid is not None:
+                    return int(cid), str(cname)
         except Exception as e:
             logger.warning("Erro ao ler last_unlock.json: %s", e)
     return None, ""
@@ -291,10 +300,9 @@ def run_agent():
     if cid is not None:
         tracker.switch_child(cid, cname)
     else:
-        # Fallback: pega o primeiro perfil de crianca do banco
-        people = store.people()
-        if people:
-            tracker.switch_child(people[0][0], people[0][1])
+        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
+        tracker.current_child_id = None
+        tracker.current_child_name = "Nao identificado" 
 
     last_active_time = time.monotonic()
     today = date.today().isoformat()

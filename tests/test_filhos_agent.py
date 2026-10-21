@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -86,6 +87,30 @@ class TestFilhosAgent(unittest.TestCase):
                 cid, cname = read_last_unlock_child()
                 self.assertEqual(cid, 2)
                 self.assertEqual(cname, "Crianca 2")
+
+    def test_read_last_unlock_child_stale_ignored(self):
+        with tempfile.TemporaryDirectory() as td:
+            unlock_file = Path(td) / "last_unlock.json"
+            unlock_file.write_text(
+                json.dumps({
+                    "child_id": 2,
+                    "child_name": "Crianca 2",
+                    "timestamp": time.time() - 1200,
+                }),
+                encoding="utf-8",
+            )
+            with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
+                cid, cname = read_last_unlock_child()
+                self.assertIsNone(cid)
+                self.assertEqual(cname, "")
+
+    def test_unidentified_child_state_safe(self):
+        tracker = QuotaTracker(self.store)
+        self.assertIsNone(tracker.current_child_id)
+        # Notifications should use fallback name without crashing
+        with patch("facekids.filhos_agent.show_toast"):
+            tracker.check_notifications_and_lock(500)
+            self.assertTrue(tracker.warned_10m)
 
 
 if __name__ == "__main__":

@@ -260,9 +260,17 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::GetSerialization(
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::ReportResult(
-    NTSTATUS, NTSTATUS, PWSTR* ppszOptionalStatusText, CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon) {
+    NTSTATUS status, NTSTATUS subStatus, PWSTR* ppszOptionalStatusText, CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon) {
+    LogCP(L"[FaceKidsCredential] ReportResult: status=0x%lx, subStatus=0x%lx", (unsigned long)status, (unsigned long)subStatus);
+    EnterCriticalSection(&m_cs);
+    if (status != 0) {
+        m_lastAuth = {};
+        m_statusText = L"Falha na autenticacao do Windows. Clique para tentar novamente.";
+    }
+    LeaveCriticalSection(&m_cs);
+
     if (ppszOptionalStatusText) *ppszOptionalStatusText = nullptr;
-    if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = CPSI_NONE;
+    if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = (status == 0) ? CPSI_SUCCESS : CPSI_ERROR;
     return S_OK;
 }
 

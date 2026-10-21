@@ -86,48 +86,51 @@ def launch_configured_programs():
         if not exe:
             continue
         try:
-            cmd = f'"{exe}" {args}' if args else f'"{exe}"'
-            subprocess.Popen(cmd, shell=True)
+            import shlex
+            cmd = [exe]
+            if args:
+                cmd.extend(shlex.split(args))
+            subprocess.Popen(cmd, shell=False)
             logger.info("Programa iniciado com sucesso: %s", exe)
         except Exception as e:
             logger.warning("Falha ao iniciar programa '%s': %s", exe, e)
 
 
-def get_current_child_info() -> tuple[int, str, int]:
-    """Recupera id, nome e saldo restante em segundos do ultimo desbloqueio ou do banco."""
-    # 1. Tentar ler do last_unlock.json se recente (menos de 10 minutos)
+def get_current_child_info() -> tuple[Optional[int], str, int]:
+    """Recupera id, nome e saldo restante em segundos do ultimo desbloqueio autenticado.
+    Retorna None no id se nao houver desbloqueio recente valido.
+    """
     if LAST_UNLOCK_FILE.exists():
         try:
             data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            ts = data.get("timestamp", 0)
-            if time.time() - ts < 600:
-                cid = data.get("child_id", 2)
+            ts = float(data.get("timestamp", 0))
+            is_fresh = True
+            if ts > 0:
+                if (time.time() - ts) >= 600:
+                    is_fresh = False
+                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
+                    is_fresh = False
+
+            cid = data.get("child_id")
+            if is_fresh and cid is not None:
+                cid = int(cid)
                 name = data.get("child_name", f"Crianca {cid}")
-                rem = data.get("remaining_seconds", 7200)
+                try:
+                    db = child_pilot_database()
+                    if db.exists():
+                        store = Storage(db)
+                        today = date.today().isoformat()
+                        rem = int(store.remaining(cid, today))
+                        store.close()
+                        return cid, name, rem
+                except Exception:
+                    pass
+                rem = int(data.get("remaining_seconds", 0))
                 return cid, name, rem
         except Exception:
             pass
 
-    # 2. Consultar o banco SQLite
-    try:
-        db = child_pilot_database()
-        if db.exists():
-            store = Storage(db)
-            today = date.today().isoformat()
-            people = store.people()
-            if people:
-                # Padrao: Crianca 2 ou primeiro cadastrado
-                target_pid = 2
-                for pid, name, _ in people:
-                    if pid == target_pid or len(people) == 1:
-                        rem = int(store.remaining(pid, today))
-                        store.close()
-                        return pid, name, rem
-            store.close()
-    except Exception:
-        pass
-
-    return 2, "Filho(a)", 7200
+    return None, "Filho(a)", 0
 
 
 def format_remaining_time(seconds: int) -> str:
@@ -227,7 +230,7 @@ class WelcomeWindow:
         avatar_frame = tk.Frame(container, bg=self.bg_card)
         avatar_frame.pack(pady=(10, 6))
 
-        avatar_path = get_child_avatar_path(self.child_id)
+        avatar_path = get_child_avatar_path(self.child_id) if self.child_id is not None else None
         if avatar_path and avatar_path.exists():
             try:
                 self.photo_image = tk.PhotoImage(file=str(avatar_path))
@@ -239,18 +242,20 @@ class WelcomeWindow:
             self._draw_fallback_avatar(avatar_frame)
 
         # 2. Titulo e Saudacao
+        salutation = f"Olá, {self.child_name}! 👋" if self.child_id is not None else "Olá! 👋"
         title_label = tk.Label(
             container,
-            text=f"Olá, {self.child_name}! 👋",
+            text=salutation,
             font=("Segoe UI", 18, "bold"),
             fg=self.text_title,
             bg=self.bg_card,
         )
         title_label.pack(pady=(4, 2))
 
+        sub_msg = "Desbloqueio facial realizado com sucesso!" if self.child_id is not None else "Entrada por PIN ou aguardando identificação facial."
         sub_label = tk.Label(
             container,
-            text="Desbloqueio facial realizado com sucesso!",
+            text=sub_msg,
             font=("Segoe UI", 10),
             fg=self.text_sub,
             bg=self.bg_card,
@@ -261,10 +266,15 @@ class WelcomeWindow:
         quota_box = tk.Frame(container, bg=self.bg_box, highlightbackground="#313244", highlightthickness=1)
         quota_box.pack(fill=tk.X, padx=32, pady=(0, 16))
 
-        time_str = format_remaining_time(self.remaining_seconds)
+        if self.child_id is not None:
+            time_str = format_remaining_time(self.remaining_seconds)
+            time_icon_text = f"⏱️  Tempo disponível hoje: {time_str}"
+        else:
+            time_icon_text = "⏱️  Aguardando identificação facial..."
+
         time_icon_label = tk.Label(
             quota_box,
-            text=f"⏱️  Tempo disponível hoje: {time_str}",
+            text=time_icon_text,
             font=("Segoe UI", 11, "bold"),
             fg=self.accent_cyan,
             bg=self.bg_box,
@@ -273,7 +283,7 @@ class WelcomeWindow:
 
         # Barra de progresso visual (quota base: 2h = 7200s)
         total_seconds = 7200
-        pct = max(0.0, min(1.0, self.remaining_seconds / total_seconds))
+        pct = max(0.0, min(1.0, self.remaining_seconds / total_seconds)) if self.child_id is not None else 0.0
         bar_canvas = tk.Canvas(quota_box, width=320, height=8, bg=self.bar_bg, highlightthickness=0)
         bar_canvas.pack(pady=(0, 10))
         fill_width = int(320 * pct)

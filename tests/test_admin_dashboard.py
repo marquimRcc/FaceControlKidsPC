@@ -1,7 +1,9 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from facekids.admin_dashboard import is_admin_account, time_format_hm
 from facekids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files
@@ -12,6 +14,11 @@ class TestAdminDashboard(unittest.TestCase):
     def test_is_admin_account(self):
         # On MarcosMiniPC, account check must return True
         self.assertTrue(is_admin_account())
+
+    def test_is_admin_account_denied_for_filhos(self):
+        with patch.dict(os.environ, {"USERNAME": "Filhos"}):
+            with patch("facekids.admin_dashboard.windows_token_user", return_value="Filhos"):
+                self.assertFalse(is_admin_account())
 
     def test_time_format_hm(self):
         self.assertEqual(time_format_hm(0), "0 min")

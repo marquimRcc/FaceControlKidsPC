@@ -1,7 +1,7 @@
 @echo off
 title Cadastro Facial - Filho 1
-cd /d "C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC"
-set PYTHONPATH=C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC
+cd /d "%~dp0"
+set PYTHONPATH=%~dp0
 echo ============================================================
 echo      FaceControlKidsPC - CADASTRO FACIAL DO FILHO 1
 echo ============================================================

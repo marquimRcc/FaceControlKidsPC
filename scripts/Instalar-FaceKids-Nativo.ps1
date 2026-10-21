@@ -25,20 +25,9 @@ Write-Host "============================================================" -Foreg
 # 1. Verificar se a DLL existe (compilar se necessario)
 if (-not (Test-Path -LiteralPath $dllSource)) {
     Write-Host "Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Yellow
-    $gpp = 'C:\Users\MarcosMiniPC\w64devkit\w64devkit\bin\g++.exe'
-    if (-not (Test-Path $gpp)) {
-        throw "Compilador g++ nao encontrado em $gpp"
-    }
-    Push-Location (Join-Path $root 'native\credential_provider_facekids')
-    try {
-        & $gpp -shared -std=c++17 -O2 -DINITGUID `
-          dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
-          -o FaceKidsCredentialProvider.dll `
-          -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
-        if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
-    } finally {
-        Pop-Location
-    }
+    $buildScript = Join-Path $root 'native\credential_provider_facekids\build.ps1'
+    & powershell -ExecutionPolicy Bypass -File $buildScript
+    if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
 }
 
 # 2. Copiar DLL para ProgramData\FaceKids
@@ -124,7 +113,7 @@ try {
 
 # 7. Iniciar os servicos em segundo plano
 Write-Host "Iniciando servicos em segundo plano..." -ForegroundColor Yellow
-& taskkill.exe /f /im pythonw.exe 2>$null
+Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" | Where-Object { $_.CommandLine -like "*auth_service*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1

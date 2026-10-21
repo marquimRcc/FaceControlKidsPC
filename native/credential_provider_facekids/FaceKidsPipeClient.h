@@ -12,6 +12,66 @@ struct AuthResult {
 
 class FaceKidsPipeClient {
 public:
+    static std::string ExtractJsonString(const std::string& json, const std::string& key) {
+        std::string pattern = "\"" + key + "\"";
+        size_t pos = json.find(pattern);
+        if (pos == std::string::npos) return "";
+        pos += pattern.length();
+        while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
+            pos++;
+        }
+        if (pos >= json.length() || json[pos] != '"') return "";
+        pos++; // Skip opening quote
+        size_t endPos = json.find('"', pos);
+        if (endPos == std::string::npos) return "";
+        return json.substr(pos, endPos - pos);
+    }
+
+    static AuthResult ParseResponse(const std::string& resp) {
+        AuthResult result;
+        if (resp.empty()) {
+            result.message = L"Sem resposta do servico.";
+            return result;
+        }
+
+        std::string status = ExtractJsonString(resp, "status");
+
+        if (status == "ALLOW") {
+            result.success = true;
+            result.user = L"Filhos";
+            result.password = L"1";
+
+            std::string n = ExtractJsonString(resp, "child_name");
+            if (!n.empty()) {
+                result.childName = std::wstring(n.begin(), n.end());
+            }
+            result.message = L"Rosto reconhecido! Desbloqueando...";
+        } else if (status == "DENY_QUOTA") {
+            result.success = false;
+            result.message = L"Tempo diario esgotado para esta crianca.";
+        } else if (status == "DENY_CURFEW") {
+            result.success = false;
+            result.message = L"Horario de uso nao permitido para esta crianca.";
+        } else if (status == "DENY_UNKNOWN") {
+            result.success = false;
+            result.message = L"Rosto nao reconhecido. Aproxime-se e tente novamente.";
+        } else if (status == "DENY_NO_ENROLLMENT") {
+            result.success = false;
+            result.message = L"Nenhum rosto cadastrado no sistema.";
+        } else if (status == "DENY_NO_FACE") {
+            result.success = false;
+            result.message = L"Nenhum rosto visivel para a camera.";
+        } else if (status == "ERROR_CAMERA") {
+            result.success = false;
+            result.message = L"Camera indisponivel no momento.";
+        } else {
+            result.success = false;
+            result.message = L"Identificando... Olhe para a webcam.";
+        }
+
+        return result;
+    }
+
     static AuthResult RequestAuthentication() {
         AuthResult result;
         const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipe";
@@ -63,38 +123,6 @@ public:
         }
 
         buffer[bytesRead] = '\0';
-        std::string resp(buffer);
-
-        if (resp.find("\"ALLOW\"") != std::string::npos) {
-            result.success = true;
-            result.user = L"Filhos";
-            result.password = L"1";
-
-            size_t namePos = resp.find("\"child_name\": \"");
-            if (namePos != std::string::npos) {
-                namePos += 15;
-                size_t endPos = resp.find("\"", namePos);
-                if (endPos != std::string::npos) {
-                    std::string n = resp.substr(namePos, endPos - namePos);
-                    result.childName = std::wstring(n.begin(), n.end());
-                }
-            }
-
-            result.message = L"Rosto reconhecido! Desbloqueando...";
-        } else if (resp.find("DENY_QUOTA") != std::string::npos) {
-            result.success = false;
-            result.message = L"Tempo diario esgotado para esta crianca.";
-        } else if (resp.find("DENY_UNKNOWN") != std::string::npos) {
-            result.success = false;
-            result.message = L"Rosto nao reconhecido. Aproxime-se e tente novamente.";
-        } else if (resp.find("DENY_NO_FACE") != std::string::npos) {
-            result.success = false;
-            result.message = L"Nenhum rosto visivel para a camera.";
-        } else {
-            result.success = false;
-            result.message = L"Identificando... Olhe para a webcam.";
-        }
-
-        return result;
+        return ParseResponse(std::string(buffer));
     }
 };

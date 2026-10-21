@@ -216,7 +216,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::GetCredentialCount(DWORD* pdwCount, 
     *pdwCount = (m_pCredential && m_eligible) ? 1 : 0;
 
     EnterCriticalSection(&m_cs);
-    const bool autoLogon = m_readyToAutoLogon;
+    const bool autoLogon = m_readyToAutoLogon && m_eligible;
     LeaveCriticalSection(&m_cs);
 
     if (autoLogon) {
