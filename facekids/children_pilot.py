@@ -72,6 +72,8 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
     recognizer = Recognizer(models)
     vectors = []
     next_frame = time.monotonic()
+    best_enroll_frame = None
+    best_enroll_face = None
     print(f"CADASTRO CONSENTIDO: perfil {index}, {REQUIRED_SAMPLES} amostras.")
     print("Um rosto por vez. Q/ESC cancela SEM substituir cadastro anterior.")
     try:
@@ -85,6 +87,8 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
                 vector = recognizer.features(frame, faces[0])
                 if _valid_features(vector):
                     vectors.append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
+                    best_enroll_frame = frame.copy()
+                    best_enroll_face = faces[0]
                     next_frame = now + 0.55
             cv2.putText(frame, f"FaceKids CRIANCA {index} - {len(vectors)}/{REQUIRED_SAMPLES}",
                         (15,35), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (25,240,235),2)
@@ -96,6 +100,12 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
                 return False
         # All-or-nothing replacement, including for later re-enrollment.
         replace_templates(store, target, vectors)
+        if best_enroll_frame is not None:
+            try:
+                from .avatar_utils import save_child_photo
+                save_child_photo(index, best_enroll_frame, best_enroll_face)
+            except Exception:
+                pass
         print(f"CADASTRO_CONCLUIDO: perfil {index}, {len(vectors)} modelos locais.")
         return True
     finally:

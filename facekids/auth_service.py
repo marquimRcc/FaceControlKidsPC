@@ -8,7 +8,8 @@ Quando o LogonUI consulta o servico:
 2. Localiza e identifica o rosto presente usando YuNet + SFace;
 3. Consulta o saldo de quotas do SQLite local;
 4. Se o filho for reconhecido e possuir saldo > 0:
-   Retorna autorizacao com usuario 'Filhos' e senha '1'.
+   Retorna autorizacao com usuario 'Filhos' e senha '1';
+5. Salva a foto/avatar do filho reconhecido e dispara a tela de boas-vindas.
 """
 from __future__ import annotations
 
@@ -19,6 +20,9 @@ import json
 import logging
 import os
 from pathlib import Path
+import subprocess
+import sys
+import threading
 import time
 from typing import Optional, Tuple
 
@@ -28,6 +32,7 @@ import numpy as np
 from .children_pilot import child_pilot_database
 from .recognition import Recognizer
 from .storage import Storage
+from .avatar_utils import save_child_photo
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -107,6 +112,8 @@ class FaceAuthenticator:
             deadline = time.monotonic() + timeout_seconds
             best_candidate = None
             consecutive_matches = 0
+            best_frame = None
+            best_face_box = None
 
             try:
                 while time.monotonic() < deadline:
@@ -131,11 +138,15 @@ class FaceAuthenticator:
                             )
                             if candidate_id == best_candidate:
                                 consecutive_matches += 1
+                                best_frame = frame.copy()
+                                best_face_box = largest_face
                                 if consecutive_matches >= 2:
                                     break
                             else:
                                 best_candidate = candidate_id
                                 consecutive_matches = 1
+                                best_frame = frame.copy()
+                                best_face_box = largest_face
                         else:
                             best_candidate = None
                             consecutive_matches = 0
@@ -159,6 +170,29 @@ class FaceAuthenticator:
                 }
 
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
+
+            # Salva foto recortada de avatar da crianca reconhecida
+            if best_frame is not None:
+                try:
+                    save_child_photo(best_candidate, best_frame, best_face_box)
+                except Exception as e:
+                    logger.warning("Falha ao salvar avatar do filho: %s", e)
+
+            # Grava ultimo evento de desbloqueio para a tela de boas-vindas
+            try:
+                unlock_data = {
+                    "child_id": best_candidate,
+                    "child_name": child_name,
+                    "remaining_seconds": remaining_seconds,
+                    "timestamp": time.time(),
+                }
+                Path("C:/ProgramData/FaceKids/last_unlock.json").write_text(
+                    json.dumps(unlock_data, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception as e:
+                logger.warning("Falha ao salvar last_unlock.json: %s", e)
+
             return "ALLOW", {
                 "child_id": best_candidate,
                 "child_name": child_name,
@@ -247,6 +281,28 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             logger.info("Resposta enviada: status=%s (%d bytes)", status, bytes_written.value)
 
             kernel32.DisconnectNamedPipe(h_pipe)
+
+            # Se o filho foi autorizado, dispara a tela de boas-vindas na area de trabalho
+            if status == "ALLOW":
+                def _launch_welcome():
+                    time.sleep(0.9)
+                    try:
+                        pyw = root / ".venv" / "Scripts" / "pythonw.exe"
+                        if not pyw.exists():
+                            pyw = sys.executable
+                        env = os.environ.copy()
+                        env["PYTHONPATH"] = str(root)
+                        subprocess.Popen(
+                            [str(pyw), "-m", "facekids.welcome_screen"],
+                            cwd=str(root),
+                            env=env,
+                        )
+                        logger.info("Tela de boas-vindas disparada com sucesso!")
+                    except Exception as ex:
+                        logger.warning("Falha ao disparar tela de boas-vindas: %s", ex)
+
+                threading.Thread(target=_launch_welcome, daemon=True).start()
+
             if once:
                 logger.info("Modo --once ativado; encerrando servidor.")
                 break
@@ -255,6 +311,5 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
 
 
 if __name__ == "__main__":
-    import sys
     once_flag = "--once" in sys.argv
     run_pipe_server(once=once_flag)
