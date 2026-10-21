@@ -10,6 +10,31 @@
 
 > ORDEM DIRETA À IA EXECUTORA: trabalhe SOMENTE na branch acima, examine novamente seu HEAD antes de agir, avance em lotes de mudanças com commits e verificações, e entregue código funcional demonstrável. Não peça autorização a cada subetapa. Não modifique main, não faça merge, não altere a conta administrativa e não esconda ou desative provedores de credenciais padrão do Windows. Quando houver risco real de bloquear o acesso ao PC, pare somente a operação de instalação perigosa e prossiga com código, testes isolados e preparação de rollback. A senha local fixa de teste "1" para a conta Filhos é uma decisão expressa do proprietário: preserve-a nesta etapa; não substitua unilateralmente por cofre complexo ou rotação. Filtragem, firewall, internet e bloqueio de conteúdo estão em OUTRO PROJETO e NÃO fazem parte deste backlog.
 
+
+## DECISÃO POSTERIOR DO PROPRIETÁRIO — SOBREPÕE DIRETRIZES DE REARQUITETURA
+
+**Atualização de requisitos recebida em 21/10/2026 depois da redação inicial deste handoff. PRECEDÊNCIA MÁXIMA em caso de conflito com quaisquer itens abaixo.**
+
+**FATO OBSERVADO PELO USUÁRIO:** o proprietário informa que já testou no próprio PC doméstico e que **o fluxo de sentar diante da webcam, reconhecimento facial, desbloqueio automático da conta Filhos e as funcionalidades descritas estão funcionando**. Esta é a confirmação de teste de campo pelo usuário; o revisor não executou teste presencial independente. Não reclassificar arbitrariamente todo o produto como “desbloqueio ainda não implementado” ou “não comprovado” apenas porque a CI antiga não testa LogonUI real. CI verde e prova em hardware são categorias de evidência distintas.
+
+**DECISÃO ARQUITETURAL FINAL PARA A IA EXECUTORA: NÃO REESCREVER NEM MIGRAR A ARQUITETURA QUE JÁ FUNCIONA.** A nova branch não autoriza substituir o Credential Provider, criar um segundo serviço/Broker, trocar a integração Python/C++, mudar forma de login, refazer protocolo em grande escala ou alterar a sequência que já desbloqueia corretamente. A proposta de “unificar arquitetura” era uma hipótese do revisor baseada em inspeção estática, e **não é uma tarefa mandatória**. A arquitetura mais adequada AGORA é a existente, comprovada funcional no ambiente doméstico, com correções cirúrgicas e testes para preservar comportamento.
+
+**Obrigação absoluta de não regressão:** antes de qualquer mudança, mapear tecnicamente a baseline funcional e registrar os processos, comandos, serviços/tarefas e interfaces em uso real. Preservar: desbloqueio facial automático SEM CLIQUE; conta Filhos e senha fixa "1"; três perfis e quotas independentes; bônus; curfew; notificações; bloqueio por LockWorkStation; tela de boas-vindas; painel dos pais; Brave/YouTube Kids quando configurado; login tradicional; conta administrativa intacta. Não substituir por simulador, app pós-login ou desbloqueio que exige interação.
+
+**Nova interpretação do backlog P0-43 a P0-55:**
+- **P0-43** (CI Python) e **P0-44** (compilação do CP real): fazer primeiro porque são correções de verificabilidade sem redesenhar produto. Os erros da CI não são, por si só, prova de falha do programa instalado.
+- **P0-45** (ciclo de vida do worker): **inspecionar/medir ANTES de mudar**. Se já continua funcionando sem admin logado, não trocar VBS/tarefa/serviço só por preferência arquitetural. Se detectar falha reproduzível, corrigir o mínimo e testar o fluxo de login antes/depois.
+- **P0-46** (Named Pipe): fazer revisão e testes negativos; corrigir vulnerabilidades quando houver alteração pequena, compatível e testável. Não introduzir redesenho com novo serviço ou contrato incompatível apenas por elegância técnica. Priorizar tratamento robusto de dados e acesso local sem alterar senha "1" nem a experiência.
+- **P0-47** (Credential Provider e autologon): **não reimplementar o fluxo**; acrescentar testes de regressão e corrigir apenas problemas efetivos. O requisito já foi observado funcionando no PC do usuário.
+- **P0-48/49/50/51** (agente, identificação, quota, painel): verificar com dados/testes controlados, corrigindo defeitos concretos sem apagar/reiniciar o SQLite doméstico, não renumerar filhos nem substituir automações operacionais desnecessariamente.
+- **P0-52** (instalação/rollback): melhorias incrementais e reversíveis; não rodar instalador nem desregistrar o CP funcional do PC do usuário sem um motivo reproduzível e plano de recuperação.
+- **P0-53** (hardware): a baseline JÁ foi testada pelo usuário, registrar essa evidência de origem. Pedir testes presenciais adicionais apenas para comportamento novo ou correção potencialmente regressiva, com cenário mínimo e instrução segura. Não exigir repetição integral sem necessidade.
+- **P0-54/55** (documentação e entrega): registrar explicitamente baseline validada pelo proprietário, alterações exatas, smoke tests e riscos residuais. PR sem merge automático.
+
+**Portão antes de refatorar:** a IA deve apresentar (a) bug real reproduzido ou risco específico demonstrável; (b) alteração de menor superfície possível; (c) comparação antes/depois; (d) teste automatizado e, se alterar o login, validação supervisionada pelo proprietário. Se não houver evidência concreta, PRESERVAR O MÓDULO FUNCIONAL.
+
+**Ordem de trabalho revisada:** primeiro testes, instrumentação não invasiva, README e saúde do build; depois correções pequenas comprovadas. Jamais fazer big-bang migration, nunca apagar a instalação operacional por suposição, nunca substituir senha fixa "1", nunca misturar firewall/conteúdo. O revisor acompanha externamente; a IA executora codifica nesta branch.
+
 ---
 
 ## 0. A intenção do proprietário, sem reinterpretar requisitos
@@ -62,9 +87,9 @@ Commits relevantes em main, do mais recente para o mais antigo:
 - O workflow C++ “Credential Provider compile and host checks” ficou verde, porém COMPILA o código DIAGNÓSTICO native/credential_provider_poc e não prova build/funcionamento de native/credential_provider_facekids (código de login real).
 - Há binários compilados versionados em native/credential_provider_facekids, mas não considerar a existência deles como prova de build reprodutível.
 - README e docs/ADR-003-WINDOWS-REAL-FACE-UNLOCK.md descrevem implementação anterior e podem contradizer os commits novos.
-- Não há prova fornecida de login/desbloqueio automático real validado de ponta a ponta em Windows doméstico. Há evidências anteriores de leitura de webcam durante Win+L em processo interativo, que NÃO garantem captura no contexto do serviço/LogonUI.
+- O usuário confirmou posteriormente que o desbloqueio facial automático e as funcionalidades estão funcionando no Windows doméstico. O revisor não possui registros independentes desse teste e não deve negar a evidência relatada. Evidências anteriores de webcam Win+L permanecem úteis para diagnósticos, mas não substituem o teste prático do usuário.
 
-**Regra da executora:** revalidar esses fatos ao abrir a branch: commits posteriores podem ter corrigido algo. Não aplicar mudanças desnecessárias que já existam.
+**Regra da executora:** revalidar esses fatos ao abrir a branch: commits posteriores podem ter corrigido algo. **O usuário confirma a instalação funcional no hardware real. Mantenha a implementação atual e não aplique mudanças desnecessárias.**
 
 ## 2. Mapa de arquivos e funcionalidades presentes
 
@@ -138,7 +163,7 @@ Separar explicitamente estes estados:
 4. Conta administrativa ativa ou bloqueada — FaceKids NUNCA deve tentar autenticar no lugar dela.
 5. Troca rápida de usuário para Filhos, com ou sem sessão preexistente.
 
-Não prometer que um único processo Python interativo resolve todos esses estados. Serviço Windows executa na Sessão 0 e NÃO pode mostrar interface no desktop do usuário; webcam DirectShow/MSMF em Sessão 0 deve ser validada empiricamente. Se um worker em Sessão 0 não acessa o hardware sob Win+L, definir arquitetura alternativa e comprovar antes da instalação real. Um agente em Filhos já conectado pode resolver unlock, mas não necessariamente logon a frio. **Jamais esconder esse gap.**
+Não presumir nem negar a capacidade do processo existente sem inspecionar e reproduzir o comportamento da instalação que já funciona. Serviço Windows executa na Sessão 0 e NÃO pode mostrar interface no desktop do usuário; webcam DirectShow/MSMF em Sessão 0 deve ser validada empiricamente. Se um worker em Sessão 0 não acessa o hardware sob Win+L, definir arquitetura alternativa e comprovar antes da instalação real. Um agente em Filhos já conectado pode resolver unlock, mas não necessariamente logon a frio. **Jamais esconder esse gap.**
 
 ## 4. Problemas encontrados: evidências concretas e solução esperada
 
@@ -215,13 +240,13 @@ Não prometer que um único processo Python interativo resolve todos esses estad
 
 Manter Python para CV/GUI/quotas iniciais e C++ nativo para o Credential Provider. A IA deve avaliar dois caminhos e escolher com evidência:
 
-**Caminho mínimo para primeiro aceite (preferível se funcionar em hardware):**
+**Caminho atual a PRESERVAR (já informado como funcional no hardware doméstico):**
 - FaceAuthWorker Python iniciado independentemente de login administrativo e capaz de acessar câmera durante Win+L.
 - API local autenticada/restrita; valida childId, quotas e horário, responde veredito tipado de uso único.
 - Credential Provider C++ real manda consulta sem bloquear LogonUI e serializa .\\Filhos com senha fixa "1" somente após veredito positivo; timeout => não tenta login.
 - Agente Filhos identifica sessão ACTIVE, lê evento confirmado, mostra welcome e conta uso. Migração de SQLite sem perda.
 
-**Caminho alternativo, se o worker autônomo não abrir webcam sob Win+L:**
+**Caminho alternativo SOMENTE se uma regressão concreta demonstrar que o worker atual deixou de abrir webcam sob Win+L:**
 - Serviço de autorização no boot + worker de webcam num contexto apropriado comprovadamente ativo enquanto Filhos está bloqueada; IPC com permissão compatível e sem depender da sessão admin.
 - Validar ao menos Win+L com sessão Filhos já iniciada; para logon a frio construir spike separado. Se só o unlock funcionar, registrar cold boot como pendência e não mascarar o resultado.
 
@@ -314,7 +339,7 @@ Cada etapa deve resultar em código, testes automatizados, commit e um registro 
 ## 7. Sequência de execução recomendada (lotes, sem microparadas)
 
 **Lote 1: base confiável (P0-43, P0-44).** Corrigir CI dos dois sistemas e construir o módulo nativo de verdade. Não exigir webcam. Commit(s), Actions verdes.  
-**Lote 2: caminho de auto unlock (P0-45, P0-46, P0-47).** Inicialização independente do admin + acesso real à webcam no bloqueio + IPC + CP auto. Prioridade absolutamente maior. Se parte depende de teste presencial, continuar implementando harness/diagnósticos e marcar pendente.  
+**Lote 2: preservar o auto unlock existente (P0-45, P0-46, P0-47).** Medir a baseline que já funciona, adicionar testes e corrigir apenas problemas reproduzidos de ciclo de vida, IPC ou CP, sem refazer o fluxo facial. Se mudar comportamento de login, requer comparação e teste específico no PC.  
 **Lote 3: experiência e quota (P0-48, P0-49, P0-50, P0-51).** Identidade individual correta, agente, interface, saldo, painel.  
 **Lote 4: entrega robusta (P0-52, P0-53, P0-54, P0-55).** Instalação/rollback, teste no PC, docs e relatórios.
 
@@ -350,7 +375,7 @@ Não implementar apenas “uma tela bonita” sem desbloqueio nem adicionar nova
 | RF-24 | Webcam ocupada/desconectada | Recuperação, timeout e não travar desktop | teste real |
 | RF-25 | IDs e nomes editados | Quotas e fotos acompanham ID correto | teste persistência |
 
-**Meta mínima de produto:** RF-01, RF-02, RF-03, RF-04, RF-05, RF-06, RF-08, RF-09, RF-10, RF-17, RF-18, RF-20.  
+**Meta mínima de REGRESSÃO:** RF-01, RF-02, RF-03, RF-04, RF-05, RF-06, RF-08, RF-09, RF-10, RF-17, RF-18, RF-20. O proprietário relatou já ter testado a operação no PC; esta matriz é para não quebrar o que existe.  
 **Meta completa:** todos acima; RF-19 deve ser registrado honestamente conforme capacidade real, sem bloquear o MVP Win+L se o cold boot exigir componente adicional.
 
 ## 9. Plano de testes técnicos — unidade, integração e sistema
@@ -466,7 +491,7 @@ Executar primeiro as que destravam entrega:
 
 ## 15. Definição de pronto (DoD final do projeto nesta rodada)
 
-Só considerar a versão “funcional doméstica” quando:
+Manter a versão que o proprietário JÁ considera funcional no PC doméstico. Para liberar atualizações dessa versão sem regressões, observar estes critérios:
 - Em teste acompanhado no PC real, pelo menos cada um dos três filhos destrava a conta Filhos após Win+L simplesmente sentando na frente da webcam, sem clique ou senha.
 - A autenticação do administrador segue convencional e intacta.
 - Quota/saldo/horário são consultados antes do desbloqueio facial.
@@ -505,4 +530,4 @@ Se qualquer item físico não foi executado, informar “implementado mas não v
 
 # PROMPT PRONTO PARA A OUTRA IA (copiar e usar)
 
-Você é a IA executora principal do projeto FaceControlKidsPC. Leia integralmente o arquivo docs/HANDOFF-EXECUCAO-AUTO-UNLOCK-OUTRA-IA-20261021.md na branch handoff/facekids-auto-unlock-stabilization-20261021 do repositório https://github.com/marquimRcc/FaceControlKidsPC. Implemente o plano P0-43 a P0-55 nessa mesma branch, em lotes de várias tarefas, criando testes, commits e verificando GitHub Actions antes de declarar cada etapa concluída. Avance sem pedir autorização a cada passo. NÃO faça merge na main. A prioridade é a criança sentar diante da webcam, ser reconhecida e DESBLOQUEAR AUTOMATICAMENTE a conta Windows Filhos sem clicar/digitar, com quotas individuais e painel parental. A conta administradora deve permanecer intacta. A senha local da conta Filhos é deliberadamente fixa como "1" neste PC doméstico; não gastar esta rodada tentando trocá-la ou redesenhar sua gestão. O login convencional permanece disponível por escolha do proprietário. Firewall/Internet/conteúdo ficam fora do escopo. Não minta sobre testes físicos; se a câmera/LogonUI real exigir participação do proprietário, forneça o teste preciso e continue o restante do desenvolvimento. Corrija regressões da CI, inclua build da DLL de login REAL, consolide o processo de autenticação e não use fallback de ID de criança. O revisor apenas acompanhará e analisará seus commits e provas. Trabalhe até onde as ferramentas permitirem no mesmo ciclo, priorizando entregas reais com documentação de resultado.
+Você é a IA executora principal do projeto FaceControlKidsPC. **ATENÇÃO: o usuário confirmou o sistema atual funcionando no PC real; não redesenhe nem substitua a arquitetura existente. Corrija apenas problemas concretos, mantenha a mesma experiência e trate toda etapa como proteção contra regressão, não como reconstrução.** Leia integralmente o arquivo docs/HANDOFF-EXECUCAO-AUTO-UNLOCK-OUTRA-IA-20261021.md na branch handoff/facekids-auto-unlock-stabilization-20261021 do repositório https://github.com/marquimRcc/FaceControlKidsPC. Implemente o plano P0-43 a P0-55 nessa mesma branch, em lotes de várias tarefas, criando testes, commits e verificando GitHub Actions antes de declarar cada etapa concluída. Avance sem pedir autorização a cada passo. NÃO faça merge na main. A prioridade é a criança sentar diante da webcam, ser reconhecida e DESBLOQUEAR AUTOMATICAMENTE a conta Windows Filhos sem clicar/digitar, com quotas individuais e painel parental. A conta administradora deve permanecer intacta. A senha local da conta Filhos é deliberadamente fixa como "1" neste PC doméstico; não gastar esta rodada tentando trocá-la ou redesenhar sua gestão. O login convencional permanece disponível por escolha do proprietário. Firewall/Internet/conteúdo ficam fora do escopo. Não minta sobre testes físicos; se a câmera/LogonUI real exigir participação do proprietário, forneça o teste preciso e continue o restante do desenvolvimento. Corrija regressões da CI, inclua build da DLL de login REAL, consolide o processo de autenticação e não use fallback de ID de criança. O revisor apenas acompanhará e analisará seus commits e provas. Trabalhe até onde as ferramentas permitirem no mesmo ciclo, priorizando entregas reais com documentação de resultado.
