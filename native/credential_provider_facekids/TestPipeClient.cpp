@@ -50,6 +50,32 @@ static int RunParsingUnitTests() {
     }
     std::wcout << L"  [PASS] 5. JSON vazio tratado com seguranca.\n";
 
+    // 6. JSON sem delimitadores validos
+    AuthResult r6 = FaceKidsPipeClient::ParseResponse("status: ALLOW, user: Filhos");
+    if (r6.success) {
+        std::wcerr << L"[FALHA] Teste 6 (JSON sem delimitadores) foi aceito!\n";
+        return 6;
+    }
+    std::wcout << L"  [PASS] 6. JSON sem delimitadores rejeitado com seguranca.\n";
+
+    // 7. Rejeicao de usuario que nao seja Filhos (ex: Administrador)
+    std::string adminJson = "{\"status\": \"ALLOW\", \"user\": \"Administrator\", \"password\": \"1\", \"child_name\": \"Hacker\"}";
+    AuthResult r7 = FaceKidsPipeClient::ParseResponse(adminJson);
+    if (r7.success) {
+        std::wcerr << L"[FALHA] Teste 7 (ALLOW para Administrator) foi aceito incorretamente!\n";
+        return 7;
+    }
+    std::wcout << L"  [PASS] 7. Rejeicao de conta que nao seja 'Filhos' aprovada.\n";
+
+    // 8. Fake status ALLOW em objeto aninhado data
+    std::string nestedFakeJson = "{\"data\": {\"status\": \"ALLOW\"}, \"status\": \"DENY_UNKNOWN\"}";
+    AuthResult r8 = FaceKidsPipeClient::ParseResponse(nestedFakeJson);
+    if (r8.success) {
+        std::wcerr << L"[FALHA] Teste 8 (Status aninhado) foi aceito incorretamente como ALLOW!\n";
+        return 8;
+    }
+    std::wcout << L"  [PASS] 8. Status aninhado em data rejeitado com sucesso.\n";
+
     std::wcout << L"[OK] Todos os testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }

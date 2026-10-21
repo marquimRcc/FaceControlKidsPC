@@ -13,18 +13,55 @@ struct AuthResult {
 class FaceKidsPipeClient {
 public:
     static std::string ExtractJsonString(const std::string& json, const std::string& key) {
-        std::string pattern = "\"" + key + "\"";
-        size_t pos = json.find(pattern);
-        if (pos == std::string::npos) return "";
-        pos += pattern.length();
-        while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
-            pos++;
+        size_t firstBrace = json.find('{');
+        size_t lastBrace = json.rfind('}');
+        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+            return "";
         }
-        if (pos >= json.length() || json[pos] != '"') return "";
-        pos++; // Skip opening quote
-        size_t endPos = json.find('"', pos);
-        if (endPos == std::string::npos) return "";
-        return json.substr(pos, endPos - pos);
+
+        std::string pattern = "\"" + key + "\"";
+        size_t searchPos = firstBrace;
+        while (searchPos < lastBrace) {
+            size_t pos = json.find(pattern, searchPos);
+            if (pos == std::string::npos || pos >= lastBrace) {
+                return "";
+            }
+
+            // Garante que a chave esta no primeiro nivel hierarquico (depth == 1)
+            int depth = 0;
+            bool insideQuote = false;
+            for (size_t i = firstBrace; i < pos; ++i) {
+                if (json[i] == '\\' && insideQuote && i + 1 < pos) {
+                    i++;
+                    continue;
+                }
+                if (json[i] == '"') insideQuote = !insideQuote;
+                if (!insideQuote) {
+                    if (json[i] == '{') depth++;
+                    else if (json[i] == '}') depth--;
+                }
+            }
+
+            pos += pattern.length();
+            while (pos < lastBrace && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
+                pos++;
+            }
+            if (pos >= lastBrace || json[pos] != '"') {
+                searchPos = pos;
+                continue;
+            }
+            pos++; // Pula aspa de abertura
+            size_t endPos = json.find('"', pos);
+            if (endPos == std::string::npos || endPos > lastBrace) {
+                return "";
+            }
+
+            if (depth == 1) {
+                return json.substr(pos, endPos - pos);
+            }
+            searchPos = endPos + 1;
+        }
+        return "";
     }
 
     static AuthResult ParseResponse(const std::string& resp) {
@@ -34,9 +71,25 @@ public:
             return result;
         }
 
+        // Valida delimitadores JSON basicos
+        size_t firstBrace = resp.find('{');
+        size_t lastBrace = resp.rfind('}');
+        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+            result.message = L"Resposta em formato JSON invalido.";
+            return result;
+        }
+
         std::string status = ExtractJsonString(resp, "status");
 
         if (status == "ALLOW") {
+            std::string user = ExtractJsonString(resp, "user");
+            if (!user.empty() && user != "Filhos") {
+                // Rejeita qualquer tentativa de autorizar conta diferente de Filhos
+                result.success = false;
+                result.message = L"Usuario nao autorizado para desbloqueio facial.";
+                return result;
+            }
+
             result.success = true;
             result.user = L"Filhos";
             result.password = L"1";

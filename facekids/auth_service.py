@@ -73,8 +73,8 @@ PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
 INVALID_HANDLE_VALUE = -1
 
-# Security descriptor SDDL: Full control for SYSTEM (SY), Admins (BA), Interactive Users (IU)
-SDDL_PERMISSIVE = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)"
+# Security descriptor SDDL: Full control for SYSTEM (SY) and Admins (BA); Read/Write for Interactive Users (IU)
+SDDL_PERMISSIVE = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)"
 
 
 class SECURITY_ATTRIBUTES(ctypes.Structure):
@@ -314,20 +314,30 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             )
 
             request_str = buf.value.decode("utf-8", errors="ignore").strip() if success else ""
-            logger.info("Requisicao recebida: '%s'", request_str)
+            logger.info("Requisicao recebida (%d bytes): '%s'", bytes_read.value, request_str[:64])
 
-            if "QUERY" in request_str or not request_str:
+            # Validacao estrita do protocolo IPC
+            if len(request_str) > 512:
+                status, data = "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
+            elif request_str in ("AUTH_QUERY", "QUERY"):
                 status, data = auth.evaluate()
-            elif "PING" in request_str:
+            elif request_str == "PING":
                 status, data = "PONG", {"version": "1.0"}
             else:
-                status, data = "INVALID_COMMAND", {}
+                status, data = "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
 
             response_payload = {
                 "status": status,
+                "version": "1.0",
+                "user": "Filhos" if status == "ALLOW" else "",
                 "data": data,
                 "timestamp": time.time(),
             }
+            if status == "ALLOW":
+                response_payload["child_id"] = data.get("child_id")
+                response_payload["child_name"] = data.get("child_name")
+                response_payload["remaining"] = data.get("remaining")
+
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")
 
@@ -343,27 +353,6 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             logger.info("Resposta enviada: status=%s (%d bytes)", status, bytes_written.value)
 
             kernel32.DisconnectNamedPipe(h_pipe)
-
-            # Se o filho foi autorizado, dispara a tela de boas-vindas na area de trabalho
-            if status == "ALLOW":
-                def _launch_welcome():
-                    time.sleep(0.9)
-                    try:
-                        pyw = root / ".venv" / "Scripts" / "pythonw.exe"
-                        if not pyw.exists():
-                            pyw = sys.executable
-                        env = os.environ.copy()
-                        env["PYTHONPATH"] = str(root)
-                        subprocess.Popen(
-                            [str(pyw), "-m", "facekids.welcome_screen"],
-                            cwd=str(root),
-                            env=env,
-                        )
-                        logger.info("Tela de boas-vindas disparada com sucesso!")
-                    except Exception as ex:
-                        logger.warning("Falha ao disparar tela de boas-vindas: %s", ex)
-
-                threading.Thread(target=_launch_welcome, daemon=True).start()
 
             if once:
                 logger.info("Modo --once ativado; encerrando servidor.")

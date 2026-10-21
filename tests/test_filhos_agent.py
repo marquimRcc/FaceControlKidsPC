@@ -80,13 +80,14 @@ class TestFilhosAgent(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             unlock_file = Path(td) / "last_unlock.json"
             unlock_file.write_text(
-                json.dumps({"child_id": 2, "child_name": "Crianca 2"}),
+                json.dumps({"child_id": 2, "child_name": "Crianca 2", "timestamp": time.time()}),
                 encoding="utf-8",
             )
             with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
-                cid, cname = read_last_unlock_child()
+                cid, cname, ts = read_last_unlock_child()
                 self.assertEqual(cid, 2)
                 self.assertEqual(cname, "Crianca 2")
+                self.assertGreater(ts, 0)
 
     def test_read_last_unlock_child_stale_ignored(self):
         with tempfile.TemporaryDirectory() as td:
@@ -100,9 +101,28 @@ class TestFilhosAgent(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
-                cid, cname = read_last_unlock_child()
+                cid, cname, ts = read_last_unlock_child()
                 self.assertIsNone(cid)
                 self.assertEqual(cname, "")
+                self.assertEqual(ts, 0.0)
+
+    def test_stale_event_in_loop_does_not_switch_child(self):
+        tracker = QuotaTracker(self.store)
+        tracker.current_child_id = None
+        last_seen_ts = time.time()
+
+        # Simulando evento antigo (2 horas atras)
+        stale_data = {"child_id": 2, "child_name": "Crianca 2", "timestamp": time.time() - 7200}
+        current_ts = float(stale_data.get("timestamp", 0.0))
+
+        # A condicao de frescor estreita deve rejeitar
+        is_fresh = (
+            (current_ts > last_seen_ts)
+            and ((time.time() - current_ts) < 600.0)
+        )
+        self.assertFalse(is_fresh)
+        # QuotaTracker deve permanecer sem crianca atribuida
+        self.assertIsNone(tracker.current_child_id)
 
     def test_unidentified_child_state_safe(self):
         tracker = QuotaTracker(self.store)

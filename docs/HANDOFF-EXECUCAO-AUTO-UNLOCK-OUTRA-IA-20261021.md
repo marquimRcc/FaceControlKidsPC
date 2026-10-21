@@ -577,3 +577,77 @@ Autenticação a frio após reboot: SIM mantida a infraestrutura existente; sem 
 Login administrativo convencional intacto: Sim, comprovado via testes unitários e arquitetura COM sem auto-logon em contas não Filhos.
 Regressões/riscos remanescentes: Nenhuma regressão detectada; 100% dos testes e workflows verdes.
 Próxima atividade a executar: Apresentar pacote de entrega e relatório consolidado para revisão.
+
+
+---
+
+## 18. Segunda Rodada de Execução e Correção Técnica dos 5 Problemas Apontados pelo Revisor (21/10/2026)
+
+FaceKids — Execução e Hardening [21/10/2026 15:35 BRT]  
+Branch e HEAD: `handoff/facekids-auto-unlock-stabilization-20261021`  
+P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico: P0-45, P0-46, P0-47, P0-48, P0-49, P0-50, P0-51, P0-52, P0-53, P0-54, P0-55.
+
+### Itens Concretos Corrigidos e Evidências
+
+#### 1. Evento facial antigo em `facekids/filhos_agent.py` (P0-48, P0-49, P0-50)
+- **Problema:** O carregamento inicial ignorava eventos vencidos, mas o loop subsequente aceitava qualquer timestamp > `last_seen_ts` (iniciado em `0.0`), permitindo que um `last_unlock.json` residual antigo comutasse a criança e debitasse tempo incorretamente.
+- **Correção:**
+  - `read_last_unlock_child()` retorna `(cid, cname, ts)`.
+  - No boot do agente: se não houver unlock recente válido, inicializa `last_seen_ts = time.time()`, garantindo que eventos passados nunca sejam aceitos no loop.
+  - No loop contínuo de rastreamento: validação tripla estrita: `(current_ts > last_seen_ts) and ((time.time() - current_ts) < 600.0) and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())`.
+  - Eventos com timestamp expirado ou de dias anteriores avançam o ponteiro sem disparar `switch_child()`.
+  - Testes unitários adicionados em `tests/test_filhos_agent.py`: `test_read_last_unlock_child_stale_ignored` e `test_stale_event_in_loop_does_not_switch_child`.
+
+#### 2. Serviço de autenticação independente do Startup do administrador (P0-45)
+- **Problema:** `Instalar-FaceKids-Nativo.ps1` criava `FaceKidsAuthService.vbs` apenas no perfil administrativo (`$env:APPDATA`), sem mecanismo independente após reboot sem login do administrador.
+- **Correção:**
+  - `scripts/Instalar-FaceKids-Nativo.ps1` cria `C:\ProgramData\FaceKids\iniciar-auth-service.bat` e registra tarefa agendada no Windows: `schtasks /create /tn "FaceKidsAuthService" /tr "cmd.exe /c ...iniciar-auth-service.bat" /sc onstart /ru "SYSTEM" /rl HIGHEST /f`.
+  - O VBS no Startup permanece como contingência redundante supervisionada.
+  - O mutex global `Global\FaceKidsAuthServiceMutex` garante que instâncias redundantes encerrem imediatamente sem colisão.
+
+#### 3. Proteção e validação do Named Pipe (P0-46, P0-47)
+- **Problema:** SDDL usava `(A;;GA;;;IU)` (Generic All para usuários interativos) e `FaceKidsPipeClient.h` fazia busca simples de texto por substring de status.
+- **Correção:**
+  - `facekids/auth_service.py`: SDDL atualizado para `D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)` (restringindo usuários interativos a leitura e escrita, sem direitos de alteração de DACL ou posse).
+  - Limite estrito de mensagem de 512 bytes no pipe e validação de comandos (`AUTH_QUERY`, `PING`), rejeitando payloads malformados com `INVALID_COMMAND`.
+  - `native/credential_provider_facekids/FaceKidsPipeClient.h`: método `ExtractJsonString` agora valida início e fim de objeto JSON (`{ ... }`), avalia a profundidade de chaves (`depth == 1`) para rejeitar status falso aninhado em sub-objetos (ex: `{"data": {"status": "ALLOW"}}`), e no status `ALLOW` verifica explicitamente se `user == "Filhos"`, rejeitando imediatamente contas administrativas.
+  - Suíte de testes em `native/credential_provider_facekids/TestPipeClient.cpp` expandida para 8 testes unitários cobrindo todos os cenários de rejeição de formato e usuário inválido.
+
+#### 4. Desinstalação completa e relatório de integridade (P0-52)
+- **Problema:** `Desinstalar-FaceKids-Nativo.ps1` não removia a tarefa `FaceKidsFilhosAgent`, nem o VBS de `$env:APPDATA`, nem encerrava o processo do agente, e emitia mensagem genérica de restauração sem verificar.
+- **Correção:**
+  - `scripts/Desinstalar-FaceKids-Nativo.ps1` completamente refatorado e tornado idempotente.
+  - Encerra processos `auth_service` e `filhos_agent` de forma segura.
+  - Remove as tarefas agendadas `FaceKidsAuthService` e `FaceKidsFilhosAgent`.
+  - Remove scripts VBS do Startup do usuário e do Startup global.
+  - Remove chaves do Registro para o CLSID COM e para a lista de Credential Providers.
+  - Desregistra a DLL via `regsvr32 /u /s`.
+  - Limpa arquivos de execução em `C:\ProgramData\FaceKids` (`iniciar-*.bat`, `last_unlock.json`, `auth_service.pid`), preservando a base SQLite e fotos cadastradas (Regra 10).
+  - Emite checklist detalhado com verificação real de cada item removido.
+  - Adicionado `tests/test_installer_scripts.py` que valida a sintaxe e AST dos scripts PowerShell.
+
+#### 5. Entrada por PIN e fluxo de identificação contínua na sessão ativa (P0-49, P0-50)
+- **Problema:** Entrada por PIN mantinha a sessão em modo indefinido sem fluxo de identificação facial posterior.
+- **Correção:**
+  - Ao iniciar sem identificação prévia (entrada por PIN), o agente emite notificação visual orientando a criança a olhar para a webcam para carregar seu perfil.
+  - Na sessão ativa (`ACTIVE`), a cada 20 segundos o agente realiza uma consulta não-bloqueante ao `auth_service` via Named Pipe (`query_auth_service()`).
+  - Ao reconhecer a criança e confirmar saldo diário positivo, comuta automaticamente para o perfil correspondente, dispara a tela de boas-vindas com o saldo real e inicia a cobrança justa.
+  - Se a quota estiver zerada ou horário de dormir ativo, notifica e bloqueia a sessão.
+  - Enquanto nenhum rosto cadastrado estiver presente, a sessão não debita saldo de nenhuma criança indevidamente.
+
+---
+
+### Resumo dos Testes Executados (Segunda Rodada)
+
+1. **Python Unit Tests:**
+   - Comando: `python -m unittest discover tests -v`
+   - Resultado: **155 testes executados, 155 aprovados (0 erros, 0 falhas)** em ~5.8s.
+2. **C++ Native Provider Host e Parser IPC:**
+   - Comando: `TestPipeClient.exe --unit-only`
+   - Resultado: **8/8 testes de parsing e segurança de contrato aprovados (100%)**.
+   - Comando: `TestProviderHost.exe`
+   - Resultado: **Criação de ICredentialProvider COM aprovada, 3 campos UI enumerados corretamente**.
+3. **PowerShell AST Parsing:**
+   - `scripts/Instalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
+   - `scripts/Desinstalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
+   - `scripts/Iniciar-Piloto-Filhos.ps1`: 0 erros de sintaxe.

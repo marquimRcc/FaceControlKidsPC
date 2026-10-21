@@ -26,6 +26,11 @@ import time
 import tkinter as tk
 from typing import Optional, Tuple
 
+if sys.platform == "win32":
+    from ctypes import wintypes
+else:
+    wintypes = None
+
 from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
@@ -158,7 +163,43 @@ def trigger_welcome_screen():
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
 
-def read_last_unlock_child() -> Tuple[Optional[int], str]:
+def query_auth_service() -> Optional[dict]:
+    """Solicita identificacao facial ao FaceKidsAuthService via Named Pipe de forma segura."""
+    if sys.platform != "win32":
+        return None
+    kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+    if kernel32 is None:
+        return None
+    pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
+    h_pipe = kernel32.CreateFileW(
+        pipe_name,
+        0xC0000000,
+        0,
+        None,
+        3,
+        0,
+        None,
+    )
+    if h_pipe == -1 or h_pipe == 0xFFFFFFFF:
+        return None
+    try:
+        req = b"AUTH_QUERY\n"
+        written = wintypes.DWORD() if wintypes else ctypes.c_ulong()
+        kernel32.WriteFile(h_pipe, req, len(req), ctypes.byref(written), None)
+        buf = ctypes.create_string_buffer(2048)
+        bytes_read = wintypes.DWORD() if wintypes else ctypes.c_ulong()
+        ok = kernel32.ReadFile(h_pipe, buf, 2047, ctypes.byref(bytes_read), None)
+        if ok and bytes_read.value > 0:
+            resp_str = buf.value.decode("utf-8", errors="ignore").strip()
+            return json.loads(resp_str)
+    except Exception as e:
+        logger.debug("Falha na consulta ao pipe em sessao: %s", e)
+    finally:
+        kernel32.CloseHandle(h_pipe)
+    return None
+
+
+def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
     """Le as informacoes do ultimo filho identificado se recente e de hoje."""
     if LAST_UNLOCK_FILE.exists():
         try:
@@ -175,10 +216,10 @@ def read_last_unlock_child() -> Tuple[Optional[int], str]:
                 cid = data.get("child_id")
                 cname = data.get("child_name", f"Crianca {cid}")
                 if cid is not None:
-                    return int(cid), str(cname)
+                    return int(cid), str(cname), ts
         except Exception as e:
             logger.warning("Erro ao ler last_unlock.json: %s", e)
-    return None, ""
+    return None, "", 0.0
 
 
 class QuotaTracker:
@@ -291,20 +332,29 @@ def run_agent():
     store = Storage(db_path)
     tracker = QuotaTracker(store)
 
-    # 1. Exibe a tela de boas-vindas inicial no desktop
-    time.sleep(1.0)
-    trigger_welcome_screen()
-
-    last_seen_ts = 0.0
-    cid, cname = read_last_unlock_child()
+    cid, cname, unlock_ts = read_last_unlock_child()
     if cid is not None:
+        last_seen_ts = unlock_ts
         tracker.switch_child(cid, cname)
+        time.sleep(1.0)
+        trigger_welcome_screen()
     else:
-        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
+        # Quando nao ha desbloqueio recente, inicializa com time.time() para que
+        # eventos antigos NUNCA sejam aceitos no loop subsequente
+        last_seen_ts = time.time()
         tracker.current_child_id = None
-        tracker.current_child_name = "Nao identificado" 
+        tracker.current_child_name = "Nao identificado"
+        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
+        show_toast(
+            "👋 FaceControl Kids",
+            "Entrada por PIN detectada. Olhe para a webcam para carregar seu tempo de tela.",
+            icon="👤",
+            color="#89DCEB",
+            duration_ms=6000,
+        )
 
     last_active_time = time.monotonic()
+    last_pipe_query_time = 0.0
     today = date.today().isoformat()
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
@@ -322,7 +372,13 @@ def run_agent():
                 try:
                     data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
                     current_ts = float(data.get("timestamp", 0.0))
-                    if current_ts > last_seen_ts:
+                    # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
+                    is_fresh = (
+                        (current_ts > last_seen_ts)
+                        and ((time.time() - current_ts) < 600.0)
+                        and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())
+                    )
+                    if is_fresh:
                         last_seen_ts = current_ts
                         new_cid = data.get("child_id")
                         new_cname = data.get("child_name", f"Crianca {new_cid}")
@@ -333,12 +389,36 @@ def run_agent():
                             logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
                             time.sleep(0.5)
                             trigger_welcome_screen()
+                    elif current_ts > last_seen_ts:
+                        # Evento expirado: avanca ponteiro sem comutar filho
+                        last_seen_ts = current_ts
+                        logger.debug("Evento facial ignorado por estar expirado (ts=%.1f)", current_ts)
                 except Exception as e:
                     logger.debug("Erro ao ler unlock timestamp: %s", e)
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
 
+            # Se em modo UNIDENTIFIED e sessao ativa, tenta identificacao periodica via pipe
+            if tracker.current_child_id is None and state is SessionState.ACTIVE:
+                now_m = time.monotonic()
+                if (now_m - last_pipe_query_time) >= 20.0:
+                    last_pipe_query_time = now_m
+                    pipe_resp = query_auth_service()
+                    if pipe_resp and pipe_resp.get("status") == "ALLOW":
+                        p_data = pipe_resp.get("data", {})
+                        cid = p_data.get("child_id")
+                        cname = p_data.get("child_name", f"Crianca {cid}")
+                        if cid is not None:
+                            logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
+                            tracker.switch_child(int(cid), str(cname))
+                            last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
+                            trigger_welcome_screen()
+                    elif pipe_resp and pipe_resp.get("status") in ("DENY_QUOTA", "DENY_CURFEW"):
+                        msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
+                        show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
+                        time.sleep(1.2)
+                        lock_current_session()
             # Checar se horario de dormir / curfew esta ativo
             is_curfew, curfew_msg = store.is_curfew_active()
             if is_curfew and state is SessionState.ACTIVE:

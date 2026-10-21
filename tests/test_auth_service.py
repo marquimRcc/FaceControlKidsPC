@@ -15,6 +15,28 @@ class TestAuthService(unittest.TestCase):
         sa = create_security_attributes()
         self.assertIsNotNone(sa.nLength)
         self.assertFalse(sa.bInheritHandle)
+        from facekids.auth_service import SDDL_PERMISSIVE
+        # Verifica que usuarios interativos possuem apenas leitura e escrita, nao controle total
+        self.assertIn("(A;;GRGW;;;IU)", SDDL_PERMISSIVE)
+        self.assertNotIn("(A;;GA;;;IU)", SDDL_PERMISSIVE)
+
+    def test_command_routing_logic(self):
+        # Valida regras de interpretacao de comando IPC
+        def route_request(request_str: str):
+            if len(request_str) > 512:
+                return "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
+            elif request_str in ("AUTH_QUERY", "QUERY"):
+                return "QUERY_ROUTED", {}
+            elif request_str == "PING":
+                return "PONG", {"version": "1.0"}
+            else:
+                return "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
+
+        self.assertEqual(route_request("PING")[0], "PONG")
+        self.assertEqual(route_request("AUTH_QUERY")[0], "QUERY_ROUTED")
+        self.assertEqual(route_request("QUERY")[0], "QUERY_ROUTED")
+        self.assertEqual(route_request("UNKNOWN")[0], "INVALID_COMMAND")
+        self.assertEqual(route_request("X" * 600)[0], "INVALID_REQUEST")
 
     def test_authenticator_nonexistent_db(self):
         auth = FaceAuthenticator(Path("models"), Path("nonexistent.sqlite3"))

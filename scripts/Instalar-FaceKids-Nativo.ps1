@@ -75,7 +75,24 @@ try {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "FaceKidsAuthService" -Force -ErrorAction SilentlyContinue
 } catch {}
 
-# Instalar script de inicializacao exclusivamente no perfil do Administrador (MarcosMiniPC)
+# Criar script de execucao do servico e tarefa agendada no boot do sistema
+$serviceBat = "C:\ProgramData\FaceKids\iniciar-auth-service.bat"
+$serviceContent = @"
+@echo off
+cd /d "$root"
+set PYTHONPATH=$root
+start "" "$pythonw" -m facekids.auth_service
+"@
+Set-Content -Path $serviceBat -Value $serviceContent -Encoding ASCII -Force
+
+try {
+    & schtasks.exe /create /tn "FaceKidsAuthService" /tr "cmd.exe /c \`"$serviceBat\`"" /sc onstart /ru "SYSTEM" /rl HIGHEST /f 2>&1 | Out-Null
+    Write-Host "Tarefa agendada FaceKidsAuthService configurada no boot (independente de login administrativo)." -ForegroundColor Green
+} catch {
+    Write-Host "Aviso ao agendar tarefa FaceKidsAuthService: $($_.Exception.Message)" -ForegroundColor DarkGray
+}
+
+# Configurar script VBS de contingencia no Startup
 $userStartup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
@@ -86,7 +103,7 @@ WshShell.Run """$pythonw"" -m facekids.auth_service", 0, False
 try {
     $userVbs = Join-Path $userStartup 'FaceKidsAuthService.vbs'
     Set-Content -Path $userVbs -Value $vbsContent -Encoding ASCII -Force
-    Write-Host "Inicializacao automatica configurada para o administrador ($userVbs)." -ForegroundColor Green
+    Write-Host "Inicializacao de contingencia configurada ($userVbs)." -ForegroundColor Green
 } catch {
     Write-Host "Aviso ao salvar no Startup do usuario: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
