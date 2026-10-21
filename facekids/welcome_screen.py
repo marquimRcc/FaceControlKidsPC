@@ -5,7 +5,7 @@ Exibe um card moderno e amigavel logo apos o desbloqueio facial:
 - Mensagem personalizada de boas-vindas
 - Saldo de tempo restante hoje com barra visual
 - Inicializacao opcional de programas configurados
-- Auto-fechamento em 5 segundos ou com 1 clique
+- Permanece aberta ate o clique em 'Comecar Agora' ou no [X]
 """
 from __future__ import annotations
 
@@ -80,12 +80,12 @@ def launch_configured_programs():
 
 def get_current_child_info() -> tuple[int, str, int]:
     """Recupera id, nome e saldo restante em segundos do ultimo desbloqueio ou do banco."""
-    # 1. Tentar ler do last_unlock.json se recente (menos de 3 minutos)
+    # 1. Tentar ler do last_unlock.json se recente (menos de 10 minutos)
     if LAST_UNLOCK_FILE.exists():
         try:
             data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
             ts = data.get("timestamp", 0)
-            if time.time() - ts < 180:
+            if time.time() - ts < 600:
                 cid = data.get("child_id", 2)
                 name = data.get("child_name", f"Crianca {cid}")
                 rem = data.get("remaining_seconds", 7200)
@@ -134,8 +134,11 @@ class WelcomeWindow:
         self.child_id = child_id
         self.child_name = child_name
         self.remaining_seconds = remaining_seconds
-        self.seconds_left = 5
         self.photo_image = None
+
+        # Posicionamento para arrastar janela
+        self._drag_start_x = 0
+        self._drag_start_y = 0
 
         # Configuracao da janela
         self.root.title("FaceControl Kids")
@@ -156,7 +159,7 @@ class WelcomeWindow:
 
         # Centralizar na tela
         width = 460
-        height = 370
+        height = 380
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
         x = (screen_w - width) // 2
@@ -164,15 +167,50 @@ class WelcomeWindow:
         self.root.geometry(f"{width}x{height}+{x}+{y}")
 
         self._build_ui()
-        self._start_countdown()
 
     def _build_ui(self):
         container = tk.Frame(self.root, bg=self.bg_card, highlightbackground=self.accent_blue, highlightthickness=2)
         container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
+        # Permitir arrastar a janela
+        container.bind("<Button-1>", self._start_drag)
+        container.bind("<B1-Motion>", self._on_drag)
+
+        # Barra superior com botao fechar [X]
+        header_bar = tk.Frame(container, bg=self.bg_card)
+        header_bar.pack(fill=tk.X, padx=12, pady=(8, 0))
+        header_bar.bind("<Button-1>", self._start_drag)
+        header_bar.bind("<B1-Motion>", self._on_drag)
+
+        badge_label = tk.Label(
+            header_bar,
+            text="✨ FaceControl Kids",
+            font=("Segoe UI", 9, "bold"),
+            fg=self.accent_blue,
+            bg=self.bg_card,
+        )
+        badge_label.pack(side=tk.LEFT)
+
+        close_btn = tk.Button(
+            header_bar,
+            text="✕",
+            font=("Segoe UI", 10, "bold"),
+            fg=self.text_sub,
+            bg=self.bg_card,
+            activeforeground="#FFFFFF",
+            activebackground="#E06C75",
+            relief=tk.FLAT,
+            cursor="hand2",
+            command=self.dismiss,
+            bd=0,
+            padx=8,
+            pady=1,
+        )
+        close_btn.pack(side=tk.RIGHT)
+
         # 1. Avatar da Crianca
         avatar_frame = tk.Frame(container, bg=self.bg_card)
-        avatar_frame.pack(pady=(22, 6))
+        avatar_frame.pack(pady=(10, 6))
 
         avatar_path = get_child_avatar_path(self.child_id)
         if avatar_path and avatar_path.exists():
@@ -211,8 +249,8 @@ class WelcomeWindow:
         time_str = format_remaining_time(self.remaining_seconds)
         time_icon_label = tk.Label(
             quota_box,
-            text=f"⏱️  {time_str}",
-            font=("Segoe UI", 12, "bold"),
+            text=f"⏱️  Tempo disponível hoje: {time_str}",
+            font=("Segoe UI", 11, "bold"),
             fg=self.accent_cyan,
             bg=self.bg_box,
         )
@@ -248,15 +286,24 @@ class WelcomeWindow:
         )
         start_btn.pack(fill=tk.X)
 
-        # 5. Contador regressivo
-        self.countdown_label = tk.Label(
+        # 5. Dica de uso
+        hint_label = tk.Label(
             container,
-            text=f"Fechando em {self.seconds_left} segundos...",
+            text="Clique em 'Começar Agora' ou no ✕ acima para usar o PC.",
             font=("Segoe UI", 9),
             fg=self.text_sub,
             bg=self.bg_card,
         )
-        self.countdown_label.pack(pady=(8, 10))
+        hint_label.pack(pady=(8, 10))
+
+    def _start_drag(self, event):
+        self._drag_start_x = event.x
+        self._drag_start_y = event.y
+
+    def _on_drag(self, event):
+        x = self.root.winfo_x() + (event.x - self._drag_start_x)
+        y = self.root.winfo_y() + (event.y - self._drag_start_y)
+        self.root.geometry(f"+{x}+{y}")
 
     def _draw_fallback_avatar(self, parent):
         canvas = tk.Canvas(parent, width=90, height=90, bg=self.bg_card, highlightthickness=0)
@@ -264,14 +311,6 @@ class WelcomeWindow:
         canvas.create_oval(5, 5, 85, 85, fill="#313244", outline=self.accent_blue, width=3)
         initial = self.child_name[0].upper() if self.child_name else "F"
         canvas.create_text(45, 45, text=initial, font=("Segoe UI", 32, "bold"), fill=self.accent_cyan)
-
-    def _start_countdown(self):
-        if self.seconds_left > 1:
-            self.seconds_left -= 1
-            self.countdown_label.config(text=f"Fechando em {self.seconds_left} segundos...")
-            self.root.after(1000, self._start_countdown)
-        else:
-            self.dismiss()
 
     def dismiss(self):
         try:
