@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-  Instalador do FaceKids Credential Provider nativo.
+  Instalador do FaceKids Credential Provider nativo e Agente de Boas-Vindas.
 .DESCRIPTION
   1. Copia FaceKidsCredentialProvider.dll para C:\ProgramData\FaceKids\
   2. Registra o CLSID com regsvr32.
-  3. Configura a inicializacao automatica do servico de autenticacao facial (Named Pipe).
-  4. Inicia o servico imediatamente em segundo plano.
+  3. Configura o servico de autenticacao facial (Named Pipe).
+  4. Configura o Agente de Sessao da conta Filhos (Tela de Boas-Vindas com Foto).
+  5. Inicia os servicos em segundo plano.
 #>
 [CmdletBinding()]
 param()
@@ -73,14 +74,14 @@ try {
 # 5. Configurar inicializacao automatica do servico (Named Pipe)
 Write-Host "Configurando servico em segundo plano (Named Pipe)..." -ForegroundColor Yellow
 
-# Limpeza: Remover qualquer script legado do Startup global (para nao afetar a conta padrao dos Filhos)
+# Limpeza: Remover qualquer script legado do Startup global
 $globalStartupVbs = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\FaceKidsAuthService.vbs'
 if (Test-Path -LiteralPath $globalStartupVbs) {
     Remove-Item -LiteralPath $globalStartupVbs -Force -ErrorAction SilentlyContinue
     Write-Host "Script legado removido do Startup global." -ForegroundColor Green
 }
 
-# Limpeza: Remover chave de Run global HKLM para evitar execucao redundante na conta dos Filhos
+# Limpeza: Remover chave de Run global HKLM
 try {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "FaceKidsAuthService" -Force -ErrorAction SilentlyContinue
 } catch {}
@@ -101,19 +102,45 @@ try {
     Write-Host "Aviso ao salvar no Startup do usuario: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
 
-# 6. Iniciar o servico agora mesmo em segundo plano
-Write-Host "Iniciando servico de reconhecimento facial..." -ForegroundColor Yellow
+# 6. Configurar Agente de Sessao da conta Filhos (Tela de Boas-Vindas e Quota)
+Write-Host "Configurando Agente de Sessao da conta Filhos..." -ForegroundColor Yellow
+$agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
+$agentContent = @"
+@echo off
+cd /d "C:\ProgramData\FaceKids"
+set PYTHONPATH=$root
+start "" "$pythonw" -m facekids.filhos_agent
+"@
+Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
+
+# Agendar no Logon da conta Filhos
+try {
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c `"$agentBat`"" /sc onlogon /ru "Filhos" /rp "1" /f 2>&1 | Out-Null
+    Write-Host "Agente dos Filhos agendado com sucesso no Windows!" -ForegroundColor Green
+} catch {
+    Write-Host "Aviso ao agendar tarefa dos Filhos: $($_.Exception.Message)" -ForegroundColor DarkGray
+}
+
+# 7. Iniciar os servicos em segundo plano
+Write-Host "Iniciando servicos em segundo plano..." -ForegroundColor Yellow
 & taskkill.exe /f /im pythonw.exe 2>$null
 Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1
 
+# Disparar o agente na conta Filhos
+try {
+    $secPass = ConvertTo-SecureString "1" -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential("Filhos", $secPass)
+    Start-Process -Credential $cred -FilePath "cmd.exe" -ArgumentList "/c `"$agentBat`"" -WorkingDirectory "C:\ProgramData\FaceKids" -ErrorAction SilentlyContinue
+} catch {}
+
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "     INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
+Write-Host "     INSTALACAO E ATUALIZACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "- DLL ativa em: $dllTarget"
 Write-Host "- Servico de autenticacao facial rodando em segundo plano."
-Write-Host "- Provedor facial pronto na tela de bloqueio (Win+L)."
+Write-Host "- Agente dos Filhos ativo para exibir a Tela de Boas-Vindas com Foto."
 Write-Host "- O login tradicional por senha ('1' e '11') continua 100% disponivel."
 Write-Host "============================================================" -ForegroundColor Cyan
