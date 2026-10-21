@@ -285,6 +285,233 @@ class ProgramsConfigDialog(tk.Toplevel):
         self._refresh_programs_list()
 
 
+class WeeklyUsageDialog(tk.Toplevel):
+    """Janela modal para visualizacao do historico de uso semanal dos filhos."""
+
+    def __init__(self, parent, store: Storage):
+        super().__init__(parent)
+        self.title("Histórico de Uso dos Últimos 7 Dias")
+        self.geometry("660x540")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+        self.store = store
+        self._build_ui()
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=18, pady=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(
+            pad,
+            text="📊 Histórico de Uso dos Últimos 7 Dias",
+            font=("Segoe UI", 13, "bold"),
+            fg=TEXT_TITLE,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            pad,
+            text="Acompanhe o tempo de tela utilizado por cada filho ao longo da semana.",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(0, 14))
+
+        canvas = tk.Canvas(pad, bg=BG_MAIN, highlightthickness=0)
+        scrollbar = tk.Scrollbar(pad, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        container = tk.Frame(canvas, bg=BG_MAIN)
+        win_id = canvas.create_window((0, 0), window=container, anchor="nw")
+        container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        people = self.store.people()
+        if not people:
+            tk.Label(container, text="Nenhum perfil cadastrado.", font=("Segoe UI", 10), fg=TEXT_MUTED, bg=BG_MAIN).pack(pady=20)
+            return
+
+        for pid, name, _ in people:
+            history = self.store.get_history(pid, 7)
+            total_sec = sum(sec for _, sec in history)
+            avg_sec = total_sec / max(1, len(history))
+
+            card = tk.Frame(container, bg=BG_CARD, highlightbackground=BORDER_DEFAULT, highlightthickness=1, padx=14, pady=12)
+            card.pack(fill=tk.X, pady=8)
+
+            header = tk.Frame(card, bg=BG_CARD)
+            header.pack(fill=tk.X, pady=(0, 8))
+
+            tk.Label(header, text=name, font=("Segoe UI", 12, "bold"), fg=ACCENT_BLUE, bg=BG_CARD).pack(side=tk.LEFT)
+            tk.Label(header, text=f"Total: {time_format_hm(total_sec)}  |  Média: {time_format_hm(avg_sec)}/dia", font=("Segoe UI", 9, "bold"), fg=ACCENT_GREEN, bg=BG_CARD).pack(side=tk.RIGHT)
+
+            for day_str, sec in reversed(history):
+                row = tk.Frame(card, bg=BG_BOX, padx=8, pady=4, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+                row.pack(fill=tk.X, pady=2)
+
+                tk.Label(row, text=day_str, font=("Segoe UI", 9), fg=TEXT_TITLE, bg=BG_BOX, width=12, anchor="w").pack(side=tk.LEFT)
+
+                pct = min(1.0, sec / 7200.0)
+                bar_c = tk.Canvas(row, height=8, bg="#11111B", highlightthickness=0)
+                bar_c.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
+
+                fill_w = int(220 * pct)
+                if fill_w > 0:
+                    bar_c.create_rectangle(0, 0, fill_w, 8, fill=ACCENT_GREEN if pct < 0.9 else ACCENT_RED, width=0)
+
+                tk.Label(row, text=time_format_hm(sec), font=("Segoe UI", 9, "bold"), fg=ACCENT_CYAN, bg=BG_BOX, width=10, anchor="e").pack(side=tk.RIGHT)
+
+
+class CurfewConfigDialog(tk.Toplevel):
+    """Janela modal para configurar horario permitido de uso (toque de recolher)."""
+
+    def __init__(self, parent, store: Storage):
+        super().__init__(parent)
+        self.title("Configurar Horário Permitido")
+        self.geometry("540x420")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+        self.store = store
+        self._build_ui()
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=20, pady=20)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(pad, text="🌙 Horário de Uso Permitido (Toque de Recolher)", font=("Segoe UI", 13, "bold"), fg=ACCENT_PURPLE, bg=BG_MAIN).pack(anchor="w", pady=(0, 4))
+        tk.Label(pad, text="Define a faixa de horário em que o computador pode ser utilizado.\nFora desse horário, o desbloqueio facial e o uso são bloqueados automaticamente.", font=("Segoe UI", 9), fg=TEXT_SUB, bg=BG_MAIN, justify="left").pack(anchor="w", pady=(0, 16))
+
+        enabled, start_val, end_val = self.store.get_curfew_config()
+
+        self.enabled_var = tk.BooleanVar(value=enabled)
+        cb = tk.Checkbutton(pad, text="Ativar restrição de horário de uso", variable=self.enabled_var, font=("Segoe UI", 10, "bold"), fg=ACCENT_CYAN, bg=BG_MAIN, selectcolor=BG_BOX, activebackground=BG_MAIN)
+        cb.pack(anchor="w", pady=(0, 14))
+
+        box = tk.Frame(pad, bg=BG_BOX, padx=14, pady=14, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        box.pack(fill=tk.X, pady=(0, 16))
+
+        r1 = tk.Frame(box, bg=BG_BOX)
+        r1.pack(fill=tk.X, pady=4)
+        tk.Label(r1, text="Liberar acesso a partir das:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
+        self.start_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_CYAN, justify="center")
+        self.start_entry.insert(0, start_val)
+        self.start_entry.pack(side=tk.RIGHT)
+
+        r2 = tk.Frame(box, bg=BG_BOX)
+        r2.pack(fill=tk.X, pady=4)
+        tk.Label(r2, text="Encerrar acesso (bloquear) às:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
+        self.end_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_RED, justify="center")
+        self.end_entry.insert(0, end_val)
+        self.end_entry.pack(side=tk.RIGHT)
+
+        presets_frame = tk.Frame(pad, bg=BG_MAIN)
+        presets_frame.pack(fill=tk.X, pady=(0, 16))
+        tk.Label(presets_frame, text="Sugestões:", font=("Segoe UI", 8), fg=TEXT_SUB, bg=BG_MAIN).pack(side=tk.LEFT, padx=(0, 6))
+
+        for s, e, lbl in [("08:00", "20:00", "08h às 20h"), ("07:00", "21:00", "07h às 21h"), ("09:00", "19:00", "09h às 19h")]:
+            def _apply(s=s, e=e):
+                self.start_entry.delete(0, tk.END)
+                self.start_entry.insert(0, s)
+                self.end_entry.delete(0, tk.END)
+                self.end_entry.insert(0, e)
+            btn = tk.Button(presets_frame, text=lbl, font=("Segoe UI", 8), bg=BG_BOX, fg=TEXT_TITLE, relief=tk.FLAT, cursor="hand2", padx=6, pady=2, command=_apply)
+            btn.pack(side=tk.LEFT, padx=3)
+
+        btn_bar = tk.Frame(pad, bg=BG_MAIN)
+        btn_bar.pack(fill=tk.X)
+        save_btn = tk.Button(btn_bar, text="💾 Salvar Horário", font=("Segoe UI", 9, "bold"), bg=ACCENT_PURPLE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=16, pady=6, command=self._save)
+        save_btn.pack(side=tk.RIGHT)
+
+    def _save(self):
+        from datetime import datetime
+        s = self.start_entry.get().strip()
+        e = self.end_entry.get().strip()
+        try:
+            datetime.strptime(s, "%H:%M")
+            datetime.strptime(e, "%H:%M")
+        except ValueError:
+            messagebox.showerror("Formato Inválido", "Informe os horários no formato HH:MM (ex: 08:00 e 20:00).", parent=self)
+            return
+
+        self.store.set_curfew_config(self.enabled_var.get(), s, e)
+        status_txt = f"Horário de uso configurado: {s} às {e} (Ativo: {'Sim' if self.enabled_var.get() else 'Não'})"
+        messagebox.showinfo("Sucesso", status_txt, parent=self)
+        self.destroy()
+
+
+class PinConfigDialog(tk.Toplevel):
+    """Janela modal para configurar ou remover o PIN do Painel dos Pais."""
+
+    def __init__(self, parent, store: Storage):
+        super().__init__(parent)
+        self.title("Configurar PIN de Acesso dos Pais")
+        self.geometry("460x340")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+        self.store = store
+        self._build_ui()
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=20, pady=20)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        has_pin = self.store.get_parent_pin() is not None
+
+        tk.Label(pad, text="🔒 PIN de Proteção do Painel", font=("Segoe UI", 13, "bold"), fg=ACCENT_BLUE, bg=BG_MAIN).pack(anchor="w", pady=(0, 4))
+        status_txt = "Atualmente: PIN ativado" if has_pin else "Atualmente: Sem proteção de PIN (abertura direta)"
+        tk.Label(pad, text=status_txt, font=("Segoe UI", 9), fg=ACCENT_GREEN if has_pin else TEXT_SUB, bg=BG_MAIN).pack(anchor="w", pady=(0, 16))
+
+        box = tk.Frame(pad, bg=BG_BOX, padx=14, pady=14, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        box.pack(fill=tk.X, pady=(0, 16))
+
+        r1 = tk.Frame(box, bg=BG_BOX)
+        r1.pack(fill=tk.X, pady=4)
+        tk.Label(r1, text="Novo PIN (4 a 8 números):", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
+        self.pin_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.pin_entry.pack(side=tk.RIGHT)
+
+        r2 = tk.Frame(box, bg=BG_BOX)
+        r2.pack(fill=tk.X, pady=4)
+        tk.Label(r2, text="Confirmar Novo PIN:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
+        self.confirm_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.confirm_entry.pack(side=tk.RIGHT)
+
+        btn_bar = tk.Frame(pad, bg=BG_MAIN)
+        btn_bar.pack(fill=tk.X)
+
+        if has_pin:
+            rem_btn = tk.Button(btn_bar, text="🗑️ Desativar PIN", font=("Segoe UI", 9), bg=BG_BOX, fg=ACCENT_RED, relief=tk.FLAT, cursor="hand2", padx=10, pady=5, command=self._remove_pin)
+            rem_btn.pack(side=tk.LEFT)
+
+        save_btn = tk.Button(btn_bar, text="💾 Salvar PIN", font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=14, pady=5, command=self._save_pin)
+        save_btn.pack(side=tk.RIGHT)
+
+    def _save_pin(self):
+        p1 = self.pin_entry.get().strip()
+        p2 = self.confirm_entry.get().strip()
+        if not p1 or len(p1) < 4 or len(p1) > 8 or not p1.isdigit():
+            messagebox.showerror("PIN Inválido", "O PIN deve conter de 4 a 8 dígitos numéricos.", parent=self)
+            return
+        if p1 != p2:
+            messagebox.showerror("Erro", "Os dois PINs digitados não são iguais.", parent=self)
+            return
+        self.store.set_parent_pin(p1)
+        messagebox.showinfo("PIN Salvo", "PIN parental configurado com sucesso!", parent=self)
+        self.destroy()
+
+    def _remove_pin(self):
+        if messagebox.askyesno("Remover PIN", "Deseja desativar a proteção por PIN deste painel?", parent=self):
+            self.store.set_parent_pin(None)
+            messagebox.showinfo("PIN Removido", "Proteção por PIN desativada.", parent=self)
+            self.destroy()
+
+
 class AdminDashboard(tk.Tk):
     """Janela principal do Painel de Controle dos Pais."""
 
@@ -310,6 +537,12 @@ class AdminDashboard(tk.Tk):
         # Referencia de banco
         self.db_path = child_pilot_database()
         self.store = Storage(self.db_path)
+
+        # Validar PIN se configurado
+        if not self._check_pin_on_startup():
+            self.store.close()
+            self.destroy()
+            return
 
         # Imagens em cache para evitar garbage collection do Tkinter
         self.avatar_images = {}
@@ -349,25 +582,57 @@ class AdminDashboard(tk.Tk):
         top_btn_frame = tk.Frame(header, bg=BG_HEADER, padx=20, pady=16)
         top_btn_frame.pack(side=tk.RIGHT)
 
-        refresh_btn = tk.Button(
+        history_btn = tk.Button(
             top_btn_frame,
-            text="🔄 Recarregar",
+            text="📊 Histórico 7 Dias",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
-            fg=TEXT_TITLE,
+            fg=ACCENT_GREEN,
             activebackground=BG_BOX_HOVER,
-            activeforeground=TEXT_TITLE,
+            activeforeground=ACCENT_GREEN,
             relief=tk.FLAT,
             cursor="hand2",
-            padx=12,
+            padx=10,
             pady=6,
-            command=self.refresh,
+            command=self._open_history,
         )
-        refresh_btn.pack(side=tk.LEFT, padx=5)
+        history_btn.pack(side=tk.LEFT, padx=4)
+
+        curfew_btn = tk.Button(
+            top_btn_frame,
+            text="🌙 Horário Permitido",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_PURPLE,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_PURPLE,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=6,
+            command=self._open_curfew,
+        )
+        curfew_btn.pack(side=tk.LEFT, padx=4)
+
+        pin_btn = tk.Button(
+            top_btn_frame,
+            text="🔒 PIN",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_YELLOW,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_YELLOW,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=8,
+            pady=6,
+            command=self._open_pin_config,
+        )
+        pin_btn.pack(side=tk.LEFT, padx=4)
 
         programs_btn = tk.Button(
             top_btn_frame,
-            text="🚀 Programas de Inicialização",
+            text="🚀 Programas",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_CYAN,
@@ -375,11 +640,27 @@ class AdminDashboard(tk.Tk):
             activeforeground=ACCENT_CYAN,
             relief=tk.FLAT,
             cursor="hand2",
-            padx=12,
+            padx=10,
             pady=6,
             command=self._open_programs_config,
         )
-        programs_btn.pack(side=tk.LEFT, padx=5)
+        programs_btn.pack(side=tk.LEFT, padx=4)
+
+        refresh_btn = tk.Button(
+            top_btn_frame,
+            text="🔄",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=TEXT_TITLE,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=TEXT_TITLE,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=8,
+            pady=6,
+            command=self.refresh,
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=4)
 
         add_child_btn = tk.Button(
             top_btn_frame,
@@ -391,11 +672,11 @@ class AdminDashboard(tk.Tk):
             activeforeground="#0B0B12",
             relief=tk.FLAT,
             cursor="hand2",
-            padx=12,
+            padx=10,
             pady=6,
             command=self._add_child,
         )
-        add_child_btn.pack(side=tk.LEFT, padx=5)
+        add_child_btn.pack(side=tk.LEFT, padx=4)
 
         # 2. Barra de Status e Dica
         self.status_bar = tk.Frame(self, bg=BG_MAIN, padx=24, pady=8)
@@ -954,6 +1235,32 @@ class AdminDashboard(tk.Tk):
     def _open_programs_config(self):
         """Abre a janela de configuracao de programas de inicializacao."""
         ProgramsConfigDialog(self)
+
+    def _open_history(self):
+        """Abre o historico de uso dos ultimos 7 dias."""
+        WeeklyUsageDialog(self, self.store)
+
+    def _open_curfew(self):
+        """Abre o dialogo de configuracao de horario permitido."""
+        CurfewConfigDialog(self, self.store)
+
+    def _open_pin_config(self):
+        """Abre o dialogo para cadastrar, alterar ou remover o PIN de acesso."""
+        PinConfigDialog(self, self.store)
+
+    def _check_pin_on_startup(self) -> bool:
+        """Solicita o PIN parental caso esteja configurado no banco de dados."""
+        stored = self.store.get_parent_pin()
+        if stored is None:
+            return True
+        for attempt in range(3):
+            pin = simpledialog.askstring("Acesso dos Pais", "Informe o PIN parental para acessar o painel:", show="*", parent=self)
+            if pin is None:
+                return False
+            if self.store.verify_parent_pin(pin):
+                return True
+            messagebox.showwarning("PIN Incorreto", f"PIN incorreto. Tentativa {attempt + 1} de 3.", parent=self)
+        return False
 
 
 def main():

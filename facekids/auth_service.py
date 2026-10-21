@@ -158,6 +158,19 @@ class FaceAuthenticator:
                 return "DENY_UNKNOWN", {"message": "Rosto desconhecido ou instavel"}
 
             child_name = names.get(best_candidate, f"Crianca {best_candidate}")
+
+            # 1. Verificar horario permitido (toque de recolher)
+            is_curfew, curfew_msg = store.is_curfew_active()
+            if is_curfew:
+                logger.info("Filho identificado (%s), mas bloqueado pelo horario permitido: %s", child_name, curfew_msg)
+                return "DENY_CURFEW", {
+                    "child_id": best_candidate,
+                    "child_name": child_name,
+                    "remaining": 0,
+                    "message": curfew_msg,
+                }
+
+            # 2. Verificar quota diaria restante
             remaining_seconds = int(store.remaining(best_candidate, today))
 
             if remaining_seconds <= 0:

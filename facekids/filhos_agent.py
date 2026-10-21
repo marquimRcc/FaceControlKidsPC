@@ -331,6 +331,26 @@ def run_agent():
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
 
+            # Checar se horario de dormir / curfew esta ativo
+            is_curfew, curfew_msg = store.is_curfew_active()
+            if is_curfew and state is SessionState.ACTIVE:
+                logger.warning("Horario de dormir ativo: %s. Bloqueando sessao...", curfew_msg)
+                show_toast(
+                    "🌙 Horário de Dormir",
+                    f"{curfew_msg} O computador foi bloqueado. Até amanhã!",
+                    icon="🌙",
+                    color="#CBA6F7",
+                    duration_ms=4500,
+                )
+                time.sleep(1.2)
+                try:
+                    lock_current_session()
+                except Exception as e:
+                    logger.error("Erro ao bloquear no horario de dormir: %s", e)
+                time.sleep(5.0)
+                last_active_time = time.monotonic()
+                continue
+
             if state is SessionState.ACTIVE:
                 now_mono = time.monotonic()
                 delta = now_mono - last_active_time

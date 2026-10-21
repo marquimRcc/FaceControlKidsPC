@@ -43,6 +43,37 @@ class TestAdminDashboard(unittest.TestCase):
         self.assertFalse(res)
         self.assertIn("Não foi possível carregar", res.message)
 
+    def test_storage_curfew_policy_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.sqlite3"
+            store = Storage(db_path)
+            # Default
+            self.assertFalse(store.get_curfew_config()[0])
+            # Enable
+            store.set_curfew_config(True, "08:00", "20:00")
+            en, s, e = store.get_curfew_config()
+            self.assertTrue(en)
+            self.assertEqual(s, "08:00")
+            self.assertEqual(e, "20:00")
+            store.close()
+
+    def test_storage_parent_pin_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.sqlite3"
+            store = Storage(db_path)
+            # No PIN
+            self.assertIsNone(store.get_parent_pin())
+            self.assertTrue(store.verify_parent_pin("any"))
+            # Set PIN
+            store.set_parent_pin("1234")
+            self.assertIsNotNone(store.get_parent_pin())
+            self.assertTrue(store.verify_parent_pin("1234"))
+            self.assertFalse(store.verify_parent_pin("9999"))
+            # Remove PIN
+            store.set_parent_pin(None)
+            self.assertIsNone(store.get_parent_pin())
+            store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

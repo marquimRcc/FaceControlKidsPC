@@ -171,3 +171,67 @@ class Storage:
               INSERT INTO settings(key,value) VALUES (?,?)
               ON CONFLICT(key) DO UPDATE SET value=excluded.value
             """,(key,value))
+
+    def get_history(self, person_id: int, num_days: int = 7) -> list[tuple[str, float]]:
+        """Retorna historico de uso dos ultimos N dias ordenados do mais antigo ao mais recente."""
+        from datetime import timedelta
+        today = date.today()
+        days = [(today - timedelta(days=i)).isoformat() for i in reversed(range(num_days))]
+        return [(d, self.used(person_id, d)) for d in days]
+
+    def get_curfew_config(self) -> tuple[bool, str, str]:
+        """Retorna (habilitado, hora_inicio, hora_fim). Padrao: (False, '08:00', '20:00')."""
+        enabled = self.get_setting("curfew_enabled") == "true"
+        start = self.get_setting("curfew_start") or "08:00"
+        end = self.get_setting("curfew_end") or "20:00"
+        return enabled, start, end
+
+    def set_curfew_config(self, enabled: bool, start: str, end: str):
+        """Salva a configuracao de horario permitido."""
+        self.set_setting("curfew_enabled", "true" if enabled else "false")
+        self.set_setting("curfew_start", start.strip())
+        self.set_setting("curfew_end", end.strip())
+
+    def is_curfew_active(self, current_time_str: Optional[str] = None) -> tuple[bool, str]:
+        """Verifica se o momento atual esta fora do horario permitido.
+
+        Retorna (bloqueado, mensagem). Se bloqueado == True, o acesso deve ser negado.
+        """
+        enabled, start_str, end_str = self.get_curfew_config()
+        if not enabled:
+            return False, "Horário permitido desativado."
+
+        from datetime import datetime
+        now_time = datetime.now().time() if current_time_str is None else datetime.strptime(current_time_str, "%H:%M").time()
+        start_time = datetime.strptime(start_str, "%H:%M").time()
+        end_time = datetime.strptime(end_str, "%H:%M").time()
+
+        if start_time <= end_time:
+            within = start_time <= now_time <= end_time
+        else:
+            within = now_time >= start_time or now_time <= end_time
+
+        if not within:
+            return True, f"Fora do horário permitido ({start_str} às {end_str})."
+        return False, f"Dentro do horário permitido ({start_str} às {end_str})."
+
+    def get_parent_pin(self) -> Optional[str]:
+        """Retorna o hash do PIN parental cadastrado ou None se nao houver PIN."""
+        return self.get_setting("parent_pin_hash")
+
+    def set_parent_pin(self, pin: Optional[str]):
+        """Define ou remove o PIN do painel dos pais."""
+        if pin is None or not pin.strip():
+            with self.db:
+                self.db.execute("DELETE FROM settings WHERE key='parent_pin_hash'")
+        else:
+            from .admin_auth import hash_pin
+            self.set_setting("parent_pin_hash", hash_pin(pin.strip()))
+
+    def verify_parent_pin(self, pin: str) -> bool:
+        """Verifica se o PIN fornecido confere com o configurado."""
+        stored = self.get_parent_pin()
+        if stored is None:
+            return True
+        from .admin_auth import verify_pin
+        return verify_pin(pin.strip(), stored)

@@ -77,3 +77,68 @@ class StorageTest(unittest.TestCase):
             with self.assertRaises(KeyError):
                 db.update_person_name(9999, "Novo")
             db.close()
+
+    def test_get_history(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            cid = db.add_person("Lucas", 120)
+            from datetime import date, timedelta
+            today = date.today().isoformat()
+            yesterday = (date.today() - timedelta(days=1)).isoformat()
+            db.charge(cid, 3600, today)
+            db.charge(cid, 1800, yesterday)
+            history = db.get_history(cid, 7)
+            self.assertEqual(len(history), 7)
+            self.assertEqual(history[-1], (today, 3600.0))
+            self.assertEqual(history[-2], (yesterday, 1800.0))
+            db.close()
+
+    def test_curfew_config_and_active_check(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            # Default disabled
+            enabled, start, end = db.get_curfew_config()
+            self.assertFalse(enabled)
+            self.assertEqual(start, "08:00")
+            self.assertEqual(end, "20:00")
+
+            is_blocked, _ = db.is_curfew_active("22:00")
+            self.assertFalse(is_blocked)  # Not blocked because disabled
+
+            # Enable curfew 08:00 to 20:00
+            db.set_curfew_config(True, "08:00", "20:00")
+            enabled, start, end = db.get_curfew_config()
+            self.assertTrue(enabled)
+
+            # Within hours
+            is_blocked, msg = db.is_curfew_active("14:30")
+            self.assertFalse(is_blocked)
+            self.assertIn("Dentro", msg)
+
+            # Outside hours (at night)
+            is_blocked, msg = db.is_curfew_active("21:15")
+            self.assertTrue(is_blocked)
+            self.assertIn("Fora", msg)
+
+            # Outside hours (early morning)
+            is_blocked, msg = db.is_curfew_active("06:30")
+            self.assertTrue(is_blocked)
+
+            db.close()
+
+    def test_parent_pin(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            self.assertIsNone(db.get_parent_pin())
+            self.assertTrue(db.verify_parent_pin("1234"))  # Sem PIN aceita qualquer um
+
+            db.set_parent_pin("9876")
+            self.assertIsNotNone(db.get_parent_pin())
+            self.assertTrue(db.verify_parent_pin("9876"))
+            self.assertFalse(db.verify_parent_pin("0000"))
+
+            # Remove PIN
+            db.set_parent_pin(None)
+            self.assertIsNone(db.get_parent_pin())
+            self.assertTrue(db.verify_parent_pin("any"))
+            db.close()
