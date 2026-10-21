@@ -22,6 +22,9 @@ from .session import SessionState, current_session_state
 from .storage import Storage
 
 def child_pilot_database() -> Path:
+    shared = Path("C:/ProgramData/FaceKids/criancas.sqlite3")
+    if shared.exists():
+        return shared
     local = os.environ.get("LOCALAPPDATA")
     if os.name == "nt" and local:
         return Path(local) / "FaceKids" / "piloto-filhos" / "criancas.sqlite3"

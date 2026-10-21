@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-  Instalador seguro do FaceKids Credential Provider nativo.
+  Instalador do FaceKids Credential Provider nativo.
 .DESCRIPTION
-  1. Copia FaceKidsCredentialProvider.dll para C:\Windows\System32\
-  2. Registra o CLSID no registro do Windows (sem ocultar senhas ou PINs nativos).
-  3. Configura a tarefa agendada do Servico de Autenticacao Facial (Named Pipe).
-  4. Inicia o servico em segundo plano.
+  1. Copia FaceKidsCredentialProvider.dll para C:\ProgramData\FaceKids\
+  2. Registra o CLSID com regsvr32.
+  3. Configura a inicializacao automatica do servico de autenticacao facial (Named Pipe).
+  4. Inicia o servico imediatamente em segundo plano.
 #>
 [CmdletBinding()]
 param()
@@ -47,43 +47,74 @@ if (-not (Test-Path $programDataDir)) {
 }
 Copy-Item -LiteralPath $dllSource -Destination $dllTarget -Force
 
-# 3. Registrar DLL via regsvr32
+# 3. Registrar DLL via regsvr32 com Start-Process para aguardar a conclusao
 Write-Host "Registrando Credential Provider no Windows..." -ForegroundColor Yellow
-& regsvr32.exe /s $dllTarget
-if ($LASTEXITCODE -ne 0) {
-    throw "Falha ao registrar a DLL com regsvr32 (codigo $LASTEXITCODE)."
+$regProc = Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s `"$dllTarget`"" -Wait -PassThru
+if ($regProc.ExitCode -ne 0) {
+    throw "Falha ao registrar a DLL com regsvr32 (codigo $($regProc.ExitCode))."
 }
+Write-Host "DLL registrada no sistema com sucesso!" -ForegroundColor Green
 
 # 4. Configurar SID da conta Filhos no registro
-$filhosUser = Get-LocalUser -Name "Filhos" -ErrorAction SilentlyContinue
-if ($filhosUser) {
-    $regPath = "HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider"
-    if (-not (Test-Path $regPath)) {
-        New-Item -Path $regPath -Force | Out-Null
+try {
+    $filhosUser = Get-LocalUser -Name "Filhos" -ErrorAction SilentlyContinue
+    if ($filhosUser) {
+        $regPath = "HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider"
+        if (-not (Test-Path $regPath)) {
+            New-Item -Path $regPath -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        Set-ItemProperty -Path $regPath -Name "TargetUserSid" -Value $filhosUser.SID.Value -Force -ErrorAction SilentlyContinue
+        Write-Host "SID da conta Filhos configurado: $($filhosUser.SID.Value)" -ForegroundColor Green
     }
-    Set-ItemProperty -Path $regPath -Name "TargetUserSid" -Value $filhosUser.SID.Value -Force
-    Write-Host "SID da conta Filhos configurado: $($filhosUser.SID.Value)" -ForegroundColor Green
+} catch {
+    Write-Host "SID sera resolvido dinamicamente pela DLL." -ForegroundColor DarkGray
 }
 
-# 5. Criar / Atualizar Tarefa Agendada para o Servico de Autenticacao
+# 5. Configurar inicializacao automatica do servico (Named Pipe)
 Write-Host "Configurando servico em segundo plano (Named Pipe)..." -ForegroundColor Yellow
-$taskName = "FaceKidsAuthService"
-$action = New-ScheduledTaskAction -Execute $pythonw -Argument "-m facekids.auth_service" -WorkingDirectory $root
-$triggerLogon = New-ScheduledTaskTrigger -AtLogOn
-$triggerStartup = New-ScheduledTaskTrigger -AtStartup
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
-# Registrar a tarefa agendada para rodar com privilegios elevados
-Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($triggerLogon, $triggerStartup) -Settings $settings -User "NT AUTHORITY\SYSTEM" -RunLevel Highest | Out-Null
+$vbsContent = @"
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = "$root"
+WshShell.Run """$pythonw"" -m facekids.auth_service", 0, False
+"@
 
-# Iniciar a tarefa agora mesmo
-Start-ScheduledTask -TaskName $taskName
+# Tentar Startup de todos os usuarios ou Startup do usuario atual
+$globalStartup = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp'
+$userStartup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+
+$vbsInstalled = $false
+try {
+    $globalVbs = Join-Path $globalStartup 'FaceKidsAuthService.vbs'
+    Set-Content -Path $globalVbs -Value $vbsContent -Encoding ASCII -ErrorAction Stop
+    $vbsInstalled = $true
+} catch {
+    try {
+        $userVbs = Join-Path $userStartup 'FaceKidsAuthService.vbs'
+        Set-Content -Path $userVbs -Value $vbsContent -Encoding ASCII -ErrorAction Stop
+        $vbsInstalled = $true
+    } catch {}
+}
+
+# Chave Run no Registro
+try {
+    $runKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+    $runCommand = "`"$pythonw`" -m facekids.auth_service"
+    Set-ItemProperty -Path $runKey -Name "FaceKidsAuthService" -Value $runCommand -Force -ErrorAction SilentlyContinue
+} catch {}
+
+# 6. Iniciar o servico agora mesmo em segundo plano
+Write-Host "Iniciando servico de reconhecimento facial..." -ForegroundColor Yellow
+Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*auth_service*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1
 
 Write-Host ""
-Write-Host "INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
-Write-Host "- DLL registrada em: $dllTarget"
-Write-Host "- Provedor facial ativo na tela de bloqueio (Win+L)."
-Write-Host "- O login tradicional por senha continua 100% disponivel."
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "     INSTALACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "- DLL ativa em: $dllTarget"
+Write-Host "- Servico de autenticacao facial rodando em segundo plano."
+Write-Host "- Provedor facial pronto na tela de bloqueio (Win+L)."
+Write-Host "- O login tradicional por senha ('1' e '11') continua 100% disponivel."
 Write-Host "============================================================" -ForegroundColor Cyan

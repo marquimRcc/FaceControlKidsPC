@@ -29,7 +29,12 @@ from .children_pilot import child_pilot_database
 from .recognition import Recognizer
 from .storage import Storage
 
+log_dir = Path("C:/ProgramData/FaceKids")
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "auth_service.log"
+
 logging.basicConfig(
+    filename=str(log_file),
     level=logging.INFO,
     format="[%(asctime)s] [FaceKidsService] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
