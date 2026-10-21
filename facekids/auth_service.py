@@ -213,8 +213,13 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
     logger.info("Modelos: %s", models)
     logger.info("Banco: %s", db)
 
-    auth = FaceAuthenticator(models, db)
     kernel32 = ctypes.windll.kernel32
+    h_mutex = kernel32.CreateMutexW(None, False, "Global\\FaceKidsAuthServiceMutex")
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        logger.info("Outra instancia de FaceKids Auth Service ja esta em execucao. Encerrando duplicata.")
+        return
+
+    auth = FaceAuthenticator(models, db)
 
     sa = create_security_attributes()
 

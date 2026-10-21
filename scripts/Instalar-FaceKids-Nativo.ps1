@@ -107,6 +107,7 @@ Write-Host "Configurando Agente de Sessao da conta Filhos..." -ForegroundColor Y
 $agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
 $agentContent = @"
 @echo off
+if /i "%USERNAME%" neq "Filhos" exit /b
 cd /d "C:\ProgramData\FaceKids"
 set PYTHONPATH=$root
 start "" "$pythonw" -m facekids.filhos_agent
@@ -115,7 +116,7 @@ Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
 
 # Agendar no Logon da conta Filhos
 try {
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c `"$agentBat`"" /sc onlogon /ru "Filhos" /rp "1" /f 2>&1 | Out-Null
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c `"$agentBat`"" /sc onlogon /f 2>&1 | Out-Null
     Write-Host "Agente dos Filhos agendado com sucesso no Windows!" -ForegroundColor Green
 } catch {
     Write-Host "Aviso ao agendar tarefa dos Filhos: $($_.Exception.Message)" -ForegroundColor DarkGray

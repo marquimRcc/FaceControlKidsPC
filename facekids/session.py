@@ -25,7 +25,7 @@ def state_from_wts_flags(connect_state: int, session_flags: int) -> SessionState
     return SessionState.UNKNOWN
 
 
-def current_session_state() -> SessionState:
+def current_session_state(session_id: int | None = None) -> SessionState:
     """Windows: consulta WTS; Linux: ACTIVE apenas em simulação experimental."""
     if os.name != "nt":
         return SessionState.ACTIVE  # Linux: CLI impede --lock até validar KDE
@@ -71,7 +71,8 @@ def current_session_state() -> SessionState:
     num_bytes = wintypes.DWORD()
     try:
         # WTSSessionInfoEx=25; WTS_CURRENT_SESSION=0xffffffff.
-        ok = query(None, 0xffffffff, 25, ctypes.byref(buffer), ctypes.byref(num_bytes))
+        target_sid = 0xffffffff if session_id is None else session_id
+        ok = query(None, target_sid, 25, ctypes.byref(buffer), ctypes.byref(num_bytes))
         if not ok or not buffer.value or num_bytes.value < ctypes.sizeof(WTSINFOEX):
             return SessionState.UNKNOWN
         info = ctypes.cast(buffer, ctypes.POINTER(WTSINFOEX)).contents
