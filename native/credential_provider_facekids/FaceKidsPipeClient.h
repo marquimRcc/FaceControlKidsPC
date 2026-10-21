@@ -16,23 +16,35 @@ public:
         AuthResult result;
         const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipe";
 
-        if (!WaitNamedPipeW(pipeName, 2500)) {
-            result.message = L"Servico FaceKids nao esta em execucao.";
-            return result;
+        HANDLE hPipe = INVALID_HANDLE_VALUE;
+        const DWORD timeoutMs = 4000;
+        const DWORD startTime = GetTickCount();
+
+        while (GetTickCount() - startTime < timeoutMs) {
+            hPipe = CreateFileW(
+                pipeName,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                nullptr,
+                OPEN_EXISTING,
+                0,
+                nullptr
+            );
+
+            if (hPipe != INVALID_HANDLE_VALUE) {
+                break;
+            }
+
+            DWORD err = GetLastError();
+            if (err == ERROR_PIPE_BUSY) {
+                WaitNamedPipeW(pipeName, 500);
+            } else {
+                Sleep(150);
+            }
         }
 
-        HANDLE hPipe = CreateFileW(
-            pipeName,
-            GENERIC_READ | GENERIC_WRITE,
-            0,
-            nullptr,
-            OPEN_EXISTING,
-            0,
-            nullptr
-        );
-
         if (hPipe == INVALID_HANDLE_VALUE) {
-            result.message = L"Nao foi possivel conectar ao servico FaceKids.";
+            result.message = L"Servico FaceKids nao esta em execucao.";
             return result;
         }
 
@@ -53,13 +65,11 @@ public:
         buffer[bytesRead] = '\0';
         std::string resp(buffer);
 
-        // Parsing simples e rapido sem dependencias externas pesadas
         if (resp.find("\"ALLOW\"") != std::string::npos) {
             result.success = true;
             result.user = L"Filhos";
             result.password = L"1";
 
-            // Extrair nome da crianca se disponivel
             size_t namePos = resp.find("\"child_name\": \"");
             if (namePos != std::string::npos) {
                 namePos += 15;

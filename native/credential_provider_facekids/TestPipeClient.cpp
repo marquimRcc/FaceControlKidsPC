@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main() {
-    std::wcout << L"[FaceKids Pipe Test] Testando comunicacao com o servico em \\\\.\\pipe\\FaceKidsAuthPipe...\n";
+    std::wcout << L"[FaceKids Pipe Test] Solicitando autenticacao via \\\\.\\pipe\\FaceKidsAuthPipe...\n";
     AuthResult res = FaceKidsPipeClient::RequestAuthentication();
     std::wcout << L"[Resultado] Sucesso: " << (res.success ? L"SIM" : L"NAO") << L"\n";
     std::wcout << L"[Mensagem] " << res.message << L"\n";
