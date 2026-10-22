@@ -111,3 +111,22 @@ interativa. O desinstalador completo tambem remove a tarefa de boot.
 - AST PowerShell verificado pelo job Windows. A CI nunca instala tarefas nem
   registra o Credential Provider. Instalacao fisica e webcam continuam pendentes
   ate teste no PC do proprietario.
+
+## Resultado publicado deste lote
+
+Fonte da DLL distribuida: `7a555889eb9cf5373aff20598a53fc914e3f97a0`.
+
+- [CI Python](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39759648645):
+  aprovada em Windows e Ubuntu. Suite de 172 testes; no Windows, inclui Named
+  Pipe real e AST PowerShell. No Linux, esses dois testes sao ignorados.
+- [CI nativa](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39759648671):
+  aprovada, incluindo 12 testes do parser, timeout sem servidor, host COM,
+  carregamento sem MinGW no PATH e os tres cenarios de repeticao/ciclo de vida.
+- Artefato da DLL: `FaceKidsCredentialProvider-Real`, ID `12417273306`.
+  ZIP SHA-256: `ce061163d09d76b69ef9195970b1ce54e33b4fd82cebee695f76f0eac83e39fe`.
+- DLL SHA-256: `3b6b6b7b42bf583472b3c65db0dd7307abca6a78033c7711a38e6b9382c1e7f0`.
+  Confirmados os marcadores IPC/retry e ausencia de imports dos runtimes MinGW.
+
+Pendente: validar camera e selecao da opcao facial no LogonUI real depois de
+reiniciar SEM logon administrativo. Nenhuma instalacao fisica foi executada
+por esta implementacao; a branch anterior e a main permanecem preservadas.
