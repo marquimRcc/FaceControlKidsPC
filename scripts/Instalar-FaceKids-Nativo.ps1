@@ -31,6 +31,7 @@ if (-not $dllNeedsBuild) {
     try {
         $dllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
         $dllNeedsBuild = -not $dllAscii.Contains($requiredProtocolMarker)
+        $dllNeedsBuild = $dllNeedsBuild -or -not $dllAscii.Contains('FACEKIDS_BOOT_RETRY_V1')
     } catch {
         $dllNeedsBuild = $true
     }
@@ -45,6 +46,9 @@ if ($dllNeedsBuild) {
     $rebuiltDllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
     if (-not $rebuiltDllAscii.Contains($requiredProtocolMarker)) {
         throw "DLL compilada nao contem o marcador de protocolo $requiredProtocolMarker. Instalacao interrompida."
+    }
+    if (-not $rebuiltDllAscii.Contains('FACEKIDS_BOOT_RETRY_V1')) {
+        throw 'DLL sem repeticao automatica do boot. Instalacao interrompida.'
     }
 }
 

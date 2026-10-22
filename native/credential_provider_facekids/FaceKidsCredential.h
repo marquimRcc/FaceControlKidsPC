@@ -15,6 +15,8 @@ private:
     AuthResult m_lastAuth;
     CRITICAL_SECTION m_cs;
     volatile bool m_isAuthenticating = false;
+    bool m_authEnabled = false;
+    unsigned long m_authGeneration = 0;
 
 public:
     FaceKidsCredential(FaceKidsProvider* pProvider = nullptr);

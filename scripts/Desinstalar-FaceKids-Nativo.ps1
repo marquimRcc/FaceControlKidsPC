@@ -18,15 +18,19 @@ Write-Host "============================================================" -Foreg
 
 $checklist = [ordered]@{}
 
+# Stop the supervisor BEFORE its workers, otherwise it would recreate them.
+Stop-ScheduledTask -TaskName 'FaceKidsBootAuth' -ErrorAction SilentlyContinue
+& schtasks.exe /delete /tn "FaceKidsBootAuth" /f 2>&1 | Out-Null
+
 # 1. Parar processos do FaceKids (auth_service e filhos_agent)
 Write-Host "1. Parando processos em segundo plano..." -ForegroundColor Cyan
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { 
-    $_.CommandLine -like "*auth_service*" -or $_.CommandLine -like "*filhos_agent*" 
+    $_.CommandLine -like "*auth_service*" -or $_.CommandLine -like "*filhos_agent*" -or $_.CommandLine -like "*-m facekids.boot_auth*"
 } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 Start-Sleep -Milliseconds 500
 $remainingProcs = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { 
-    $_.CommandLine -like "*auth_service*" -or $_.CommandLine -like "*filhos_agent*" 
+    $_.CommandLine -like "*auth_service*" -or $_.CommandLine -like "*filhos_agent*" -or $_.CommandLine -like "*-m facekids.boot_auth*"
 })
 $checklist["Processos em segundo plano encerrados"] = ($remainingProcs.Count -eq 0)
 
@@ -37,6 +41,7 @@ Write-Host "2. Removendo tarefas agendadas..." -ForegroundColor Cyan
 $tasksOutput = & schtasks.exe /query /fo csv 2>&1 | Out-String
 $checklist["Tarefa FaceKidsAuthService removida"] = ($tasksOutput -notmatch "FaceKidsAuthService")
 $checklist["Tarefa FaceKidsFilhosAgent removida"] = ($tasksOutput -notmatch "FaceKidsFilhosAgent")
+$checklist["Tarefa FaceKidsBootAuth removida"] = ($tasksOutput -notmatch "FaceKidsBootAuth")
 
 # 3. Remover entradas de inicializacao automatica (Startup / Run)
 Write-Host "3. Removendo scripts de inicializacao..." -ForegroundColor Cyan

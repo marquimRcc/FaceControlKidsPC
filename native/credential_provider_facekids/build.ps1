@@ -36,6 +36,11 @@ try {
     & $gpp -std=c++17 -O2 TestPipeClient.cpp -o TestPipeClient.exe -lole32
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipeClient.exe" }
 
+    Write-Host "[FaceKids] Compilando teste de repeticao automatica..." -ForegroundColor Cyan
+    & $gpp -std=c++17 -O2 TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
+        -o TestCredentialRetry.exe -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestCredentialRetry.exe" }
+
     Write-Host "[FaceKids] Build completo com sucesso!" -ForegroundColor Green
 } finally {
     Pop-Location

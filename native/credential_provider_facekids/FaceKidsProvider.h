@@ -22,7 +22,8 @@ public:
 
     bool IsValid() const { return m_pCredential != nullptr; }
     void NotifyAuthSuccess();
-    bool IsAutoLogonReady() const;
+    bool IsAutoLogonReady();
+    void ResetAuth();
 
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override;

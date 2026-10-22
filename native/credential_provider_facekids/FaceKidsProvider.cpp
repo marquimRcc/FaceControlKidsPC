@@ -54,8 +54,17 @@ std::wstring FaceKidsProvider::ResolveTargetSid() {
     return L"";
 }
 
-bool FaceKidsProvider::IsAutoLogonReady() const {
-    return m_readyToAutoLogon;
+bool FaceKidsProvider::IsAutoLogonReady() {
+    EnterCriticalSection(&m_cs);
+    const bool ready = m_readyToAutoLogon;
+    LeaveCriticalSection(&m_cs);
+    return ready;
+}
+
+void FaceKidsProvider::ResetAuth() {
+    EnterCriticalSection(&m_cs);
+    m_readyToAutoLogon = false;
+    LeaveCriticalSection(&m_cs);
 }
 
 void FaceKidsProvider::NotifyAuthSuccess() {

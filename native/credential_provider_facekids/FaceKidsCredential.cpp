@@ -5,6 +5,7 @@
 extern volatile LONG g_cObjects;
 
 FaceKidsCredential::FaceKidsCredential(FaceKidsProvider* pProvider) : m_pProvider(pProvider) {
+    OutputDebugStringA("FACEKIDS_BOOT_RETRY_V1");
     InterlockedIncrement(&g_cObjects);
     InitializeCriticalSection(&m_cs);
     m_statusText = L"Olhe para a webcam para desbloquear...";
@@ -46,9 +47,14 @@ ULONG STDMETHODCALLTYPE FaceKidsCredential::Release() {
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredentialEvents* pcpce) {
     LogCP(L"[FaceKidsCredential] Advise");
     EnterCriticalSection(&m_cs);
+    if (m_pEvents) m_pEvents->Release();
     m_pEvents = pcpce;
     if (m_pEvents) m_pEvents->AddRef();
+    m_authEnabled = true;
+    ++m_authGeneration;
+    m_lastAuth = {};
     LeaveCriticalSection(&m_cs);
+    if (m_pProvider) m_pProvider->ResetAuth();
 
     // Dispara a autenticacao imediatamente assim que o tile e criado pelo LogonUI
     TriggerAsyncAuth();
@@ -58,11 +64,15 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredenti
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::UnAdvise() {
     LogCP(L"[FaceKidsCredential] UnAdvise");
     EnterCriticalSection(&m_cs);
+    m_authEnabled = false;
+    ++m_authGeneration;
+    m_lastAuth = {};
     if (m_pEvents) {
         m_pEvents->Release();
         m_pEvents = nullptr;
     }
     LeaveCriticalSection(&m_cs);
+    if (m_pProvider) m_pProvider->ResetAuth();
     return S_OK;
 }
 
@@ -75,7 +85,7 @@ static unsigned __stdcall AuthThreadProc(void* param) {
 
 void FaceKidsCredential::TriggerAsyncAuth() {
     EnterCriticalSection(&m_cs);
-    if (m_isAuthenticating || m_lastAuth.success) {
+    if (!m_authEnabled || m_isAuthenticating || m_lastAuth.success) {
         LeaveCriticalSection(&m_cs);
         return;
     }
@@ -92,6 +102,10 @@ void FaceKidsCredential::TriggerAsyncAuth() {
     }
 
     AddRef();
+    // Provider owns this credential. Hold it for the worker lifetime so an
+    // in-flight request cannot call a raw pointer after LogonUI releases it.
+    FaceKidsProvider* provider = m_pProvider;
+    if (provider) provider->AddRef();
     uintptr_t hThread = _beginthreadex(nullptr, 0, AuthThreadProc, this, 0, nullptr);
     if (hThread) {
         CloseHandle(reinterpret_cast<HANDLE>(hThread));
@@ -99,48 +113,64 @@ void FaceKidsCredential::TriggerAsyncAuth() {
         EnterCriticalSection(&m_cs);
         m_isAuthenticating = false;
         LeaveCriticalSection(&m_cs);
+        if (provider) provider->Release();
         Release();
     }
 }
 
 void FaceKidsCredential::PerformAuthentication() {
-    LogCP(L"[FaceKidsCredential] Solicitando autenticacao ao FaceKidsPipeClient...");
-    AuthResult auth = FaceKidsPipeClient::RequestAuthentication();
-    LogCP(L"[FaceKidsCredential] Resposta recebida: success=%d, user=%s, msg=%s",
-          auth.success, auth.user.c_str(), auth.message.c_str());
-
-    EnterCriticalSection(&m_cs);
-    m_lastAuth = auth;
-    m_isAuthenticating = false;
-    if (auth.success) {
-        if (!auth.childName.empty()) {
-            m_statusText = L"Ola, " + auth.childName + L"! Desbloqueando...";
-        } else {
-            m_statusText = L"Rosto reconhecido! Desbloqueando...";
+    FaceKidsProvider* heldProvider = m_pProvider;
+    for (;;) {
+        EnterCriticalSection(&m_cs);
+        if (!m_authEnabled || m_lastAuth.success) {
+            m_isAuthenticating = false;
+            LeaveCriticalSection(&m_cs);
+            break;
         }
-    } else {
-        m_statusText = auth.message.empty() ? L"Rosto nao reconhecido. Clique para tentar." : auth.message;
-    }
+        const unsigned long generation = m_authGeneration;
+        LeaveCriticalSection(&m_cs);
 
-    ICredentialProviderCredentialEvents* events = m_pEvents;
-    if (events) events->AddRef();
-    FaceKidsProvider* provider = m_pProvider;
-    LeaveCriticalSection(&m_cs);
+        AuthResult auth = FaceKidsPipeClient::RequestAuthentication();
+        EnterCriticalSection(&m_cs);
+        // A reply from the previous tile activation must not authorize a new
+        // activation after switching sign-in options/users or locking again.
+        if (!m_authEnabled || generation != m_authGeneration) {
+            LeaveCriticalSection(&m_cs);
+            continue;
+        }
+        m_lastAuth = auth;
+        m_statusText = auth.success
+            ? L"Ola, " + auth.childName + L"! Desbloqueando..."
+            : (auth.message.empty() ? L"Olhe para a webcam. Tentando novamente..." : auth.message);
+        const std::wstring statusText = m_statusText;
+        ICredentialProviderCredentialEvents* events = m_pEvents;
+        if (events) events->AddRef();
+        LeaveCriticalSection(&m_cs);
 
-    if (events) {
-        events->SetFieldString(this, FIELD_STATUS, m_statusText.c_str());
-        events->Release();
+        if (events) {
+            events->SetFieldString(this, FIELD_STATUS, statusText.c_str());
+            events->Release();
+        }
+        if (auth.success) {
+            // NotifyAuthSuccess/eligible SID remain the only route to Windows
+            // serialization. A retry never bypasses identity, quota or curfew.
+            EnterCriticalSection(&m_cs);
+            const bool stillActive = m_authEnabled && generation == m_authGeneration;
+            LeaveCriticalSection(&m_cs);
+            if (stillActive && heldProvider) heldProvider->NotifyAuthSuccess();
+        } else {
+            Sleep(1000); // Worker thread only, never the LogonUI UI thread.
+        }
     }
-
-    if (auth.success && provider) {
-        LogCP(L"[FaceKidsCredential] Notificando FaceKidsProvider sobre sucesso facial...");
-        provider->NotifyAuthSuccess();
-    }
+    if (heldProvider) heldProvider->Release();
 }
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetSelected(BOOL* pbAutoLogon) {
     LogCP(L"[FaceKidsCredential] SetSelected");
     if (!pbAutoLogon) return E_POINTER;
+    EnterCriticalSection(&m_cs);
+    m_authEnabled = true;
+    LeaveCriticalSection(&m_cs);
     if (m_pProvider && m_pProvider->IsAutoLogonReady()) {
         *pbAutoLogon = TRUE;
     } else {
@@ -152,6 +182,12 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetSelected(BOOL* pbAutoLogon) {
 
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetDeselected() {
     LogCP(L"[FaceKidsCredential] SetDeselected");
+    EnterCriticalSection(&m_cs);
+    m_authEnabled = false;
+    ++m_authGeneration;
+    m_lastAuth = {};
+    LeaveCriticalSection(&m_cs);
+    if (m_pProvider) m_pProvider->ResetAuth();
     return S_OK;
 }
 
@@ -204,7 +240,9 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::CommandLinkClicked(DWORD dwFieldID
     if (dwFieldID == FIELD_RETRY_BUTTON) {
         EnterCriticalSection(&m_cs);
         m_lastAuth = {};
-        m_isAuthenticating = false;
+        // Do not clear m_isAuthenticating: a pending worker still owns it.
+        ++m_authGeneration;
+        m_authEnabled = true;
         LeaveCriticalSection(&m_cs);
         TriggerAsyncAuth();
         return S_OK;

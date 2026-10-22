@@ -12,6 +12,7 @@ class TestInstallerScripts(unittest.TestCase):
             self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1",
             self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1",
             self.root / "scripts" / "Iniciar-Piloto-Filhos.ps1",
+            self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1",
         ]
 
     def test_scripts_exist_and_utf8(self):
@@ -46,6 +47,9 @@ class TestInstallerScripts(unittest.TestCase):
         # Verifica remocao de ambas as tarefas
         self.assertIn("FaceKidsAuthService", uninst)
         self.assertIn("FaceKidsFilhosAgent", uninst)
+        self.assertIn("FaceKidsBootAuth", uninst)
+        self.assertLess(uninst.index("Stop-ScheduledTask -TaskName 'FaceKidsBootAuth'"),
+                        uninst.index("Stop-Process"))
         # Verifica que o banco de dados sqlite3 e fotos NAO sao deletados
         self.assertNotIn("Remove-Item -Path $db", uninst)
         self.assertNotIn("children.sqlite3", uninst)
@@ -97,6 +101,19 @@ class TestInstallerScripts(unittest.TestCase):
             self.assertFalse(unlock.exists())
             self.assertTrue(db_file.exists())
             self.assertTrue((photo_dir / "child1.jpg").exists())
+
+    def test_boot_task_runs_system_without_password_or_auto_admin_logon(self):
+        script = (self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1").read_text(encoding="utf-8")
+        self.assertIn("New-ScheduledTaskTrigger -AtStartup", script)
+        self.assertIn("-UserId 'SYSTEM' -LogonType ServiceAccount", script)
+        self.assertIn("-MultipleInstances IgnoreNew", script)
+        self.assertIn("-ExecutionTimeLimit ([TimeSpan]::Zero)", script)
+        self.assertIn("param([switch]$Desativar)", script)
+        self.assertIn("-m facekids.boot_auth", script)
+        self.assertNotIn("AutoAdminLogon", script)
+        self.assertNotIn("DefaultPassword", script)
+        self.assertNotIn("regsvr32", script)
+        self.assertNotIn("Remove-Item", script)
 
 
 if __name__ == "__main__":

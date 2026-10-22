@@ -35,6 +35,7 @@ from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .windows_pipe_api import configure_kernel32
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -176,12 +177,7 @@ def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
         return None
     pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
 
-    # Sem restype explicito, ctypes assume c_int e pode truncar HANDLE em
-    # Windows 64 bits. Objetos falsos usados nos testes nao expõem restype.
-    for function_name in ("CreateFileW", "CreateEventW"):
-        function = getattr(kernel32, function_name, None)
-        if function is not None and hasattr(function, "restype"):
-            function.restype = wintypes.HANDLE
+    configure_kernel32(kernel32)
 
     deadline = time.monotonic() + max(0.1, float(timeout_seconds))
 

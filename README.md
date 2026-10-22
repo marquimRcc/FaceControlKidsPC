@@ -1,5 +1,10 @@
 # FaceControlKidsPC — Desbloqueio Facial Automático e Controle de Quotas
 
+Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
+[Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
+Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao
+explicita pelo script e teste fisico da webcam/LogonUI; nao altera o firewall.
+
 > **Estado do Sistema:** Sistema doméstico de controle parental e desbloqueio facial automático via webcam para a conta compartilhada **Filhos** no Windows 10/11.
 > **Comprovação em Hardware:** Testado e comprovado funcional no PC doméstico pelo proprietário. A criança senta em frente à webcam, o rosto é reconhecido, a quota diária e horário permitido são verificados, e o Windows desbloqueia automaticamente sem cliques ou digitação de senha.
 > **Recuperação e Segurança:** O login convencional (PIN / senha "1" da conta Filhos e credenciais da conta administradora) permanece 100% intacto e acessível.

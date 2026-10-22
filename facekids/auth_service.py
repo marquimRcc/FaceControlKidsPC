@@ -14,6 +14,7 @@ Quando o LogonUI consulta o servico:
 from __future__ import annotations
 
 import ctypes
+import argparse
 from ctypes import wintypes
 from datetime import date
 import json
@@ -34,6 +35,8 @@ from .children_pilot import child_pilot_database
 from .recognition import Recognizer
 from .storage import Storage
 from .avatar_utils import save_child_photo
+from .windows_pipe_api import configure_kernel32
+from .boot_auth import write_status
 
 if sys.platform == "win32":
     log_dir = Path(os.environ.get("PROGRAMDATA", "C:/ProgramData")) / "FaceKids"
@@ -71,7 +74,7 @@ PIPE_TYPE_MESSAGE = 0x00000004
 PIPE_READMODE_MESSAGE = 0x00000002
 PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
-INVALID_HANDLE_VALUE = -1
+INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 # Marcador de versao do contrato IPC. Isto NAO e segredo nem mecanismo
 # criptografico; a confianca local continua dependendo das ACLs do Named Pipe.
@@ -95,6 +98,11 @@ def create_security_attributes() -> SECURITY_ATTRIBUTES:
     sa.bInheritHandle = False
     advapi32 = getattr(getattr(ctypes, "windll", None), "advapi32", None)
     if advapi32 is not None:
+        convert = advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
+        if isinstance(convert, ctypes._CFuncPtr):
+            convert.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                                ctypes.POINTER(wintypes.LPVOID), wintypes.LPDWORD]
+            convert.restype = wintypes.BOOL
         p_sd = wintypes.LPVOID()
         if advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
             SDDL_PERMISSIVE, 1, ctypes.byref(p_sd), None
@@ -125,7 +133,8 @@ class FaceAuthenticator:
             self._recognizer = Recognizer(self.models_dir)
         return self._recognizer
 
-    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5) -> Tuple[str, dict]:
+    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5,
+                 camera_backend: str = "dshow") -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
             return "ERROR", {"message": "Banco de dados nao encontrado"}
@@ -146,9 +155,10 @@ class FaceAuthenticator:
             # Mapeamento ID -> Nome
             names = {pid: name for pid, name, _ in store.people()}
 
-            backend = cv2.CAP_DSHOW if sys.platform == "win32" else 0
+            backend = camera_backend_id(camera_backend)
             cap = cv2.VideoCapture(camera_index, backend)
             if not cap.isOpened():
+                cap.release()
                 return "ERROR_CAMERA", {"message": "Nao foi possivel abrir a webcam"}
 
             deadline = time.monotonic() + timeout_seconds
@@ -261,19 +271,35 @@ class FaceAuthenticator:
             store.close()
 
 
-def probe_camera_access(camera_index: int = 0) -> bool:
+def camera_backend_id(name: str) -> int:
+    if sys.platform != "win32":
+        return cv2.CAP_ANY
+    return {"dshow": cv2.CAP_DSHOW, "msmf": cv2.CAP_MSMF}[name]
+
+
+def probe_camera_access(camera_index: int = 0, camera_backend: str = "dshow") -> bool:
     """Verifica se o contexto atual de execucao tem permissao e capacidade de abrir a webcam."""
+    cap = None
     try:
-        backend = cv2.CAP_DSHOW if sys.platform == "win32" else 0
+        backend = camera_backend_id(camera_backend)
         cap = cv2.VideoCapture(camera_index, backend)
         if not cap.isOpened():
             return False
-        ret, frame = cap.read()
-        cap.release()
-        return bool(ret and frame is not None)
+        # Some USB webcams return empty warm-up samples at boot. The external
+        # supervisor enforces a hard process deadline if a driver call hangs.
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                return True
+            time.sleep(0.05)
+        return False
     except Exception as e:
         logger.warning("Falha na sondagem da webcam: %s", e)
         return False
+    finally:
+        if cap is not None:
+            cap.release()
 
 
 def is_session_zero_or_system() -> bool:
@@ -294,7 +320,9 @@ def is_session_zero_or_system() -> bool:
     return False
 
 
-def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] = None, once: bool = False):
+def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] = None,
+                    once: bool = False, camera_backend: str = "dshow",
+                    status_file: Optional[Path] = None) -> int:
     root = Path(__file__).resolve().parent.parent
     models = models_dir or (root / "models")
     db = db_path or child_pilot_database()
@@ -303,31 +331,63 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
     logger.info("Modelos: %s", models)
     logger.info("Banco: %s", db)
 
-    # Verificacao de viabilidade de webcam no contexto de execucao (Sessao 0 vs Interativa)
-    if is_session_zero_or_system():
-        logger.info("Detectado contexto SYSTEM / Sessao 0. Realizando sondagem de acesso a webcam...")
-        if not probe_camera_access(0):
-            logger.error(
-                "AVISO CRÍTICO: Contexto SYSTEM / Sessao 0 nao possui acesso aos dispositivos DirectShow de webcam. "
-                "Encerrando processo para liberar a execucao interativa no login do usuario sem bloquear o mutex."
-            )
-            return
-
     kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
     if kernel32 is None:
         logger.error("Servico Named Pipe requer ambiente Windows.")
-        return
+        return 1
+    configure_kernel32(kernel32)
+
+    def report(phase: str):
+        if status_file is not None:
+            session_id = wintypes.DWORD()
+            kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id))
+            evidence = dict(phase=phase, pid=os.getpid(), session_id=session_id.value,
+                            backend=camera_backend)
+            if phase in ("camera_ready", "allow"):
+                # Diagnostic only: no usernames, photos, child IDs or passwords.
+                from .windows_session_diagnostic import enumerate_local_sessions
+                try:
+                    evidence["logged_on_users"] = sum(
+                        bool(row.username) for row in enumerate_local_sessions())
+                except (OSError, RuntimeError):
+                    evidence["logged_on_users"] = None
+                evidence["updated_at"] = time.time()
+                with (log_dir / "boot_events.jsonl").open("a", encoding="utf-8") as events:
+                    events.write(json.dumps(evidence) + "\n")
+            write_status(status_file, **evidence)
 
     h_mutex = kernel32.CreateMutexW(None, False, "Global\\FaceKidsAuthServiceMutex")
-    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-        logger.info("Outra instancia de FaceKids Auth Service ja esta em execucao. Encerrando duplicata.")
-        return
+    if not h_mutex:
+        logger.error("Nao foi possivel abrir mutex (erro %d).", kernel32.GetLastError())
+        return 1
+    # Keep the existence lock for exactly this instance's lifetime. Check BEFORE
+    # touching the webcam, so retries cannot steal an interactive worker's camera.
+    sa = None
+    try:
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            report("duplicate")
+            logger.info("Outra instancia do autenticador ja esta em execucao.")
+            return 20
+        report("camera_probe")
+        if is_session_zero_or_system():
+            if not probe_camera_access(0, camera_backend):
+                report("camera_unavailable")
+                logger.warning("Webcam indisponivel em SYSTEM via %s; liberando mutex para nova tentativa.", camera_backend)
+                return 21
+        report("camera_ready")
+        auth = FaceAuthenticator(models, db)
+        sa = create_security_attributes()
+        _serve_connections(kernel32, sa, auth, camera_backend, once, report)
+        return 0
+    finally:
+        if sa is not None and sa.lpSecurityDescriptor:
+            kernel32.LocalFree(sa.lpSecurityDescriptor)
+        kernel32.CloseHandle(h_mutex)
 
-    auth = FaceAuthenticator(models, db)
 
-    sa = create_security_attributes()
-
+def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
     while True:
+        report("pipe_setup")
         logger.info("Aguardando conexao do LogonUI / Credential Provider em %s...", PIPE_NAME)
         h_pipe = kernel32.CreateNamedPipeW(
             PIPE_NAME,
@@ -347,12 +407,13 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             continue
 
         try:
+            report("listening")
             connected = kernel32.ConnectNamedPipe(h_pipe, None)
             if not connected and kernel32.GetLastError() != 535:  # ERROR_PIPE_CONNECTED
                 logger.warning("Falha ao conectar cliente (erro %d).", kernel32.GetLastError())
-                kernel32.CloseHandle(h_pipe)
                 continue
 
+            report("request")
             logger.info("Cliente conectado! Lendo solicitacao...")
             buf = ctypes.create_string_buffer(BUFFER_SIZE)
             bytes_read = wintypes.DWORD()
@@ -367,7 +428,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             if len(request_str) > 512:
                 status, data = "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
             elif request_str in ("AUTH_QUERY", "QUERY"):
-                status, data = auth.evaluate()
+                status, data = auth.evaluate(camera_backend=camera_backend)
             elif request_str == "PING":
                 status, data = "PONG", {"version": "1.0"}
             else:
@@ -385,6 +446,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")
                 response_payload["protocol_marker"] = IPC_PROTOCOL_MARKER
+                report("allow")
 
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")
@@ -410,5 +472,10 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
 
 
 if __name__ == "__main__":
-    once_flag = "--once" in sys.argv
-    run_pipe_server(once=once_flag)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--camera-backend", choices=("dshow", "msmf"), default="dshow")
+    parser.add_argument("--status-file", type=Path)
+    args = parser.parse_args()
+    raise SystemExit(run_pipe_server(once=args.once, camera_backend=args.camera_backend,
+                                    status_file=args.status_file))
