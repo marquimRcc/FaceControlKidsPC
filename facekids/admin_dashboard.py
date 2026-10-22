@@ -103,9 +103,9 @@ class ProgramsConfigDialog(tk.Toplevel):
             "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
             "programs": [
                 {
-                    "name": "Brave - YouTube Kids",
-                    "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                    "arguments": "https://www.youtubekids.com",
+                    "name": "Firefox - YouTube Kids",
+                    "executable": r"C:\Program Files\Mozilla Firefox\firefox.exe",
+                    "arguments": "-new-window https://www.youtubekids.com",
                     "enabled": True,
                 }
             ],
