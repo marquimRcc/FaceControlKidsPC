@@ -184,7 +184,9 @@ class WelcomeWindow:
 
         # Centralizar na tela
         width = 460
-        height = 380
+        # 420px preserva a dica inferior em escalas de tela do Windows acima
+        # de 100%, sem apertar o card de quota ou o botao principal.
+        height = 420
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
         x = (screen_w - width) // 2
