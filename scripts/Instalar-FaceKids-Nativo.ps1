@@ -18,10 +18,30 @@ $programDataDir = 'C:\ProgramData\FaceKids'
 $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
 $requiredProtocolMarker = 'FACEKIDS_IPC_V1'
+$firefox = 'C:\Program Files\Mozilla Firefox\firefox.exe'
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "     FaceControlKidsPC - Instalador de Desbloqueio Facial" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
+
+# O Firefox precisa estar disponivel para a conta Filhos, nao apenas no perfil
+# do administrador. Instala no escopo da maquina quando ainda nao existir.
+if (-not (Test-Path -LiteralPath $firefox)) {
+    $winget = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
+    if (-not (Test-Path -LiteralPath $winget)) {
+        $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
+        if ($wingetCommand) { $winget = $wingetCommand.Source }
+    }
+    if (-not (Test-Path -LiteralPath $winget)) {
+        throw 'Firefox ausente e Windows Package Manager (winget) nao foi encontrado.'
+    }
+    Write-Host 'Instalando Mozilla Firefox para todos os usuarios...' -ForegroundColor Yellow
+    & $winget install --id Mozilla.Firefox --exact --scope machine --silent `
+        --accept-package-agreements --accept-source-agreements --disable-interactivity --force
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $firefox)) {
+        throw 'Falha ao instalar o Mozilla Firefox para a conta Filhos.'
+    }
+}
 
 # 1. Verificar se a DLL existe e corresponde ao contrato IPC atual.
 # O repositorio distribui uma DLL pronta, mas nunca devemos instalar um binario
@@ -149,6 +169,23 @@ try {
 
 # 6. Configurar Agente de Sessao da conta Filhos (Tela de Boas-Vindas e Quota)
 Write-Host "Configurando Agente de Sessao da conta Filhos..." -ForegroundColor Yellow
+
+# A fonte de verdade do launcher fica em ProgramData e e lida pelo agente da
+# conta Filhos. O navegador abre primeiro; a saudacao topmost aparece sobre ele.
+$programsConfig = @{
+    enabled = $true
+    description = 'Lista de programas a inicializar automaticamente apos o desbloqueio facial'
+    programs = @(
+        @{
+            name = 'Firefox - YouTube Kids'
+            executable = $firefox
+            arguments = '-new-window https://www.youtubekids.com'
+            enabled = $true
+        }
+    )
+}
+$programsConfig | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $programDataDir 'programas_inicializar.json') -Encoding UTF8 -Force
+
 $agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
 $agentContent = @"
 @echo off

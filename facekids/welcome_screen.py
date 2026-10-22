@@ -30,19 +30,23 @@ LAST_UNLOCK_FILE = Path("C:/ProgramData/FaceKids/last_unlock.json")
 logger = logging.getLogger("FaceKidsWelcome")
 
 
-def load_programs_config() -> dict:
-    default_config = {
+def default_programs_config() -> dict:
+    return {
         "enabled": True,
         "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
         "programs": [
             {
-                "name": "Brave - YouTube Kids",
-                "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                "arguments": "https://www.youtubekids.com",
+                "name": "Firefox - YouTube Kids",
+                "executable": r"C:\Program Files\Mozilla Firefox\firefox.exe",
+                "arguments": "-new-window https://www.youtubekids.com",
                 "enabled": True,
             }
         ],
     }
+
+
+def load_programs_config() -> dict:
+    default_config = default_programs_config()
     if not CONFIG_FILE.exists():
         try:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +88,9 @@ def launch_configured_programs():
         exe = prog.get("executable", "").strip()
         args = prog.get("arguments", "").strip()
         if not exe:
+            continue
+        if not Path(exe).is_file():
+            logger.warning("Programa configurado nao encontrado: %s", exe)
             continue
         try:
             import shlex
@@ -347,9 +354,11 @@ class WelcomeWindow:
 
 
 def show_welcome():
-    # Inicializa programas em segundo plano para ja estarem carregados quando o filho comecar
-    launch_configured_programs()
     child_id, child_name, remaining_seconds = get_current_child_info()
+    # Abre o conteudo infantil apenas depois de um reconhecimento facial valido.
+    # A janela de boas-vindas permanece topmost e aparece sobre o navegador.
+    if child_id is not None:
+        launch_configured_programs()
     root = tk.Tk()
     app = WelcomeWindow(root, child_id, child_name, remaining_seconds)
     root.mainloop()

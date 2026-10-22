@@ -5,9 +5,15 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from facekids.welcome_screen import format_remaining_time, load_programs_config, get_current_child_info
+import facekids.welcome_screen as welcome_screen
+from facekids.welcome_screen import (
+    default_programs_config,
+    format_remaining_time,
+    get_current_child_info,
+    load_programs_config,
+)
 
 
 class TestWelcomeScreen(unittest.TestCase):
@@ -31,6 +37,30 @@ class TestWelcomeScreen(unittest.TestCase):
         self.assertIsInstance(cfg, dict)
         self.assertIn("enabled", cfg)
         self.assertIn("programs", cfg)
+
+    def test_default_program_opens_youtube_kids_in_firefox(self):
+        program = default_programs_config()["programs"][0]
+        self.assertIn("Mozilla Firefox", program["executable"])
+        self.assertIn("-new-window", program["arguments"])
+        self.assertIn("youtubekids.com", program["arguments"])
+
+    def test_programs_only_launch_for_identified_child(self):
+        fake_root = Mock()
+        with patch.object(welcome_screen, "get_current_child_info", return_value=(None, "Filho(a)", 0)), \
+             patch.object(welcome_screen, "launch_configured_programs") as launch, \
+             patch.object(welcome_screen.tk, "Tk", return_value=fake_root), \
+             patch.object(welcome_screen, "WelcomeWindow"):
+            welcome_screen.show_welcome()
+        launch.assert_not_called()
+        fake_root.mainloop.assert_called_once_with()
+
+        fake_root.reset_mock()
+        with patch.object(welcome_screen, "get_current_child_info", return_value=(2, "Miguel", 3600)), \
+             patch.object(welcome_screen, "launch_configured_programs") as launch, \
+             patch.object(welcome_screen.tk, "Tk", return_value=fake_root), \
+             patch.object(welcome_screen, "WelcomeWindow"):
+            welcome_screen.show_welcome()
+        launch.assert_called_once_with()
 
     def test_get_current_child_info_fresh(self):
         with tempfile.TemporaryDirectory() as td:
