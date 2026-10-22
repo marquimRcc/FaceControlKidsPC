@@ -1,6 +1,7 @@
 """Tickets faciais de uso único para uma futura integração PAM no Linux."""
 from __future__ import annotations
 
+import math
 import threading
 from dataclasses import dataclass
 
@@ -45,7 +46,10 @@ class FaceApprovalBroker:
         child_id: int | None, quota_available: bool, curfew_clear: bool,
     ) -> FaceApproval | None:
         with self._lock:
-            if (state is not SessionState.LOCKED or not session_id or child_id is None
+            if (not isinstance(now, (int, float)) or not math.isfinite(now) or now < 0
+                    or state is not SessionState.LOCKED or not session_id
+                    or not all(ch.isalnum() or ch in "_-" for ch in session_id)
+                    or type(child_id) is not int or child_id <= 0
                     or not quota_available or not curfew_clear):
                 self._reset_unlocked()
                 return None
@@ -71,9 +75,19 @@ class FaceApprovalBroker:
         with self._lock:
             approval = self._approval
             self._approval = None
-            if approval is None or approval.session_id != session_id:
+            if (approval is None or approval.session_id != session_id
+                    or not isinstance(now, (int, float)) or not math.isfinite(now)):
                 return None
             age = now - approval.issued_at
             if age < 0 or age > self.ttl_seconds:
                 return None
             return approval
+
+
+def approval_still_allowed(store, approval: FaceApproval, day: str) -> bool:
+    """Revalida horário e saldo no instante em que o PAM consome o ticket."""
+    try:
+        curfew, _reason = store.is_curfew_active()
+        return not curfew and store.remaining(approval.child_id, day) > 0
+    except (KeyError, ValueError):
+        return False

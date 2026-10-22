@@ -1,9 +1,15 @@
+import math
+import tempfile
 import unittest
+from datetime import date
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from facekids import linux_pam_helper
-from facekids.linux_auth import FaceApprovalBroker
+from facekids.child_quota_pilot import provision_three_children
+from facekids.linux_auth import FaceApproval, FaceApprovalBroker, approval_still_allowed
 from facekids.session import SessionState
+from facekids.storage import Storage
 
 
 class LinuxAuthTests(unittest.TestCase):
@@ -76,6 +82,34 @@ class LinuxAuthTests(unittest.TestCase):
     @patch.dict("os.environ", {"PAM_TYPE": "account", "PAM_USER": "filhos"}, clear=True)
     def test_pam_helper_rejects_non_auth_phase(self):
         self.assertEqual(linux_pam_helper.main(), 1)
+
+    def test_nonfinite_clock_and_invalid_identity_are_rejected(self):
+        broker = FaceApprovalBroker()
+        base = {
+            "session_id": "4", "state": SessionState.LOCKED, "child_id": 1,
+            "quota_available": True, "curfew_clear": True,
+        }
+        for now in (math.nan, math.inf, -1):
+            self.assertIsNone(broker.observe(now=now, **base))
+        self.assertIsNone(broker.observe(now=1, **{**base, "child_id": True}))
+        self.assertIsNone(broker.observe(now=1, **{**base, "session_id": "4;bad"}))
+
+    def test_redemption_rechecks_quota_and_curfew(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "kids.sqlite3")
+            try:
+                child = min(provision_three_children(store))
+                approval = FaceApproval("4", child, 1)
+                today = date.today().isoformat()
+                self.assertTrue(approval_still_allowed(store, approval, today))
+                store.charge(child, store.remaining(child, today), today)
+                self.assertFalse(approval_still_allowed(store, approval, today))
+                other = sorted(provision_three_children(store))[1]
+                approval = FaceApproval("4", other, 2)
+                store.set_curfew_config(True, "00:00", "00:01")
+                self.assertFalse(approval_still_allowed(store, approval, today))
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":

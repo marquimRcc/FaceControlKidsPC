@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from .child_quota_pilot import ChildQuotaEngine, PilotEvent
-from .linux_auth import FaceApprovalBroker
+from .linux_auth import FaceApprovalBroker, approval_still_allowed
 from .locker import lock_current_session
 from .recognition import Recognizer
 from .session import SessionState, current_linux_session_state, linux_display_session
@@ -97,6 +97,7 @@ class LinuxFaceQuotaRuntime:
         self.store.close()
 
     def _serve_auth(self, server: socket.socket) -> None:
+        verifier = Storage(self.config.database)
         try:
             while not self._stopping:
                 try:
@@ -115,7 +116,11 @@ class LinuxFaceQuotaRuntime:
                         if (uid == 0 and verb == "AUTH" and separator
                                 and session_id
                                 and all(ch.isalnum() or ch in "_-" for ch in session_id)):
-                            allowed = self.approvals.consume(session_id, time.monotonic()) is not None
+                            approval = self.approvals.consume(session_id, time.monotonic())
+                            if approval is not None:
+                                allowed = approval_still_allowed(
+                                    verifier, approval, date.today().isoformat()
+                                )
                         connection.sendall(b"ALLOW\n" if allowed else b"DENY\n")
                     except (OSError, UnicodeError, ValueError):
                         try:
@@ -123,6 +128,7 @@ class LinuxFaceQuotaRuntime:
                         except OSError:
                             pass
         finally:
+            verifier.close()
             server.close()
             self.socket_path.unlink(missing_ok=True)
 
