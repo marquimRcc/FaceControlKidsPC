@@ -22,24 +22,33 @@ try {
     Write-Host "[FaceKids] Usando compilador: $gpp" -ForegroundColor Cyan
 
     Write-Host "[FaceKids] Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Cyan
-    & $gpp -shared -std=c++17 -O2 `
+    & $gpp -shared -std=c++17 -O2 -static -static-libgcc -static-libstdc++ `
       dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
       -o FaceKidsCredentialProvider.dll `
       -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar FaceKidsCredentialProvider.dll" }
 
     Write-Host "[FaceKids] Compilando TestProviderHost.exe..." -ForegroundColor Cyan
-    & $gpp -std=c++17 -O2 TestProviderHost.cpp -o TestProviderHost.exe -lole32 -luuid
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestProviderHost.cpp -o TestProviderHost.exe -lole32 -luuid
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestProviderHost.exe" }
 
     Write-Host "[FaceKids] Compilando TestPipeClient.exe..." -ForegroundColor Cyan
-    & $gpp -std=c++17 -O2 TestPipeClient.cpp -o TestPipeClient.exe -lole32
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestPipeClient.cpp -o TestPipeClient.exe -lole32
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipeClient.exe" }
 
     Write-Host "[FaceKids] Compilando teste de repeticao automatica..." -ForegroundColor Cyan
-    & $gpp -std=c++17 -O2 TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
         -o TestCredentialRetry.exe -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestCredentialRetry.exe" }
+
+    $objdump = Join-Path (Split-Path -Parent $gpp) 'objdump.exe'
+    if (Test-Path -LiteralPath $objdump) {
+        $imports = & $objdump -p FaceKidsCredentialProvider.dll | Out-String
+        if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inspecionar imports da DLL.' }
+        if ($imports -match '(?im)DLL Name:\s*(libgcc|libstdc\+\+|libwinpthread)') {
+            throw 'DLL ainda depende do runtime MinGW externo; nao distribuir para LogonUI.'
+        }
+    }
 
     Write-Host "[FaceKids] Build completo com sucesso!" -ForegroundColor Green
 } finally {

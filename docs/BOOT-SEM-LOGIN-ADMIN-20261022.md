@@ -38,6 +38,9 @@ Nao configurar AutoAdminLogon nem entrar silenciosamente na conta administrativa
   desinstalador para/remove a tarefa de boot ANTES de encerrar workers.
 - O instalador e o ativador exigem a DLL com `FACEKIDS_IPC_V1` e
   `FACEKIDS_BOOT_RETRY_V1`, evitando usar o binario anterior sem repeticao.
+- Binarios distribuidos incorporam os runtimes GCC/C++; nao dependem de
+  `libgcc_s_seh-1.dll`, `libstdc++-6.dll` ou `libwinpthread-1.dll` no PATH do
+  LogonUI. A CI verifica o carregamento com PATH restrito ao Windows.
 
 ## Ativacao no Windows
 
