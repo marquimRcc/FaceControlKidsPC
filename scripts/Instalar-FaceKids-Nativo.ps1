@@ -19,29 +19,14 @@ $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $requiredProtocolMarker = 'FACEKIDS_IPC_V1'
-$firefox = 'C:\Program Files\Mozilla Firefox\firefox.exe'
+$brave = 'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "     FaceControlKidsPC - Instalador de Desbloqueio Facial" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 
-# O Firefox precisa estar disponivel para a conta Filhos, nao apenas no perfil
-# do administrador. Instala no escopo da maquina quando ainda nao existir.
-if (-not (Test-Path -LiteralPath $firefox)) {
-    $winget = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
-    if (-not (Test-Path -LiteralPath $winget)) {
-        $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
-        if ($wingetCommand) { $winget = $wingetCommand.Source }
-    }
-    if (-not (Test-Path -LiteralPath $winget)) {
-        throw 'Firefox ausente e Windows Package Manager (winget) nao foi encontrado.'
-    }
-    Write-Host 'Instalando Mozilla Firefox para todos os usuarios...' -ForegroundColor Yellow
-    & $winget install --id Mozilla.Firefox --exact --scope machine --silent `
-        --accept-package-agreements --accept-source-agreements --disable-interactivity --force
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $firefox)) {
-        throw 'Falha ao instalar o Mozilla Firefox para a conta Filhos.'
-    }
+if (-not (Test-Path -LiteralPath $brave)) {
+    throw 'Brave nao foi encontrado para a conta Filhos.'
 }
 
 # 1. Verificar se a DLL existe e corresponde ao contrato IPC atual.
@@ -189,9 +174,9 @@ $programsConfig = @{
     description = 'Lista de programas a inicializar automaticamente apos o desbloqueio facial'
     programs = @(
         @{
-            name = 'Firefox - YouTube Kids'
-            executable = $firefox
-            arguments = '-new-window https://www.youtubekids.com'
+            name = 'Brave - YouTube Kids'
+            executable = $brave
+            arguments = '--new-window https://www.youtubekids.com'
             enabled = $true
         }
     )

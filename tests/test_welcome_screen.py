@@ -38,10 +38,10 @@ class TestWelcomeScreen(unittest.TestCase):
         self.assertIn("enabled", cfg)
         self.assertIn("programs", cfg)
 
-    def test_default_program_opens_youtube_kids_in_firefox(self):
+    def test_default_program_opens_youtube_kids_in_brave(self):
         program = default_programs_config()["programs"][0]
-        self.assertIn("Mozilla Firefox", program["executable"])
-        self.assertIn("-new-window", program["arguments"])
+        self.assertIn("BraveSoftware", program["executable"])
+        self.assertIn("--new-window", program["arguments"])
         self.assertIn("youtubekids.com", program["arguments"])
 
     def test_programs_only_launch_for_identified_child(self):
