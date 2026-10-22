@@ -1,0 +1,33 @@
+[Unit]
+Description=FaceKids Linux facial quota controller
+After=systemd-logind.service graphical.target
+Wants=systemd-logind.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+ExecStart=/opt/facekids/venv/bin/python -m facekids.linux_runtime --database /var/lib/facekids/criancas.sqlite3 --models /usr/lib/facekids/models --user filhos --camera 0
+WorkingDirectory=/usr/lib/facekids
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/facekids
+RuntimeDirectory=facekids
+RuntimeDirectoryMode=0700
+DevicePolicy=closed
+DeviceAllow=/dev/video0 rw
+NoNewPrivileges=true
+LockPersonality=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=graphical.target

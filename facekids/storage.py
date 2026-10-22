@@ -188,9 +188,14 @@ class Storage:
 
     def set_curfew_config(self, enabled: bool, start: str, end: str):
         """Salva a configuracao de horario permitido."""
+        from datetime import datetime
+        start = start.strip()
+        end = end.strip()
+        datetime.strptime(start, "%H:%M")
+        datetime.strptime(end, "%H:%M")
         self.set_setting("curfew_enabled", "true" if enabled else "false")
-        self.set_setting("curfew_start", start.strip())
-        self.set_setting("curfew_end", end.strip())
+        self.set_setting("curfew_start", start)
+        self.set_setting("curfew_end", end)
 
     def is_curfew_active(self, current_time_str: Optional[str] = None) -> tuple[bool, str]:
         """Verifica se o momento atual esta fora do horario permitido.

@@ -1,15 +1,54 @@
 """Interface de linha de comando para validar o MVP antes de automatizar o bloqueio."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
+import tempfile
 from urllib.request import urlretrieve
 
 from .storage import Storage, default_data_path
 
 MODEL_FILES={
-  "face_detection_yunet_2023mar.onnx":"https://raw.githubusercontent.com/crymetr/crysence/main/crysence/data/face_detection_yunet_2023mar.onnx",
-  "face_recognition_sface_2021dec.onnx":"https://raw.githubusercontent.com/crymetr/crysence/main/crysence/data/face_recognition_sface_2021dec.onnx",
+  "face_detection_yunet_2023mar.onnx":(
+    "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+    "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+  ),
+  "face_recognition_sface_2021dec.onnx":(
+    "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+    "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+  ),
 }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_models(model_dir: Path) -> None:
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name, (url, expected_hash) in MODEL_FILES.items():
+        target = model_dir / name
+        if target.exists() and _sha256(target) == expected_hash:
+            print(f"OK: {target}")
+            continue
+        with tempfile.NamedTemporaryFile(dir=model_dir, delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+        try:
+            print(f"Baixando e verificando {name} ...")
+            urlretrieve(url, temporary_path)
+            actual_hash = _sha256(temporary_path)
+            if actual_hash != expected_hash:
+                raise RuntimeError(
+                    f"SHA-256 inesperado para {name}: {actual_hash}"
+                )
+            temporary_path.replace(target)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        print(f"OK: {target}")
 
 
 def main():
@@ -31,13 +70,7 @@ def main():
     if args.cmd == "monitor" and args.lock and os.name != "nt":
         p.error("Bloqueio real disponível apenas no Windows 10/11 nesta versão")
     if args.cmd=="download-models":
-        args.models.mkdir(parents=True,exist_ok=True)
-        for name,url in MODEL_FILES.items():
-            target=args.models/name
-            if not target.exists():
-                print(f"Baixando {name} (~{37 if 'sface' in name else .3} MB) ...")
-                urlretrieve(url,target)
-            print(f"OK: {target}")
+        download_models(args.models)
         return
     from .monitor import enroll,monitor
     store=Storage(args.database)

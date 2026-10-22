@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/usr/lib/facekids
+exec /opt/facekids/venv/bin/python -m facekids.linux_admin \
+  --database /var/lib/facekids/criancas.sqlite3 \
+  --models /usr/lib/facekids/models "$@"

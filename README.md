@@ -1,5 +1,19 @@
 # FaceControlKidsPC — Desbloqueio Facial Automático e Controle de Quotas
 
+## Regata OS / Linux
+
+O trabalho Linux está na branch `feature/regataos-linux-implementation-20261022`.
+Ela inclui um controlador protegido por `systemd`, reconhecimento local
+YuNet/SFace, quotas individuais para três crianças na mesma conta, observação
+de bloqueio via `systemd-logind`, cadastro sem salvar imagens e instalador para
+Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
+
+O controlador Linux já contabiliza e bloqueia a sessão KDE. Uma integração PAM
+opcional consome tickets faciais de uso único, mas permanece desativada até o
+responsável testar câmera, recuperação e fallback por senha. O login inicial e
+o desbloqueio sem qualquer interação ainda exigem integração gráfica específica
+com SDDM/KScreenLocker.
+
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
 Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao

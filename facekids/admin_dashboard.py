@@ -16,30 +16,31 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 from datetime import date
+from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Optional
 
 from .avatar_utils import (
-    get_child_avatar_path,
-    set_child_photo_from_file,
-    remove_child_avatar_files,
     AVATAR_DIR,
+    get_child_avatar_path,
+    remove_child_avatar_files,
+    set_child_photo_from_file,
 )
-from .storage import Storage
 from .children_pilot import child_pilot_database, windows_token_user
+from .platform_paths import application_data_dir
+from .storage import Storage
 
 logger = logging.getLogger("FaceKidsAdmin")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT_DIR / "models"
-PROGRAMS_FILE = Path("C:/ProgramData/FaceKids/programas_inicializar.json")
+PROGRAMS_FILE = application_data_dir() / "programas_inicializar.json"
 
 # Paleta Moderna Escura (Alinhada com Catppuccin Mocha / Welcome Screen)
 BG_MAIN = "#0F0F17"

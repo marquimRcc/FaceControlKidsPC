@@ -12,20 +12,21 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
 import tkinter as tk
 from datetime import date
+from pathlib import Path
 from typing import Optional
 
 from .avatar_utils import get_child_avatar_path
-from .storage import Storage
 from .children_pilot import child_pilot_database
+from .platform_paths import application_data_dir
+from .storage import Storage
 
-CONFIG_FILE = Path("C:/ProgramData/FaceKids/programas_inicializar.json")
-LAST_UNLOCK_FILE = Path("C:/ProgramData/FaceKids/last_unlock.json")
+CONFIG_FILE = application_data_dir() / "programas_inicializar.json"
+LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 
 logger = logging.getLogger("FaceKidsWelcome")
 

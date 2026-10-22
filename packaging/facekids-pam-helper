@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/usr/lib/facekids
+export FACEKIDS_CHILD_USER=filhos
+exec /opt/facekids/venv/bin/python -m facekids.linux_pam_helper
