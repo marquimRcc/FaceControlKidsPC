@@ -117,8 +117,13 @@ try {
     Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $authAction -Trigger $authTrigger -Principal $authPrincipal -Force | Out-Null
 
     $registeredTask = Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction Stop
-    if ($registeredTask.Principal.UserId -ne $authServiceUser -or
-        [string]$registeredTask.Principal.LogonType -ne 'Interactive') {
+    $expectedSid = ([Security.Principal.NTAccount]$authServiceUser).Translate([Security.Principal.SecurityIdentifier]).Value
+    $registeredSid = ([Security.Principal.NTAccount]$registeredTask.Principal.UserId).Translate([Security.Principal.SecurityIdentifier]).Value
+    # Get-ScheduledTask may expose the CIM enum as its name or numeric value,
+    # depending on the Windows/PowerShell version and display language.
+    $registeredLogonType = [string]$registeredTask.Principal.LogonType
+    if ($registeredSid -ne $expectedSid -or
+        $registeredLogonType -notin @('Interactive', 'InteractiveToken', '3')) {
         throw "A tarefa FaceKidsAuthService nao ficou vinculada ao usuario/sessao interativa esperada."
     }
     Write-Host "Tarefa FaceKidsAuthService vinculada a sessao interativa de $authServiceUser (privilegios elevados)." -ForegroundColor Green

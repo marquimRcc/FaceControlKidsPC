@@ -63,6 +63,7 @@ class TestInstallerScripts(unittest.TestCase):
         # Verifica execucao com privilegios elevados
         self.assertIn("New-ScheduledTaskPrincipal", inst)
         self.assertIn("-LogonType Interactive", inst)
+        self.assertIn("@('Interactive', 'InteractiveToken', '3')", inst)
         self.assertIn("-RunLevel Highest", inst)
         self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $authServiceUser", inst)
         self.assertIn("Get-ScheduledTask -TaskName 'FaceKidsAuthService'", inst)
@@ -106,6 +107,8 @@ class TestInstallerScripts(unittest.TestCase):
         script = (self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1").read_text(encoding="utf-8")
         self.assertIn("New-ScheduledTaskTrigger -AtStartup", script)
         self.assertIn("-UserId 'SYSTEM' -LogonType ServiceAccount", script)
+        self.assertIn("@('ServiceAccount', '5')", script)
+        self.assertIn("$registeredSid -ne 'S-1-5-18'", script)
         self.assertIn("-MultipleInstances IgnoreNew", script)
         self.assertIn("-ExecutionTimeLimit ([TimeSpan]::Zero)", script)
         self.assertIn("param([switch]$Desativar)", script)

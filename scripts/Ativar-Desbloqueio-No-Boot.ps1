@@ -66,8 +66,17 @@ $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Force | Out-Null
 $registered = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-if ([string]$registered.Principal.LogonType -ne 'ServiceAccount' -or
-    $registered.Principal.UserId -notin @('SYSTEM', 'NT AUTHORITY\SYSTEM', 'S-1-5-18')) {
+$registeredLogonType = [string]$registered.Principal.LogonType
+$registeredUser = [string]$registered.Principal.UserId
+try {
+    $registeredSid = ([Security.Principal.NTAccount]$registeredUser).Translate([Security.Principal.SecurityIdentifier]).Value
+} catch {
+    $registeredSid = $registeredUser
+}
+# Get-ScheduledTask may expose the CIM enum as its name or numeric value,
+# depending on the Windows/PowerShell version and display language.
+if ($registeredLogonType -notin @('ServiceAccount', '5') -or
+    $registeredSid -ne 'S-1-5-18') {
     throw 'Principal da tarefa de boot diferente de SYSTEM/ServiceAccount.'
 }
 Start-ScheduledTask -TaskName $taskName
