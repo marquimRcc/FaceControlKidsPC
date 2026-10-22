@@ -71,6 +71,8 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("$requiredProtocolMarker = 'FACEKIDS_IPC_V1'", inst)
         self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
         self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
+        self.assertIn("set TCL_LIBRARY=", inst)
+        self.assertIn("set TK_LIBRARY=", inst)
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:

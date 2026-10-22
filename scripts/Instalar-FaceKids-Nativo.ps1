@@ -17,6 +17,7 @@ $dllSource = Join-Path $root 'native\credential_provider_facekids\FaceKidsCreden
 $programDataDir = 'C:\ProgramData\FaceKids'
 $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
+$python = Join-Path $root '.venv\Scripts\python.exe'
 $requiredProtocolMarker = 'FACEKIDS_IPC_V1'
 $firefox = 'C:\Program Files\Mozilla Firefox\firefox.exe'
 
@@ -170,6 +171,17 @@ try {
 # 6. Configurar Agente de Sessao da conta Filhos (Tela de Boas-Vindas e Quota)
 Write-Host "Configurando Agente de Sessao da conta Filhos..." -ForegroundColor Yellow
 
+# O Python esta no perfil administrativo. Os scripts Tcl/Tk precisam ficar em
+# uma pasta compartilhada para tkinter funcionar no desktop da conta Filhos.
+$pythonBase = (& $python -c 'import sys; print(sys.base_prefix)').Trim()
+if ($LASTEXITCODE -ne 0 -or -not $pythonBase) {
+    throw 'Nao foi possivel localizar o runtime base do Python.'
+}
+$tclRuntime = Join-Path $programDataDir 'tcl'
+New-Item -ItemType Directory -Path $tclRuntime -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $pythonBase 'tcl\tcl8.6') -Destination $tclRuntime -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $pythonBase 'tcl\tk8.6') -Destination $tclRuntime -Recurse -Force
+
 # A fonte de verdade do launcher fica em ProgramData e e lida pelo agente da
 # conta Filhos. O navegador abre primeiro; a saudacao topmost aparece sobre ele.
 $programsConfig = @{
@@ -192,6 +204,8 @@ $agentContent = @"
 if /i "%USERNAME%" neq "Filhos" exit /b
 cd /d "C:\ProgramData\FaceKids"
 set PYTHONPATH=$root
+set TCL_LIBRARY=$tclRuntime\tcl8.6
+set TK_LIBRARY=$tclRuntime\tk8.6
 start "" "$pythonw" -m facekids.filhos_agent
 "@
 Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
