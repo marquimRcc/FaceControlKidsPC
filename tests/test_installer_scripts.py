@@ -13,6 +13,7 @@ class TestInstallerScripts(unittest.TestCase):
             self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1",
             self.root / "scripts" / "Iniciar-Piloto-Filhos.ps1",
             self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1",
+            self.root / "scripts" / "FaceKidsFilhosAgent.vbs",
         ]
 
     def test_scripts_exist_and_utf8(self):
@@ -73,6 +74,8 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
         self.assertIn("set TCL_LIBRARY=", inst)
         self.assertIn("set TK_LIBRARY=", inst)
+        self.assertIn("FaceKidsFilhosAgent.vbs", inst)
+        self.assertIn("Startup solicitado para %USERNAME%", inst)
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:
