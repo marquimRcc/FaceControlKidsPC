@@ -186,6 +186,7 @@ $programsConfig | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path 
 $agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
 $agentContent = @"
 @echo off
+echo [%date% %time%] Startup solicitado para %USERNAME% >> "C:\ProgramData\FaceKids\filhos_startup.log"
 if /i "%USERNAME%" neq "Filhos" exit /b
 cd /d "C:\ProgramData\FaceKids"
 set PYTHONPATH=$root
@@ -195,7 +196,15 @@ start "" "$pythonw" -m facekids.filhos_agent
 "@
 Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
 
-# Agendar exclusivamente no Logon da conta Filhos de forma interativa (/it)
+# Inicializacao primaria na sessao interativa. O VBS e executado pelo Startup
+# global em cada logon, enquanto o BAT acima restringe a execucao a Filhos.
+# Isso evita depender de senha armazenada ou de uma tarefa /IT fragil.
+$globalStartup = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup'
+$agentStartupVbs = Join-Path $globalStartup 'FaceKidsFilhosAgent.vbs'
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'FaceKidsFilhosAgent.vbs') -Destination $agentStartupVbs -Force
+Write-Host "Inicializacao interativa do agente instalada em $agentStartupVbs" -ForegroundColor Green
+
+# Tarefa mantida como contingencia para instalacoes existentes.
 try {
     & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /ru "Filhos" /rp "1" /it /f 2>&1 | Out-Null
     Write-Host "Agente dos Filhos agendado com sucesso vinculado exclusivamente a conta 'Filhos' (/it)." -ForegroundColor Green
