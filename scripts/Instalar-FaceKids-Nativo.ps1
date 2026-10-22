@@ -204,14 +204,21 @@ $agentStartupVbs = Join-Path $globalStartup 'FaceKidsFilhosAgent.vbs'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'FaceKidsFilhosAgent.vbs') -Destination $agentStartupVbs -Force
 Write-Host "Inicializacao interativa do agente instalada em $agentStartupVbs" -ForegroundColor Green
 
-# Tarefa mantida como contingencia para instalacoes existentes.
-try {
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /ru "Filhos" /rp "1" /it /f 2>&1 | Out-Null
-    Write-Host "Agente dos Filhos agendado com sucesso vinculado exclusivamente a conta 'Filhos' (/it)." -ForegroundColor Green
-} catch {
-    Write-Host "Aviso ao agendar tarefa vinculada com senha: $($_.Exception.Message)" -ForegroundColor DarkGray
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /f 2>&1 | Out-Null
+# Tarefa interativa sem senha. InteractiveToken usa a sessao existente de
+# Filhos e tambem permite iniciar o agente imediatamente apos uma atualizacao.
+$filhosAccount = "$env:COMPUTERNAME\Filhos"
+$agentAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/d /c `"$agentBat`""
+$agentTrigger = New-ScheduledTaskTrigger -AtLogOn -User $filhosAccount
+$agentPrincipal = New-ScheduledTaskPrincipal -UserId $filhosAccount -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -Action $agentAction -Trigger $agentTrigger -Principal $agentPrincipal -Force | Out-Null
+
+$registeredAgent = Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction Stop
+$agentLogonType = [string]$registeredAgent.Principal.LogonType
+if ($registeredAgent.Principal.UserId -notmatch '(?i)(^|\\)Filhos$' -or
+    $agentLogonType -notin @('Interactive', 'InteractiveToken', '3')) {
+    throw 'A tarefa FaceKidsFilhosAgent nao ficou vinculada a sessao interativa de Filhos.'
 }
+Write-Host "Agente dos Filhos agendado sem senha para $filhosAccount." -ForegroundColor Green
 
 # 7. Iniciar os servicos em segundo plano
 Write-Host "Iniciando servicos em segundo plano..." -ForegroundColor Yellow
@@ -220,12 +227,13 @@ Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1
 
-# Disparar o agente na conta Filhos
+# Disparar agora na sessao Filhos, quando ela ja estiver conectada.
 try {
-    $secPass = ConvertTo-SecureString "1" -AsPlainText -Force
-    $cred = New-Object System.Management.Automation.PSCredential("Filhos", $secPass)
-    Start-Process -Credential $cred -FilePath "cmd.exe" -ArgumentList "/c `"$agentBat`"" -WorkingDirectory "C:\ProgramData\FaceKids" -ErrorAction SilentlyContinue
-} catch {}
+    Start-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction Stop
+    Write-Host 'Agente solicitado na sessao Filhos existente.' -ForegroundColor Green
+} catch {
+    Write-Host "A conta Filhos ainda nao possui sessao; o agente iniciara no proximo logon." -ForegroundColor DarkGray
+}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
