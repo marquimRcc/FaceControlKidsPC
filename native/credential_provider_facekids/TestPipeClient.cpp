@@ -10,8 +10,14 @@ static int RunParsingUnitTests() {
     time_t now = time(nullptr);
     std::string nowTs = std::to_string(now);
 
-    // 1. ALLOW valido completo com user, child_id, token e timestamp fresco
-    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    // O timeout total precisa acomodar os 4,5 s do reconhecimento + transporte.
+    if (FaceKidsPipeClient::kTotalRequestTimeoutMs <= FaceKidsPipeClient::kRecognitionBudgetMs) {
+        std::wcerr << L"[FALHA] Timeout total nao acomoda reconhecimento facial.\n";
+        return 1;
+    }
+
+    // 1. ALLOW valido completo com user, child_id, marcador e timestamp fresco
+    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"protocol_marker\": \"FACEKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r1 = FaceKidsPipeClient::ParseResponse(allowJson);
     if (!r1.success || r1.user != L"Filhos" || r1.password != L"1" || r1.childId != 2 || r1.childName != L"Crianca 2") {
         std::wcerr << L"[FALHA] Teste 1 (ALLOW valido) falhou! Msg: " << r1.message << L"\n";
@@ -20,7 +26,7 @@ static int RunParsingUnitTests() {
     std::wcout << L"  [PASS] 1. ALLOW valido reconhecido corretamente.\n";
 
     // 2. Rejeicao de ALLOW sem o campo "user"
-    std::string noUserJson = "{\"status\": \"ALLOW\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    std::string noUserJson = "{\"status\": \"ALLOW\", \"child_id\": 2, \"protocol_marker\": \"FACEKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r2 = FaceKidsPipeClient::ParseResponse(noUserJson);
     if (r2.success) {
         std::wcerr << L"[FALHA] Teste 2 (ALLOW sem user) foi aceito incorretamente!\n";
@@ -29,7 +35,7 @@ static int RunParsingUnitTests() {
     std::wcout << L"  [PASS] 2. ALLOW sem campo 'user' rejeitado com seguranca.\n";
 
     // 3. Rejeicao de ALLOW sem child_id
-    std::string noCidJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    std::string noCidJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"protocol_marker\": \"FACEKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r3 = FaceKidsPipeClient::ParseResponse(noCidJson);
     if (r3.success) {
         std::wcerr << L"[FALHA] Teste 3 (ALLOW sem child_id) foi aceito incorretamente!\n";
@@ -37,18 +43,18 @@ static int RunParsingUnitTests() {
     }
     std::wcout << L"  [PASS] 3. ALLOW sem 'child_id' valido rejeitado com seguranca.\n";
 
-    // 4. Rejeicao de ALLOW com token ausente ou invalido
-    std::string badTokenJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"auth_token\": \"INVALID_TOKEN\", \"timestamp\": " + nowTs + "}";
-    AuthResult r4 = FaceKidsPipeClient::ParseResponse(badTokenJson);
+    // 4. Rejeicao de ALLOW com marcador de protocolo ausente ou invalido
+    std::string badMarkerJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"protocol_marker\": \"INVALID_PROTOCOL\", \"timestamp\": " + nowTs + "}";
+    AuthResult r4 = FaceKidsPipeClient::ParseResponse(badMarkerJson);
     if (r4.success) {
-        std::wcerr << L"[FALHA] Teste 4 (ALLOW com token invalido) foi aceito!\n";
+        std::wcerr << L"[FALHA] Teste 4 (ALLOW com protocolo invalido) foi aceito!\n";
         return 4;
     }
-    std::wcout << L"  [PASS] 4. Token invalido rejeitado com seguranca.\n";
+    std::wcout << L"  [PASS] 4. Marcador de protocolo invalido rejeitado.\n";
 
     // 5. Rejeicao de timestamp expirado (60 segundos atras)
     std::string expiredTs = std::to_string(now - 60);
-    std::string staleJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + expiredTs + "}";
+    std::string staleJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"protocol_marker\": \"FACEKIDS_IPC_V1\", \"timestamp\": " + expiredTs + "}";
     AuthResult r5 = FaceKidsPipeClient::ParseResponse(staleJson);
     if (r5.success) {
         std::wcerr << L"[FALHA] Teste 5 (Timestamp expirado) foi aceito!\n";
@@ -100,7 +106,7 @@ static int RunParsingUnitTests() {
     std::wcout << L"  [PASS] 10. JSON sem delimitadores rejeitado com seguranca.\n";
 
     // 11. Rejeicao de usuario que nao seja Filhos (ex: Administrator)
-    std::string adminJson = "{\"status\": \"ALLOW\", \"user\": \"Administrator\", \"child_id\": 2, \"auth_token\": \"FACEKIDS_AUTH_TOKEN_V1\", \"timestamp\": " + nowTs + "}";
+    std::string adminJson = "{\"status\": \"ALLOW\", \"user\": \"Administrator\", \"child_id\": 2, \"protocol_marker\": \"FACEKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r11 = FaceKidsPipeClient::ParseResponse(adminJson);
     if (r11.success) {
         std::wcerr << L"[FALHA] Teste 11 (ALLOW para Administrator) foi aceito incorretamente!\n";
@@ -132,7 +138,14 @@ int main(int argc, char* argv[]) {
     }
 
     std::wcout << L"[FaceKids Pipe Test] Solicitando autenticacao via \\\\.\\pipe\\FaceKidsAuthPipe...\n";
+    ULONGLONG started = GetTickCount64();
     AuthResult res = FaceKidsPipeClient::RequestAuthentication();
+    ULONGLONG elapsed = GetTickCount64() - started;
+    if (elapsed > FaceKidsPipeClient::kTotalRequestTimeoutMs + 1500) {
+        std::wcerr << L"[FALHA] Cliente excedeu o prazo global: " << elapsed << L" ms.\n";
+        return 13;
+    }
+    std::wcout << L"[Tempo] " << elapsed << L" ms (limite global controlado)\n";
     std::wcout << L"[Resultado] Sucesso: " << (res.success ? L"SIM" : L"NAO") << L"\n";
     std::wcout << L"[Mensagem] " << res.message << L"\n";
     if (res.success) {

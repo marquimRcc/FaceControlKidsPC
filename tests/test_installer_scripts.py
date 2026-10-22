@@ -57,7 +57,15 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn('/ru "Filhos"', inst)
         self.assertIn("/it", inst)
         # Verifica execucao com privilegios elevados
-        self.assertIn("/rl HIGHEST", inst)
+        self.assertIn("New-ScheduledTaskPrincipal", inst)
+        self.assertIn("-LogonType Interactive", inst)
+        self.assertIn("-RunLevel Highest", inst)
+        self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $authServiceUser", inst)
+        self.assertIn("Get-ScheduledTask -TaskName 'FaceKidsAuthService'", inst)
+        # Impede instalar DLL antiga com contrato IPC incompatível.
+        self.assertIn("$requiredProtocolMarker = 'FACEKIDS_IPC_V1'", inst)
+        self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
+        self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:

@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+import ctypes
+import types
 from unittest.mock import patch, MagicMock
 
 from facekids.filhos_agent import QuotaTracker, read_last_unlock_child
@@ -149,6 +151,60 @@ class TestFilhosAgent(unittest.TestCase):
             self.assertEqual(res["child_id"], 2)
             # Apos consumir, deve retornar None
             self.assertIsNone(identifier.check_result())
+
+    def test_query_auth_service_cancels_stalled_overlapped_read(self):
+        import facekids.filhos_agent as filhos_agent
+        from ctypes import wintypes as real_wintypes
+
+        class FakeKernel32:
+            def __init__(self):
+                self.cancelled = False
+                self.closed = []
+
+            def WaitNamedPipeW(self, _name, _timeout):
+                return True
+
+            def CreateFileW(self, *_args):
+                return 123
+
+            def CreateEventW(self, *_args):
+                return 456
+
+            def WriteFile(self, _handle, _buffer, size, transferred, _overlapped):
+                transferred._obj.value = size
+                return True
+
+            def ReadFile(self, *_args):
+                return False
+
+            def GetLastError(self):
+                return 997  # ERROR_IO_PENDING
+
+            def WaitForSingleObject(self, _event, _timeout):
+                return 258  # WAIT_TIMEOUT
+
+            def CancelIoEx(self, _handle, _overlapped):
+                self.cancelled = True
+                return True
+
+            def GetOverlappedResult(self, *_args):
+                return False
+
+            def CloseHandle(self, handle):
+                self.closed.append(handle)
+                return True
+
+        fake_kernel32 = FakeKernel32()
+        fake_windll = types.SimpleNamespace(kernel32=fake_kernel32)
+        with patch("facekids.filhos_agent.sys.platform", "win32"), patch.object(
+            filhos_agent, "wintypes", real_wintypes
+        ), patch.object(ctypes, "windll", fake_windll, create=True):
+            result = filhos_agent.query_auth_service(timeout_seconds=0.1)
+
+        self.assertIsNone(result)
+        self.assertTrue(fake_kernel32.cancelled)
+        self.assertIn(456, fake_kernel32.closed)
+        self.assertIn(123, fake_kernel32.closed)
 
 
 if __name__ == "__main__":

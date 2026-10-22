@@ -17,17 +17,35 @@ $dllSource = Join-Path $root 'native\credential_provider_facekids\FaceKidsCreden
 $programDataDir = 'C:\ProgramData\FaceKids'
 $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
+$requiredProtocolMarker = 'FACEKIDS_IPC_V1'
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "     FaceControlKidsPC - Instalador de Desbloqueio Facial" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 
-# 1. Verificar se a DLL existe (compilar se necessario)
-if (-not (Test-Path -LiteralPath $dllSource)) {
+# 1. Verificar se a DLL existe e corresponde ao contrato IPC atual.
+# O repositorio distribui uma DLL pronta, mas nunca devemos instalar um binario
+# antigo junto com um auth_service novo e incompatível.
+$dllNeedsBuild = -not (Test-Path -LiteralPath $dllSource)
+if (-not $dllNeedsBuild) {
+    try {
+        $dllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
+        $dllNeedsBuild = -not $dllAscii.Contains($requiredProtocolMarker)
+    } catch {
+        $dllNeedsBuild = $true
+    }
+}
+
+if ($dllNeedsBuild) {
     Write-Host "Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Yellow
     $buildScript = Join-Path $root 'native\credential_provider_facekids\build.ps1'
     & powershell -ExecutionPolicy Bypass -File $buildScript
     if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
+
+    $rebuiltDllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
+    if (-not $rebuiltDllAscii.Contains($requiredProtocolMarker)) {
+        throw "DLL compilada nao contem o marcador de protocolo $requiredProtocolMarker. Instalacao interrompida."
+    }
 }
 
 # 2. Copiar DLL para ProgramData\FaceKids
@@ -75,7 +93,9 @@ try {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "FaceKidsAuthService" -Force -ErrorAction SilentlyContinue
 } catch {}
 
-# Criar script de execucao do servico e tarefa agendada no boot do sistema
+# Criar script de execucao do servico e tarefa vinculada ao usuario/sessao
+# interativa que executa este instalador. Isso preserva acesso DirectShow a
+# webcam e evita a ambiguidade de /sc onlogon sem principal explicito.
 $serviceBat = "C:\ProgramData\FaceKids\iniciar-auth-service.bat"
 $serviceContent = @"
 @echo off
@@ -86,10 +106,20 @@ start "" "$pythonw" -m facekids.auth_service
 Set-Content -Path $serviceBat -Value $serviceContent -Encoding ASCII -Force
 
 try {
-    & schtasks.exe /create /tn "FaceKidsAuthService" /tr "cmd.exe /c \`"$serviceBat\`"" /sc onlogon /rl HIGHEST /f 2>&1 | Out-Null
-    Write-Host "Tarefa agendada FaceKidsAuthService configurada no Logon interativo (com acesso a webcam e privilegios elevados)." -ForegroundColor Green
+    $authServiceUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $authAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$serviceBat`""
+    $authTrigger = New-ScheduledTaskTrigger -AtLogOn -User $authServiceUser
+    $authPrincipal = New-ScheduledTaskPrincipal -UserId $authServiceUser -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $authAction -Trigger $authTrigger -Principal $authPrincipal -Force | Out-Null
+
+    $registeredTask = Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction Stop
+    if ($registeredTask.Principal.UserId -ne $authServiceUser -or
+        [string]$registeredTask.Principal.LogonType -ne 'Interactive') {
+        throw "A tarefa FaceKidsAuthService nao ficou vinculada ao usuario/sessao interativa esperada."
+    }
+    Write-Host "Tarefa FaceKidsAuthService vinculada a sessao interativa de $authServiceUser (privilegios elevados)." -ForegroundColor Green
 } catch {
-    Write-Host "Aviso ao agendar tarefa FaceKidsAuthService: $($_.Exception.Message)" -ForegroundColor DarkGray
+    throw "Falha ao configurar FaceKidsAuthService na sessao interativa: $($_.Exception.Message)"
 }
 
 # Configurar script VBS de contingencia no Startup

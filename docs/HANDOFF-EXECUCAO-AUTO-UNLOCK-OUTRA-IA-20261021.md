@@ -665,16 +665,16 @@ P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato 
 - **Problema apontado:** A tarefa agendada no boot como `SYSTEM` corre o risco de não conseguir abrir a webcam USB em Sessão 0 (devido a isolamento de hardware ou privacidade no Windows 10/11), bloqueando a execução da instância interativa de contingência através do mutex global `Global\FaceKidsAuthServiceMutex`.
 - **Mitigações implementadas:**
   1. **Sondagem de Viabilidade (`probe_camera_access` e `is_session_zero_or_system`)**: Em `facekids/auth_service.py`, se o processo for disparado em Sessão 0 ou como `SYSTEM`, ele realiza uma sondagem de acesso à webcam antes de adquirir o mutex global. Se a webcam não responder, o processo emite log explicativo de aviso e **encerra imediatamente sem adquirir o mutex e sem criar o pipe**. Isso garante que a instância interativa jamais seja bloqueada por um processo sem webcam.
-  2. **Agendamento Interativo na Sessão com Câmera**: Em `scripts/Instalar-FaceKids-Nativo.ps1`, a tarefa agendada `FaceKidsAuthService` agora é configurada com `/sc onlogon /rl HIGHEST`. Isso garante que o serviço suba diretamente na sessão interativa do usuário onde os drivers DirectShow e Media Foundation da webcam operam com 100% de confiabilidade, resguardando o desbloqueio em `Win+L` testado e aprovado pelo proprietário.
+  2. **Agendamento Interativo na Sessão com Câmera**: substituído na quarta rodada por um principal e gatilho explicitamente vinculados ao usuário interativo que executa o instalador. A forma anterior, apenas com `/sc onlogon /rl HIGHEST`, não demonstrava sozinha qual principal/sessão executaria a tarefa.
 
-### 2. Validação Estrita e Criptográfica do Contrato IPC (P0-46, P0-47)
+### 2. Validação Estrutural do Contrato IPC (P0-46, P0-47)
 - **Problema apontado:** O parser C++ ainda aceitava `ALLOW` sem verificar obrigatoriamente um `child_id`, a validade temporal da resposta, ou quando o campo `user` estivesse ausente.
 - **Mitigações implementadas:**
   1. **Campo `user` Obrigatório**: Rejeita imediatamente se `user` for vazio ou diferente de `"Filhos"`.
   2. **Campo `child_id` Obrigatório**: Rejeita se `child_id` for ausente ou `<= 0`.
   3. **Validade Temporal Estrita**: Adicionada validação de timestamp com janela máxima de 15 segundos (`fabs(now - ts) <= 15.0`). Rejeita pacotes expirados ou de replay.
-  4. **Token de Confiança**: Adicionado token de validação `"FACEKIDS_AUTH_TOKEN_V1"`.
-  5. **Proteção de Timeout no LogonUI**: `RequestAuthentication()` agora utiliza I/O sobreposto (`FILE_FLAG_OVERLAPPED`) com timeout estrito de 3,5 segundos, garantindo que o LogonUI do Windows nunca congele mesmo se o serviço de backend sofrer pane.
+  4. **Marcador de Protocolo**: na quarta rodada, a constante deixou de ser descrita como token de confiança e passou a ser o marcador público `"FACEKIDS_IPC_V1"`. Ela verifica compatibilidade, não autenticidade criptográfica.
+  5. **Proteção de Timeout no LogonUI**: na quarta rodada, `RequestAuthentication()` passou a usar prazo global de 7 segundos, suficiente para o orçamento facial de 4,5 segundos mais conexão/transporte, com I/O sobreposto validado e cancelado.
   6. **Suíte C++ Expandida**: `native/credential_provider_facekids/TestPipeClient.cpp` agora possui **12 testes unitários** automatizados cobrindo todos os casos negativos (sem user, sem child_id, token inválido, timestamp expirado, status aninhado, etc.).
 
 ### 3. Agente Filhos Totalmente Não-Bloqueante e Tarefa Vinculada (P0-48, P0-49)
@@ -703,3 +703,20 @@ P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato 
 3. **PowerShell AST e Validação de Scripts:**
    - Comando: `python -m unittest tests/test_installer_scripts.py -v`
    - Resultado: **5/5 testes aprovados** (sintaxe AST, vinculação com `/it`, remoção e preservação de dados).
+
+---
+
+## 20. Quarta Rodada — Correções da Auditoria Final (22/10/2026)
+
+Esta seção substitui as afirmações conflitantes da terceira rodada.
+
+1. **Tarefa do autenticador vinculada à sessão correta:** `FaceKidsAuthService` usa `New-ScheduledTaskTrigger -AtLogOn -User` e `New-ScheduledTaskPrincipal -LogonType Interactive -RunLevel Highest`, ambos associados à identidade Windows que executa o instalador. Após o registro, o instalador relê a tarefa e falha de forma explícita se principal ou modo de logon forem diferentes do esperado.
+2. **Prazo global compatível com o reconhecimento:** o cliente C++ usa 7 segundos para conexão, escrita e leitura somadas. Esse valor acomoda os 4,5 segundos do reconhecimento facial. `GetOverlappedResult` é verificado, operações vencidas são canceladas com `CancelIoEx`, e a estrutura `OVERLAPPED` permanece válida até o cancelamento terminar.
+3. **Consulta pós-PIN realmente limitada:** `query_auth_service()` abre o pipe com `FILE_FLAG_OVERLAPPED`, aplica o mesmo prazo a conexão, escrita e leitura, cancela I/O vencido e trata `HANDLE` corretamente em 64 bits. O worker da sessão usa 6,5 segundos, mas permanece em thread daemon separada do relógio de quota.
+4. **Terminologia de segurança corrigida:** `FACEKIDS_IPC_V1` é somente marcador público de versão do protocolo. Não é segredo nem autenticação criptográfica. A barreira local é a ACL do Named Pipe; hardening adicional continua fora desta estabilização doméstica.
+5. **Testes adicionados:** a suíte Python simula leitura pendente e confirma o cancelamento; o teste nativo verifica que o orçamento total é maior que o reconhecimento e que uma consulta sem servidor retorna dentro do limite global.
+6. **Compatibilidade entre fonte e DLL:** antes de copiar o Credential Provider, o instalador verifica se o binário contém o marcador `FACEKIDS_IPC_V1`. Uma DLL antiga é recompilada e revalidada; se continuar incompatível, a instalação é interrompida em vez de registrar um provider incapaz de interpretar a resposta do serviço.
+
+**Limite operacional preservado:** a tarefa `FaceKidsAuthService` inicia no logon do administrador que executou a instalação. Portanto, esta rodada preserva o cenário doméstico já validado — administrador inicia a sessão e depois usa `Win+L` —, mas não declara desbloqueio facial disponível imediatamente apó a reinicialização, antes de qualquer logon interativo. Resolver esse segundo cenário exigiria uma arquitetura específica que consiga acessar a webcam antes do logon, fora desta correção incremental.
+
+Validação local desta rodada: **161 testes Python aprovados**, com 1 teste de sintaxe PowerShell ignorado no Linux e reservado ao job Windows do GitHub Actions. A instalação física e o teste de webcam/Win+L continuam sendo uma etapa separada; não se declara risco operacional zero antes desse ensaio.

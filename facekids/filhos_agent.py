@@ -164,7 +164,11 @@ def trigger_welcome_screen():
 
 
 def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
-    """Solicita identificacao facial ao FaceKidsAuthService via Named Pipe de forma segura e com timeout."""
+    """Consulta o servico facial com um prazo total, inclusive para ReadFile.
+
+    O handle e aberto com I/O sobreposto para que uma resposta travada nunca
+    mantenha indefinidamente a thread de identificacao da sessao.
+    """
     if sys.platform != "win32":
         return None
     kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
@@ -172,28 +176,103 @@ def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
         return None
     pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
 
+    # Sem restype explicito, ctypes assume c_int e pode truncar HANDLE em
+    # Windows 64 bits. Objetos falsos usados nos testes nao expõem restype.
+    for function_name in ("CreateFileW", "CreateEventW"):
+        function = getattr(kernel32, function_name, None)
+        if function is not None and hasattr(function, "restype"):
+            function.restype = wintypes.HANDLE
+
+    deadline = time.monotonic() + max(0.1, float(timeout_seconds))
+
+    def remaining_ms() -> int:
+        return max(0, int((deadline - time.monotonic()) * 1000))
+
     if hasattr(kernel32, "WaitNamedPipeW"):
-        if not kernel32.WaitNamedPipeW(pipe_name, 300):
+        wait_ms = min(300, remaining_ms())
+        if wait_ms <= 0 or not kernel32.WaitNamedPipeW(pipe_name, wait_ms):
             return None
 
+    file_flag_overlapped = 0x40000000
     h_pipe = kernel32.CreateFileW(
         pipe_name,
         0xC0000000,
         0,
         None,
         3,
-        0,
+        file_flag_overlapped,
         None,
     )
-    if h_pipe == -1 or h_pipe == 0xFFFFFFFF:
+    invalid_handle = ctypes.c_void_p(-1).value
+    if not h_pipe or h_pipe == invalid_handle:
         return None
     try:
-        req = b"AUTH_QUERY\n"
-        written = wintypes.DWORD() if wintypes else ctypes.c_ulong()
-        kernel32.WriteFile(h_pipe, req, len(req), ctypes.byref(written), None)
+        class OVERLAPPED(ctypes.Structure):
+            _fields_ = [
+                ("Internal", ctypes.c_void_p),
+                ("InternalHigh", ctypes.c_void_p),
+                ("Offset", wintypes.DWORD),
+                ("OffsetHigh", wintypes.DWORD),
+                ("hEvent", wintypes.HANDLE),
+            ]
+
+        error_io_pending = 997
+        wait_object_0 = 0
+
+        def perform_io(function, buffer, size: int, transferred) -> bool:
+            event = kernel32.CreateEventW(None, True, False, None)
+            if not event:
+                return False
+            overlapped = OVERLAPPED()
+            overlapped.hEvent = event
+            try:
+                ok = function(
+                    h_pipe,
+                    buffer,
+                    size,
+                    ctypes.byref(transferred),
+                    ctypes.byref(overlapped),
+                )
+                if ok:
+                    return True
+                if kernel32.GetLastError() != error_io_pending:
+                    return False
+
+                wait_ms = remaining_ms()
+                if wait_ms <= 0 or kernel32.WaitForSingleObject(event, wait_ms) != wait_object_0:
+                    if hasattr(kernel32, "CancelIoEx"):
+                        kernel32.CancelIoEx(h_pipe, ctypes.byref(overlapped))
+                    else:
+                        kernel32.CancelIo(h_pipe)
+                    # OVERLAPPED e evento devem permanecer validos ate o SO
+                    # concluir o cancelamento. CancelIoEx faz a operacao sair
+                    # com ERROR_OPERATION_ABORTED e sinalizar o evento.
+                    kernel32.GetOverlappedResult(
+                        h_pipe,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        True,
+                    )
+                    return False
+                return bool(
+                    kernel32.GetOverlappedResult(
+                        h_pipe,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        False,
+                    )
+                )
+            finally:
+                kernel32.CloseHandle(event)
+
+        req = ctypes.create_string_buffer(b"AUTH_QUERY\n")
+        written = wintypes.DWORD()
+        if not perform_io(kernel32.WriteFile, req, len(b"AUTH_QUERY\n"), written):
+            return None
+
         buf = ctypes.create_string_buffer(2048)
-        bytes_read = wintypes.DWORD() if wintypes else ctypes.c_ulong()
-        ok = kernel32.ReadFile(h_pipe, buf, 2047, ctypes.byref(bytes_read), None)
+        bytes_read = wintypes.DWORD()
+        ok = perform_io(kernel32.ReadFile, buf, 2047, bytes_read)
         if ok and bytes_read.value > 0:
             resp_str = buf.value.decode("utf-8", errors="ignore").strip()
             return json.loads(resp_str)
@@ -230,7 +309,9 @@ class InSessionFaceIdentifier:
         self.last_query_mono = now
 
         def _worker():
-            res = query_auth_service(timeout_seconds=2.0)
+            # O reconhecimento facial pode usar ate 4,5 s; 6,5 s inclui
+            # conexao e transporte sem jamais bloquear o loop principal.
+            res = query_auth_service(timeout_seconds=6.5)
             with self._lock:
                 self.pending_result = res
 

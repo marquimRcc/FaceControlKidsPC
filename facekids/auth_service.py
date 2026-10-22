@@ -73,6 +73,10 @@ PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
 INVALID_HANDLE_VALUE = -1
 
+# Marcador de versao do contrato IPC. Isto NAO e segredo nem mecanismo
+# criptografico; a confianca local continua dependendo das ACLs do Named Pipe.
+IPC_PROTOCOL_MARKER = "FACEKIDS_IPC_V1"
+
 # Security descriptor SDDL: Full control for SYSTEM (SY) and Admins (BA); Read/Write for Interactive Users (IU)
 SDDL_PERMISSIVE = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)"
 
@@ -380,7 +384,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                 response_payload["child_id"] = data.get("child_id")
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")
-                response_payload["auth_token"] = "FACEKIDS_AUTH_TOKEN_V1"
+                response_payload["protocol_marker"] = IPC_PROTOCOL_MARKER
 
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")

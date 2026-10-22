@@ -15,6 +15,9 @@ struct AuthResult {
 
 class FaceKidsPipeClient {
 public:
+    static constexpr DWORD kRecognitionBudgetMs = 4500;
+    static constexpr DWORD kTotalRequestTimeoutMs = 7000;
+
     static std::string ExtractJsonValue(const std::string& json, const std::string& key) {
         size_t firstBrace = json.find('{');
         size_t lastBrace = json.rfind('}');
@@ -130,11 +133,12 @@ public:
                 return result;
             }
 
-            // 3. Validacao do token criptografico de confianca
-            std::string token = ExtractJsonString(resp, "auth_token");
-            if (token != "FACEKIDS_AUTH_TOKEN_V1") {
+            // 3. Compatibilidade do protocolo. O marcador e publico e NAO e
+            // segredo criptografico; a origem local e limitada pela ACL do pipe.
+            std::string protocolMarker = ExtractJsonString(resp, "protocol_marker");
+            if (protocolMarker != "FACEKIDS_IPC_V1") {
                 result.success = false;
-                result.message = L"Token de autenticacao invalido ou ausente.";
+                result.message = L"Versao do protocolo invalida ou ausente.";
                 return result;
             }
 
@@ -192,10 +196,27 @@ public:
         const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipe";
 
         HANDLE hPipe = INVALID_HANDLE_VALUE;
-        const DWORD timeoutMs = 4000;
-        const DWORD startTime = GetTickCount();
+        const ULONGLONG deadline = GetTickCount64() + kTotalRequestTimeoutMs;
 
-        while (GetTickCount() - startTime < timeoutMs) {
+        auto remainingMs = [&deadline]() -> DWORD {
+            ULONGLONG now = GetTickCount64();
+            if (now >= deadline) return 0;
+            ULONGLONG remaining = deadline - now;
+            return remaining > MAXDWORD ? MAXDWORD : static_cast<DWORD>(remaining);
+        };
+
+        auto finishOverlapped = [&remainingMs](HANDLE pipe, OVERLAPPED& ov, DWORD& transferred) -> bool {
+            DWORD remaining = remainingMs();
+            if (remaining == 0 || WaitForSingleObject(ov.hEvent, remaining) != WAIT_OBJECT_0) {
+                CancelIoEx(pipe, &ov);
+                // OVERLAPPED precisa continuar valido ate o cancelamento terminar.
+                GetOverlappedResult(pipe, &ov, &transferred, TRUE);
+                return false;
+            }
+            return GetOverlappedResult(pipe, &ov, &transferred, FALSE) == TRUE;
+        };
+
+        while (remainingMs() > 0) {
             hPipe = CreateFileW(
                 pipeName,
                 GENERIC_READ | GENERIC_WRITE,
@@ -212,9 +233,13 @@ public:
 
             DWORD err = GetLastError();
             if (err == ERROR_PIPE_BUSY) {
-                WaitNamedPipeW(pipeName, 500);
+                DWORD waitSlice = remainingMs();
+                if (waitSlice > 350) waitSlice = 350;
+                if (waitSlice > 0) WaitNamedPipeW(pipeName, waitSlice);
             } else {
-                Sleep(150);
+                DWORD sleepSlice = remainingMs();
+                if (sleepSlice > 150) sleepSlice = 150;
+                if (sleepSlice > 0) Sleep(sleepSlice);
             }
         }
 
@@ -227,13 +252,20 @@ public:
         DWORD bytesWritten = 0;
         OVERLAPPED ovWrite = {};
         ovWrite.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ovWrite.hEvent) {
+            CloseHandle(hPipe);
+            result.message = L"Falha ao preparar solicitacao de reconhecimento.";
+            return result;
+        }
         BOOL writeOk = WriteFile(hPipe, request, (DWORD)strlen(request), &bytesWritten, &ovWrite);
         if (!writeOk && GetLastError() == ERROR_IO_PENDING) {
-            if (WaitForSingleObject(ovWrite.hEvent, 2000) == WAIT_OBJECT_0) {
-                GetOverlappedResult(hPipe, &ovWrite, &bytesWritten, FALSE);
-            } else {
-                CancelIo(hPipe);
-            }
+            writeOk = finishOverlapped(hPipe, ovWrite, bytesWritten) ? TRUE : FALSE;
+        }
+        if (!writeOk || bytesWritten != strlen(request)) {
+            if (ovWrite.hEvent) CloseHandle(ovWrite.hEvent);
+            CloseHandle(hPipe);
+            result.message = L"Falha ou timeout ao solicitar reconhecimento.";
+            return result;
         }
         if (ovWrite.hEvent) CloseHandle(ovWrite.hEvent);
 
@@ -241,15 +273,14 @@ public:
         DWORD bytesRead = 0;
         OVERLAPPED ovRead = {};
         ovRead.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ovRead.hEvent) {
+            CloseHandle(hPipe);
+            result.message = L"Falha ao preparar resposta do reconhecimento.";
+            return result;
+        }
         BOOL readOk = ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, &ovRead);
         if (!readOk && GetLastError() == ERROR_IO_PENDING) {
-            if (WaitForSingleObject(ovRead.hEvent, 3500) == WAIT_OBJECT_0) {
-                GetOverlappedResult(hPipe, &ovRead, &bytesRead, FALSE);
-                readOk = TRUE;
-            } else {
-                CancelIo(hPipe);
-                readOk = FALSE;
-            }
+            readOk = finishOverlapped(hPipe, ovRead, bytesRead) ? TRUE : FALSE;
         }
         if (ovRead.hEvent) CloseHandle(ovRead.hEvent);
         CloseHandle(hPipe);
