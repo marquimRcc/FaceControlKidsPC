@@ -7,6 +7,9 @@ Ela inclui um controlador protegido por `systemd`, reconhecimento local
 YuNet/SFace, quotas individuais para três crianças na mesma conta, observação
 de bloqueio via `systemd-logind`, cadastro sem salvar imagens e instalador para
 Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
+Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
+[documento de continuidade](docs/CONTINUIDADE-REGATAOS.md), que deve ser
+atualizado e commitado antes de cada pausa planejada.
 
 O controlador Linux já contabiliza e bloqueia a sessão KDE. Uma integração PAM
 opcional consome tickets faciais de uso único, mas permanece desativada até o
