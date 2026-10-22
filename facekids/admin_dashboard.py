@@ -851,13 +851,22 @@ class AdminDashboard(tk.Tk):
         )
         rename_btn.pack(side=tk.LEFT, padx=(12, 0))
 
-        # Botoes de Acao de Foto e Biometria
+        tk.Label(
+            avatar_col,
+            text="Foto da\nboas-vindas",
+            font=("Segoe UI", 8, "bold"),
+            fg=TEXT_SUB,
+            bg=BG_CARD,
+            justify="center",
+        ).pack(pady=(5, 0))
+
+        # A foto visual e a biometria sao controles independentes.
         photo_btn_row = tk.Frame(info_col, bg=BG_CARD)
         photo_btn_row.pack(fill=tk.X, pady=(4, 12))
 
         pick_file_btn = tk.Button(
             photo_btn_row,
-            text="📁 Escolher Foto (Arquivo)",
+            text="🖼️ Escolher Foto da Boas-Vindas",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_CYAN,
@@ -1082,7 +1091,7 @@ class AdminDashboard(tk.Tk):
         canvas.create_text(50, 50, text=initial, font=("Segoe UI", 32, "bold"), fill=ACCENT_CYAN)
 
     def _pick_photo_file(self, child_id: int):
-        """Abre caixa de dialogo para selecionar arquivo de imagem e atualiza avatar e biometria."""
+        """Seleciona apenas a foto visual; a biometria continua independente."""
         file_path = filedialog.askopenfilename(
             title=f"Escolher Foto para o Perfil #{child_id}",
             filetypes=[
@@ -1094,7 +1103,7 @@ class AdminDashboard(tk.Tk):
         if not file_path:
             return
 
-        self.status_text.set("Processando imagem e detectando biometria facial...")
+        self.status_text.set("Processando a foto da tela de boas-vindas...")
         self.update_idletasks()
 
         res = set_child_photo_from_file(
@@ -1102,12 +1111,12 @@ class AdminDashboard(tk.Tk):
             file_path=file_path,
             models_dir=MODELS_DIR if MODELS_DIR.exists() else None,
             store=self.store,
-            update_biometrics=True,
+            update_biometrics=False,
         )
 
         if res.success:
             messagebox.showinfo("Foto Atualizada", res.message, parent=self)
-            self.status_text.set(f"Foto do perfil #{child_id} atualizada com sucesso!")
+            self.status_text.set(f"Foto de boas-vindas do perfil #{child_id} atualizada com sucesso!")
         else:
             messagebox.showerror("Aviso", res.message, parent=self)
             self.status_text.set("Falha ao atualizar foto.")
