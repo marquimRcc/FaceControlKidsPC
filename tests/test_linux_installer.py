@@ -46,6 +46,15 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("wheel", script)
         self.assertIn("--groups video", script)
 
+    def test_linux_ci_checks_scripts_and_integration_modules(self):
+        workflow = (ROOT / ".github/workflows/linux-regataos.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("python-version: \"3.13\"", workflow)
+        self.assertIn("tests.test_linux_runtime", workflow)
+        self.assertIn("scripts/*RegataOS.sh", workflow)
+        self.assertIn('bash -n "$script"', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
