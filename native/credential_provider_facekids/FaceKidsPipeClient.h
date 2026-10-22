@@ -1,5 +1,7 @@
 #pragma once
 #include "common.h"
+#include <cmath>
+#include <ctime>
 
 struct AuthResult {
     bool success = false;
@@ -7,27 +9,225 @@ struct AuthResult {
     std::wstring password;
     std::wstring message;
     std::wstring childName;
+    int childId = 0;
     int remainingSeconds = 0;
 };
 
 class FaceKidsPipeClient {
 public:
+    static constexpr DWORD kRecognitionBudgetMs = 4500;
+    static constexpr DWORD kTotalRequestTimeoutMs = 7000;
+
+    static std::string ExtractJsonValue(const std::string& json, const std::string& key) {
+        size_t firstBrace = json.find('{');
+        size_t lastBrace = json.rfind('}');
+        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+            return "";
+        }
+
+        std::string pattern = "\"" + key + "\"";
+        size_t searchPos = firstBrace;
+        while (searchPos < lastBrace) {
+            size_t pos = json.find(pattern, searchPos);
+            if (pos == std::string::npos || pos >= lastBrace) {
+                return "";
+            }
+
+            // Garante que a chave esta no primeiro nivel hierarquico (depth == 1)
+            int depth = 0;
+            bool insideQuote = false;
+            for (size_t i = firstBrace; i < pos; ++i) {
+                if (json[i] == '\\' && insideQuote && i + 1 < pos) {
+                    i++;
+                    continue;
+                }
+                if (json[i] == '"') insideQuote = !insideQuote;
+                if (!insideQuote) {
+                    if (json[i] == '{') depth++;
+                    else if (json[i] == '}') depth--;
+                }
+            }
+
+            pos += pattern.length();
+            while (pos < lastBrace && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
+                pos++;
+            }
+            if (pos >= lastBrace) {
+                searchPos = pos;
+                continue;
+            }
+
+            if (depth == 1) {
+                if (json[pos] == '"') {
+                    // Valor textual entre aspas
+                    pos++; // pula aspa de abertura
+                    size_t endPos = json.find('"', pos);
+                    if (endPos == std::string::npos || endPos > lastBrace) return "";
+                    return json.substr(pos, endPos - pos);
+                } else {
+                    // Valor numerico ou literal
+                    size_t endPos = pos;
+                    while (endPos < lastBrace && json[endPos] != ',' && json[endPos] != '}' && 
+                           json[endPos] != ' ' && json[endPos] != '\r' && json[endPos] != '\n') {
+                        endPos++;
+                    }
+                    return json.substr(pos, endPos - pos);
+                }
+            }
+            searchPos = pos + 1;
+        }
+        return "";
+    }
+
+    static std::string ExtractJsonString(const std::string& json, const std::string& key) {
+        return ExtractJsonValue(json, key);
+    }
+
+    static double ExtractJsonNumber(const std::string& json, const std::string& key) {
+        std::string val = ExtractJsonValue(json, key);
+        if (val.empty()) return 0.0;
+        try {
+            return std::stod(val);
+        } catch (...) {
+            return 0.0;
+        }
+    }
+
+    static AuthResult ParseResponse(const std::string& resp) {
+        AuthResult result;
+        if (resp.empty()) {
+            result.message = L"Sem resposta do servico.";
+            return result;
+        }
+
+        // Valida delimitadores JSON basicos
+        size_t firstBrace = resp.find('{');
+        size_t lastBrace = resp.rfind('}');
+        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+            result.message = L"Resposta em formato JSON invalido.";
+            return result;
+        }
+
+        std::string status = ExtractJsonString(resp, "status");
+
+        if (status == "ALLOW") {
+            // 1. Validacao estrita da conta destino (obrigatoriamente Filhos)
+            std::string user = ExtractJsonString(resp, "user");
+            if (user.empty() || user != "Filhos") {
+                result.success = false;
+                result.message = L"Usuario nao autorizado para desbloqueio facial.";
+                return result;
+            }
+
+            // 2. Validacao do child_id obrigatorio e numerico positivo
+            std::string cidStr = ExtractJsonString(resp, "child_id");
+            int cid = 0;
+            try {
+                cid = cidStr.empty() ? 0 : std::stoi(cidStr);
+            } catch (...) {
+                cid = 0;
+            }
+            if (cid <= 0) {
+                result.success = false;
+                result.message = L"Identificacao invalida: ID da crianca ausente ou invalido.";
+                return result;
+            }
+
+            // 3. Compatibilidade do protocolo. O marcador e publico e NAO e
+            // segredo criptografico; a origem local e limitada pela ACL do pipe.
+            std::string protocolMarker = ExtractJsonString(resp, "protocol_marker");
+            if (protocolMarker != "FACEKIDS_IPC_V1") {
+                result.success = false;
+                result.message = L"Versao do protocolo invalida ou ausente.";
+                return result;
+            }
+
+            // 4. Validacao de frescor temporal da resposta (janela estrita de 15 segundos)
+            double ts = ExtractJsonNumber(resp, "timestamp");
+            time_t now = time(nullptr);
+            if (ts <= 0.0 || std::abs((double)now - ts) > 15.0) {
+                result.success = false;
+                result.message = L"Autorizacao expirada ou timestamp fora do intervalo valido.";
+                return result;
+            }
+
+            // Autorizacao valida e comprovada!
+            result.success = true;
+            result.user = L"Filhos";
+            result.password = L"1";
+            result.childId = cid;
+
+            std::string n = ExtractJsonString(resp, "child_name");
+            if (!n.empty()) {
+                result.childName = std::wstring(n.begin(), n.end());
+            } else {
+                result.childName = L"Crianca " + std::to_wstring(cid);
+            }
+            result.remainingSeconds = (int)ExtractJsonNumber(resp, "remaining");
+            result.message = L"Rosto reconhecido! Desbloqueando...";
+        } else if (status == "DENY_QUOTA") {
+            result.success = false;
+            result.message = L"Tempo diario esgotado para esta crianca.";
+        } else if (status == "DENY_CURFEW") {
+            result.success = false;
+            result.message = L"Horario de uso nao permitido para esta crianca.";
+        } else if (status == "DENY_UNKNOWN") {
+            result.success = false;
+            result.message = L"Rosto nao reconhecido. Aproxime-se e tente novamente.";
+        } else if (status == "DENY_NO_ENROLLMENT") {
+            result.success = false;
+            result.message = L"Nenhum rosto cadastrado no sistema.";
+        } else if (status == "DENY_NO_FACE") {
+            result.success = false;
+            result.message = L"Nenhum rosto visivel para a camera.";
+        } else if (status == "ERROR_CAMERA") {
+            result.success = false;
+            result.message = L"Camera indisponivel no momento.";
+        } else {
+            result.success = false;
+            result.message = L"Identificando... Olhe para a webcam.";
+        }
+
+        return result;
+    }
+
     static AuthResult RequestAuthentication() {
         AuthResult result;
+#ifdef FACEKIDS_RETRY_HOST_TEST
+        const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipeRetryHost";
+#else
         const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipe";
+#endif
 
         HANDLE hPipe = INVALID_HANDLE_VALUE;
-        const DWORD timeoutMs = 4000;
-        const DWORD startTime = GetTickCount();
+        const ULONGLONG deadline = GetTickCount64() + kTotalRequestTimeoutMs;
 
-        while (GetTickCount() - startTime < timeoutMs) {
+        auto remainingMs = [&deadline]() -> DWORD {
+            ULONGLONG now = GetTickCount64();
+            if (now >= deadline) return 0;
+            ULONGLONG remaining = deadline - now;
+            return remaining > MAXDWORD ? MAXDWORD : static_cast<DWORD>(remaining);
+        };
+
+        auto finishOverlapped = [&remainingMs](HANDLE pipe, OVERLAPPED& ov, DWORD& transferred) -> bool {
+            DWORD remaining = remainingMs();
+            if (remaining == 0 || WaitForSingleObject(ov.hEvent, remaining) != WAIT_OBJECT_0) {
+                CancelIoEx(pipe, &ov);
+                // OVERLAPPED precisa continuar valido ate o cancelamento terminar.
+                GetOverlappedResult(pipe, &ov, &transferred, TRUE);
+                return false;
+            }
+            return GetOverlappedResult(pipe, &ov, &transferred, FALSE) == TRUE;
+        };
+
+        while (remainingMs() > 0) {
             hPipe = CreateFileW(
                 pipeName,
                 GENERIC_READ | GENERIC_WRITE,
                 0,
                 nullptr,
                 OPEN_EXISTING,
-                0,
+                FILE_FLAG_OVERLAPPED,
                 nullptr
             );
 
@@ -37,9 +237,13 @@ public:
 
             DWORD err = GetLastError();
             if (err == ERROR_PIPE_BUSY) {
-                WaitNamedPipeW(pipeName, 500);
+                DWORD waitSlice = remainingMs();
+                if (waitSlice > 350) waitSlice = 350;
+                if (waitSlice > 0) WaitNamedPipeW(pipeName, waitSlice);
             } else {
-                Sleep(150);
+                DWORD sleepSlice = remainingMs();
+                if (sleepSlice > 150) sleepSlice = 150;
+                if (sleepSlice > 0) Sleep(sleepSlice);
             }
         }
 
@@ -50,51 +254,47 @@ public:
 
         const char* request = "AUTH_QUERY\n";
         DWORD bytesWritten = 0;
-        WriteFile(hPipe, request, (DWORD)strlen(request), &bytesWritten, nullptr);
+        OVERLAPPED ovWrite = {};
+        ovWrite.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ovWrite.hEvent) {
+            CloseHandle(hPipe);
+            result.message = L"Falha ao preparar solicitacao de reconhecimento.";
+            return result;
+        }
+        BOOL writeOk = WriteFile(hPipe, request, (DWORD)strlen(request), &bytesWritten, &ovWrite);
+        if (!writeOk && GetLastError() == ERROR_IO_PENDING) {
+            writeOk = finishOverlapped(hPipe, ovWrite, bytesWritten) ? TRUE : FALSE;
+        }
+        if (!writeOk || bytesWritten != strlen(request)) {
+            if (ovWrite.hEvent) CloseHandle(ovWrite.hEvent);
+            CloseHandle(hPipe);
+            result.message = L"Falha ou timeout ao solicitar reconhecimento.";
+            return result;
+        }
+        if (ovWrite.hEvent) CloseHandle(ovWrite.hEvent);
 
         char buffer[2048] = {};
         DWORD bytesRead = 0;
-        BOOL readOk = ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr);
+        OVERLAPPED ovRead = {};
+        ovRead.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ovRead.hEvent) {
+            CloseHandle(hPipe);
+            result.message = L"Falha ao preparar resposta do reconhecimento.";
+            return result;
+        }
+        BOOL readOk = ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, &ovRead);
+        if (!readOk && GetLastError() == ERROR_IO_PENDING) {
+            readOk = finishOverlapped(hPipe, ovRead, bytesRead) ? TRUE : FALSE;
+        }
+        if (ovRead.hEvent) CloseHandle(ovRead.hEvent);
         CloseHandle(hPipe);
 
         if (!readOk || bytesRead == 0) {
-            result.message = L"Sem resposta do servico.";
+            result.message = L"Sem resposta ou timeout do servico.";
             return result;
         }
 
         buffer[bytesRead] = '\0';
-        std::string resp(buffer);
-
-        if (resp.find("\"ALLOW\"") != std::string::npos) {
-            result.success = true;
-            result.user = L"Filhos";
-            result.password = L"1";
-
-            size_t namePos = resp.find("\"child_name\": \"");
-            if (namePos != std::string::npos) {
-                namePos += 15;
-                size_t endPos = resp.find("\"", namePos);
-                if (endPos != std::string::npos) {
-                    std::string n = resp.substr(namePos, endPos - namePos);
-                    result.childName = std::wstring(n.begin(), n.end());
-                }
-            }
-
-            result.message = L"Rosto reconhecido! Desbloqueando...";
-        } else if (resp.find("DENY_QUOTA") != std::string::npos) {
-            result.success = false;
-            result.message = L"Tempo diario esgotado para esta crianca.";
-        } else if (resp.find("DENY_UNKNOWN") != std::string::npos) {
-            result.success = false;
-            result.message = L"Rosto nao reconhecido. Aproxime-se e tente novamente.";
-        } else if (resp.find("DENY_NO_FACE") != std::string::npos) {
-            result.success = false;
-            result.message = L"Nenhum rosto visivel para a camera.";
-        } else {
-            result.success = false;
-            result.message = L"Identificando... Olhe para a webcam.";
-        }
-
-        return result;
+        return ParseResponse(std::string(buffer));
     }
 };

@@ -17,27 +17,38 @@ $dllSource = Join-Path $root 'native\credential_provider_facekids\FaceKidsCreden
 $programDataDir = 'C:\ProgramData\FaceKids'
 $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
+$requiredProtocolMarker = 'FACEKIDS_IPC_V1'
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "     FaceControlKidsPC - Instalador de Desbloqueio Facial" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 
-# 1. Verificar se a DLL existe (compilar se necessario)
-if (-not (Test-Path -LiteralPath $dllSource)) {
-    Write-Host "Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Yellow
-    $gpp = 'C:\Users\MarcosMiniPC\w64devkit\w64devkit\bin\g++.exe'
-    if (-not (Test-Path $gpp)) {
-        throw "Compilador g++ nao encontrado em $gpp"
-    }
-    Push-Location (Join-Path $root 'native\credential_provider_facekids')
+# 1. Verificar se a DLL existe e corresponde ao contrato IPC atual.
+# O repositorio distribui uma DLL pronta, mas nunca devemos instalar um binario
+# antigo junto com um auth_service novo e incompatível.
+$dllNeedsBuild = -not (Test-Path -LiteralPath $dllSource)
+if (-not $dllNeedsBuild) {
     try {
-        & $gpp -shared -std=c++17 -O2 -DINITGUID `
-          dllmain.cpp FaceKidsProvider.cpp FaceKidsCredential.cpp FaceKidsProvider.def `
-          -o FaceKidsCredentialProvider.dll `
-          -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
-        if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
-    } finally {
-        Pop-Location
+        $dllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
+        $dllNeedsBuild = -not $dllAscii.Contains($requiredProtocolMarker)
+        $dllNeedsBuild = $dllNeedsBuild -or -not $dllAscii.Contains('FACEKIDS_BOOT_RETRY_V1')
+    } catch {
+        $dllNeedsBuild = $true
+    }
+}
+
+if ($dllNeedsBuild) {
+    Write-Host "Compilando FaceKidsCredentialProvider.dll..." -ForegroundColor Yellow
+    $buildScript = Join-Path $root 'native\credential_provider_facekids\build.ps1'
+    & powershell -ExecutionPolicy Bypass -File $buildScript
+    if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao da DLL." }
+
+    $rebuiltDllAscii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllSource))
+    if (-not $rebuiltDllAscii.Contains($requiredProtocolMarker)) {
+        throw "DLL compilada nao contem o marcador de protocolo $requiredProtocolMarker. Instalacao interrompida."
+    }
+    if (-not $rebuiltDllAscii.Contains('FACEKIDS_BOOT_RETRY_V1')) {
+        throw 'DLL sem repeticao automatica do boot. Instalacao interrompida.'
     }
 }
 
@@ -86,7 +97,41 @@ try {
     Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "FaceKidsAuthService" -Force -ErrorAction SilentlyContinue
 } catch {}
 
-# Instalar script de inicializacao exclusivamente no perfil do Administrador (MarcosMiniPC)
+# Criar script de execucao do servico e tarefa vinculada ao usuario/sessao
+# interativa que executa este instalador. Isso preserva acesso DirectShow a
+# webcam e evita a ambiguidade de /sc onlogon sem principal explicito.
+$serviceBat = "C:\ProgramData\FaceKids\iniciar-auth-service.bat"
+$serviceContent = @"
+@echo off
+cd /d "$root"
+set PYTHONPATH=$root
+start "" "$pythonw" -m facekids.auth_service
+"@
+Set-Content -Path $serviceBat -Value $serviceContent -Encoding ASCII -Force
+
+try {
+    $authServiceUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $authAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$serviceBat`""
+    $authTrigger = New-ScheduledTaskTrigger -AtLogOn -User $authServiceUser
+    $authPrincipal = New-ScheduledTaskPrincipal -UserId $authServiceUser -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $authAction -Trigger $authTrigger -Principal $authPrincipal -Force | Out-Null
+
+    $registeredTask = Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction Stop
+    $expectedSid = ([Security.Principal.NTAccount]$authServiceUser).Translate([Security.Principal.SecurityIdentifier]).Value
+    $registeredSid = ([Security.Principal.NTAccount]$registeredTask.Principal.UserId).Translate([Security.Principal.SecurityIdentifier]).Value
+    # Get-ScheduledTask may expose the CIM enum as its name or numeric value,
+    # depending on the Windows/PowerShell version and display language.
+    $registeredLogonType = [string]$registeredTask.Principal.LogonType
+    if ($registeredSid -ne $expectedSid -or
+        $registeredLogonType -notin @('Interactive', 'InteractiveToken', '3')) {
+        throw "A tarefa FaceKidsAuthService nao ficou vinculada ao usuario/sessao interativa esperada."
+    }
+    Write-Host "Tarefa FaceKidsAuthService vinculada a sessao interativa de $authServiceUser (privilegios elevados)." -ForegroundColor Green
+} catch {
+    throw "Falha ao configurar FaceKidsAuthService na sessao interativa: $($_.Exception.Message)"
+}
+
+# Configurar script VBS de contingencia no Startup
 $userStartup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
@@ -97,7 +142,7 @@ WshShell.Run """$pythonw"" -m facekids.auth_service", 0, False
 try {
     $userVbs = Join-Path $userStartup 'FaceKidsAuthService.vbs'
     Set-Content -Path $userVbs -Value $vbsContent -Encoding ASCII -Force
-    Write-Host "Inicializacao automatica configurada para o administrador ($userVbs)." -ForegroundColor Green
+    Write-Host "Inicializacao de contingencia configurada ($userVbs)." -ForegroundColor Green
 } catch {
     Write-Host "Aviso ao salvar no Startup do usuario: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
@@ -114,17 +159,18 @@ start "" "$pythonw" -m facekids.filhos_agent
 "@
 Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
 
-# Agendar no Logon da conta Filhos
+# Agendar exclusivamente no Logon da conta Filhos de forma interativa (/it)
 try {
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c `"$agentBat`"" /sc onlogon /f 2>&1 | Out-Null
-    Write-Host "Agente dos Filhos agendado com sucesso no Windows!" -ForegroundColor Green
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /ru "Filhos" /rp "1" /it /f 2>&1 | Out-Null
+    Write-Host "Agente dos Filhos agendado com sucesso vinculado exclusivamente a conta 'Filhos' (/it)." -ForegroundColor Green
 } catch {
-    Write-Host "Aviso ao agendar tarefa dos Filhos: $($_.Exception.Message)" -ForegroundColor DarkGray
+    Write-Host "Aviso ao agendar tarefa vinculada com senha: $($_.Exception.Message)" -ForegroundColor DarkGray
+    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /f 2>&1 | Out-Null
 }
 
 # 7. Iniciar os servicos em segundo plano
 Write-Host "Iniciando servicos em segundo plano..." -ForegroundColor Yellow
-& taskkill.exe /f /im pythonw.exe 2>$null
+Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" | Where-Object { $_.CommandLine -like "*auth_service*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1

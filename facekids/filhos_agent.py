@@ -26,10 +26,16 @@ import time
 import tkinter as tk
 from typing import Optional, Tuple
 
+if sys.platform == "win32":
+    from ctypes import wintypes
+else:
+    wintypes = None
+
 from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .windows_pipe_api import configure_kernel32
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -158,18 +164,178 @@ def trigger_welcome_screen():
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
 
-def read_last_unlock_child() -> Tuple[Optional[int], str]:
-    """Le as informacoes do ultimo filho identificado."""
+def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
+    """Consulta o servico facial com um prazo total, inclusive para ReadFile.
+
+    O handle e aberto com I/O sobreposto para que uma resposta travada nunca
+    mantenha indefinidamente a thread de identificacao da sessao.
+    """
+    if sys.platform != "win32":
+        return None
+    kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+    if kernel32 is None:
+        return None
+    pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
+
+    configure_kernel32(kernel32)
+
+    deadline = time.monotonic() + max(0.1, float(timeout_seconds))
+
+    def remaining_ms() -> int:
+        return max(0, int((deadline - time.monotonic()) * 1000))
+
+    if hasattr(kernel32, "WaitNamedPipeW"):
+        wait_ms = min(300, remaining_ms())
+        if wait_ms <= 0 or not kernel32.WaitNamedPipeW(pipe_name, wait_ms):
+            return None
+
+    file_flag_overlapped = 0x40000000
+    h_pipe = kernel32.CreateFileW(
+        pipe_name,
+        0xC0000000,
+        0,
+        None,
+        3,
+        file_flag_overlapped,
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if not h_pipe or h_pipe == invalid_handle:
+        return None
+    try:
+        class OVERLAPPED(ctypes.Structure):
+            _fields_ = [
+                ("Internal", ctypes.c_void_p),
+                ("InternalHigh", ctypes.c_void_p),
+                ("Offset", wintypes.DWORD),
+                ("OffsetHigh", wintypes.DWORD),
+                ("hEvent", wintypes.HANDLE),
+            ]
+
+        error_io_pending = 997
+        wait_object_0 = 0
+
+        def perform_io(function, buffer, size: int, transferred) -> bool:
+            event = kernel32.CreateEventW(None, True, False, None)
+            if not event:
+                return False
+            overlapped = OVERLAPPED()
+            overlapped.hEvent = event
+            try:
+                ok = function(
+                    h_pipe,
+                    buffer,
+                    size,
+                    ctypes.byref(transferred),
+                    ctypes.byref(overlapped),
+                )
+                if ok:
+                    return True
+                if kernel32.GetLastError() != error_io_pending:
+                    return False
+
+                wait_ms = remaining_ms()
+                if wait_ms <= 0 or kernel32.WaitForSingleObject(event, wait_ms) != wait_object_0:
+                    if hasattr(kernel32, "CancelIoEx"):
+                        kernel32.CancelIoEx(h_pipe, ctypes.byref(overlapped))
+                    else:
+                        kernel32.CancelIo(h_pipe)
+                    # OVERLAPPED e evento devem permanecer validos ate o SO
+                    # concluir o cancelamento. CancelIoEx faz a operacao sair
+                    # com ERROR_OPERATION_ABORTED e sinalizar o evento.
+                    kernel32.GetOverlappedResult(
+                        h_pipe,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        True,
+                    )
+                    return False
+                return bool(
+                    kernel32.GetOverlappedResult(
+                        h_pipe,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        False,
+                    )
+                )
+            finally:
+                kernel32.CloseHandle(event)
+
+        req = ctypes.create_string_buffer(b"AUTH_QUERY\n")
+        written = wintypes.DWORD()
+        if not perform_io(kernel32.WriteFile, req, len(b"AUTH_QUERY\n"), written):
+            return None
+
+        buf = ctypes.create_string_buffer(2048)
+        bytes_read = wintypes.DWORD()
+        ok = perform_io(kernel32.ReadFile, buf, 2047, bytes_read)
+        if ok and bytes_read.value > 0:
+            resp_str = buf.value.decode("utf-8", errors="ignore").strip()
+            return json.loads(resp_str)
+    except Exception as e:
+        logger.debug("Falha na consulta ao pipe em sessao: %s", e)
+    finally:
+        kernel32.CloseHandle(h_pipe)
+    return None
+
+
+class InSessionFaceIdentifier:
+    """Realiza consultas assincronas ao servico facial sem bloquear o loop de quota."""
+
+    def __init__(self, interval_seconds: float = 15.0):
+        self.interval = interval_seconds
+        self.last_query_mono = 0.0
+        self.thread: Optional[threading.Thread] = None
+        self.pending_result: Optional[dict] = None
+        self._lock = threading.Lock()
+
+    def check_result(self) -> Optional[dict]:
+        with self._lock:
+            res = self.pending_result
+            self.pending_result = None
+            return res
+
+    def trigger_if_due(self):
+        now = time.monotonic()
+        if (now - self.last_query_mono) < self.interval:
+            return
+        if self.thread and self.thread.is_alive():
+            return
+
+        self.last_query_mono = now
+
+        def _worker():
+            # O reconhecimento facial pode usar ate 4,5 s; 6,5 s inclui
+            # conexao e transporte sem jamais bloquear o loop principal.
+            res = query_auth_service(timeout_seconds=6.5)
+            with self._lock:
+                self.pending_result = res
+
+        self.thread = threading.Thread(target=_worker, daemon=True)
+        self.thread.start()
+
+
+def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
+    """Le as informacoes do ultimo filho identificado se recente e de hoje."""
     if LAST_UNLOCK_FILE.exists():
         try:
             data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            cid = data.get("child_id")
-            cname = data.get("child_name", f"Crianca {cid}")
-            if cid is not None:
-                return int(cid), str(cname)
+            ts = float(data.get("timestamp", 0))
+            is_fresh = True
+            if ts > 0:
+                if (time.time() - ts) >= 600:
+                    is_fresh = False
+                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
+                    is_fresh = False
+
+            if is_fresh:
+                cid = data.get("child_id")
+                cname = data.get("child_name", f"Crianca {cid}")
+                if cid is not None:
+                    return int(cid), str(cname), ts
         except Exception as e:
             logger.warning("Erro ao ler last_unlock.json: %s", e)
-    return None, ""
+    return None, "", 0.0
 
 
 class QuotaTracker:
@@ -282,21 +448,29 @@ def run_agent():
     store = Storage(db_path)
     tracker = QuotaTracker(store)
 
-    # 1. Exibe a tela de boas-vindas inicial no desktop
-    time.sleep(1.0)
-    trigger_welcome_screen()
-
-    last_seen_ts = 0.0
-    cid, cname = read_last_unlock_child()
+    cid, cname, unlock_ts = read_last_unlock_child()
     if cid is not None:
+        last_seen_ts = unlock_ts
         tracker.switch_child(cid, cname)
+        time.sleep(1.0)
+        trigger_welcome_screen()
     else:
-        # Fallback: pega o primeiro perfil de crianca do banco
-        people = store.people()
-        if people:
-            tracker.switch_child(people[0][0], people[0][1])
+        # Quando nao ha desbloqueio recente, inicializa com time.time() para que
+        # eventos antigos NUNCA sejam aceitos no loop subsequente
+        last_seen_ts = time.time()
+        tracker.current_child_id = None
+        tracker.current_child_name = "Nao identificado"
+        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
+        show_toast(
+            "👋 FaceControl Kids",
+            "Entrada por PIN detectada. Olhe para a webcam para carregar seu tempo de tela.",
+            icon="👤",
+            color="#89DCEB",
+            duration_ms=6000,
+        )
 
     last_active_time = time.monotonic()
+    identifier = InSessionFaceIdentifier(interval_seconds=15.0)
     today = date.today().isoformat()
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
@@ -314,7 +488,13 @@ def run_agent():
                 try:
                     data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
                     current_ts = float(data.get("timestamp", 0.0))
-                    if current_ts > last_seen_ts:
+                    # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
+                    is_fresh = (
+                        (current_ts > last_seen_ts)
+                        and ((time.time() - current_ts) < 600.0)
+                        and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())
+                    )
+                    if is_fresh:
                         last_seen_ts = current_ts
                         new_cid = data.get("child_id")
                         new_cname = data.get("child_name", f"Crianca {new_cid}")
@@ -325,12 +505,37 @@ def run_agent():
                             logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
                             time.sleep(0.5)
                             trigger_welcome_screen()
+                    elif current_ts > last_seen_ts:
+                        # Evento expirado: avanca ponteiro sem comutar filho
+                        last_seen_ts = current_ts
+                        logger.debug("Evento facial ignorado por estar expirado (ts=%.1f)", current_ts)
                 except Exception as e:
                     logger.debug("Erro ao ler unlock timestamp: %s", e)
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
 
+            # Se em modo UNIDENTIFIED e sessao ativa, verifica resultado e agenda identificacao em background
+            if tracker.current_child_id is None and state is SessionState.ACTIVE:
+                pipe_resp = identifier.check_result()
+                if pipe_resp:
+                    status = pipe_resp.get("status")
+                    if status == "ALLOW":
+                        cid = pipe_resp.get("child_id") or pipe_resp.get("data", {}).get("child_id")
+                        cname = pipe_resp.get("child_name") or pipe_resp.get("data", {}).get("child_name", f"Crianca {cid}")
+                        if cid is not None:
+                            logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
+                            tracker.switch_child(int(cid), str(cname))
+                            last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
+                            trigger_welcome_screen()
+                    elif status in ("DENY_QUOTA", "DENY_CURFEW"):
+                        msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
+                        show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
+                        time.sleep(1.2)
+                        lock_current_session()
+
+                if tracker.current_child_id is None:
+                    identifier.trigger_if_due()
             # Checar se horario de dormir / curfew esta ativo
             is_curfew, curfew_msg = store.is_curfew_active()
             if is_curfew and state is SessionState.ACTIVE:

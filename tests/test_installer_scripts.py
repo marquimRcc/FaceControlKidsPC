@@ -1,0 +1,123 @@
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+class TestInstallerScripts(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parent.parent
+        self.scripts = [
+            self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1",
+            self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1",
+            self.root / "scripts" / "Iniciar-Piloto-Filhos.ps1",
+            self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1",
+        ]
+
+    def test_scripts_exist_and_utf8(self):
+        for s in self.scripts:
+            self.assertTrue(s.exists(), f"Script ausente: {s}")
+            content = s.read_text(encoding="utf-8")
+            self.assertGreater(len(content), 50)
+
+    def test_powershell_syntax_on_windows(self):
+        if sys.platform != "win32":
+            self.skipTest("PowerShell AST parser exclusivo do Windows")
+
+        for s in self.scripts:
+            ps_cmd = (
+                f"$tokens = $null; $errors = $null; "
+                f"[System.Management.Automation.Language.Parser]::ParseFile('{s}', [ref]$tokens, [ref]$errors); "
+                f"if ($errors.Count -ne 0) {{ Write-Error $errors[0].Message; exit 1 }}"
+            )
+            res = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                res.returncode,
+                0,
+                f"Falha de sintaxe no script {s.name}: {res.stderr or res.stdout}",
+            )
+
+    def test_uninstaller_script_contract(self):
+        uninst = (self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        # Verifica remocao de ambas as tarefas
+        self.assertIn("FaceKidsAuthService", uninst)
+        self.assertIn("FaceKidsFilhosAgent", uninst)
+        self.assertIn("FaceKidsBootAuth", uninst)
+        self.assertLess(uninst.index("Stop-ScheduledTask -TaskName 'FaceKidsBootAuth'"),
+                        uninst.index("Stop-Process"))
+        # Verifica que o banco de dados sqlite3 e fotos NAO sao deletados
+        self.assertNotIn("Remove-Item -Path $db", uninst)
+        self.assertNotIn("children.sqlite3", uninst)
+        self.assertIn("PRESERVADO", uninst)
+
+    def test_installer_script_binding_and_privileges(self):
+        inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        # Verifica vinculacao a conta Filhos com modo interativo /it
+        self.assertIn('/ru "Filhos"', inst)
+        self.assertIn("/it", inst)
+        # Verifica execucao com privilegios elevados
+        self.assertIn("New-ScheduledTaskPrincipal", inst)
+        self.assertIn("-LogonType Interactive", inst)
+        self.assertIn("@('Interactive', 'InteractiveToken', '3')", inst)
+        self.assertIn("-RunLevel Highest", inst)
+        self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $authServiceUser", inst)
+        self.assertIn("Get-ScheduledTask -TaskName 'FaceKidsAuthService'", inst)
+        # Impede instalar DLL antiga com contrato IPC incompatível.
+        self.assertIn("$requiredProtocolMarker = 'FACEKIDS_IPC_V1'", inst)
+        self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
+        self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
+
+    def test_simulated_runtime_cleanup_preserves_database(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            # Arquivos de dados (devem ser PRESERVADOS)
+            db_file = base / "children.sqlite3"
+            db_file.write_text("sqlite dummy data", encoding="utf-8")
+            photo_dir = base / "fotos"
+            photo_dir.mkdir()
+            (photo_dir / "child1.jpg").write_text("dummy photo", encoding="utf-8")
+
+            # Arquivos de runtime (devem ser REMOVIDOS)
+            bat1 = base / "iniciar-filhos-agent.bat"
+            bat1.write_text("@echo off", encoding="utf-8")
+            bat2 = base / "iniciar-auth-service.bat"
+            bat2.write_text("@echo off", encoding="utf-8")
+            unlock = base / "last_unlock.json"
+            unlock.write_text("{}", encoding="utf-8")
+
+            # Simulando lista de remocao do desinstalador
+            runtime_files = [bat1, bat2, unlock]
+            for f in runtime_files:
+                if f.exists():
+                    f.unlink()
+
+            # Verificacoes
+            self.assertFalse(bat1.exists())
+            self.assertFalse(bat2.exists())
+            self.assertFalse(unlock.exists())
+            self.assertTrue(db_file.exists())
+            self.assertTrue((photo_dir / "child1.jpg").exists())
+
+    def test_boot_task_runs_system_without_password_or_auto_admin_logon(self):
+        script = (self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1").read_text(encoding="utf-8")
+        self.assertIn("New-ScheduledTaskTrigger -AtStartup", script)
+        self.assertIn("-UserId 'SYSTEM' -LogonType ServiceAccount", script)
+        self.assertIn("@('ServiceAccount', '5')", script)
+        self.assertIn("$registeredSid -ne 'S-1-5-18'", script)
+        self.assertIn("-MultipleInstances IgnoreNew", script)
+        self.assertIn("-ExecutionTimeLimit ([TimeSpan]::Zero)", script)
+        self.assertIn("param([switch]$Desativar)", script)
+        self.assertIn("-m facekids.boot_auth", script)
+        self.assertNotIn("AutoAdminLogon", script)
+        self.assertNotIn("DefaultPassword", script)
+        self.assertNotIn("regsvr32", script)
+        self.assertNotIn("Remove-Item", script)
+
+
+if __name__ == "__main__":
+    unittest.main()

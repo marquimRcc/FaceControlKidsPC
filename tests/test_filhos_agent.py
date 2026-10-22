@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
+import ctypes
+import types
 from unittest.mock import patch, MagicMock
 
 from facekids.filhos_agent import QuotaTracker, read_last_unlock_child
@@ -79,13 +82,129 @@ class TestFilhosAgent(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             unlock_file = Path(td) / "last_unlock.json"
             unlock_file.write_text(
-                json.dumps({"child_id": 2, "child_name": "Crianca 2"}),
+                json.dumps({"child_id": 2, "child_name": "Crianca 2", "timestamp": time.time()}),
                 encoding="utf-8",
             )
             with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
-                cid, cname = read_last_unlock_child()
+                cid, cname, ts = read_last_unlock_child()
                 self.assertEqual(cid, 2)
                 self.assertEqual(cname, "Crianca 2")
+                self.assertGreater(ts, 0)
+
+    def test_read_last_unlock_child_stale_ignored(self):
+        with tempfile.TemporaryDirectory() as td:
+            unlock_file = Path(td) / "last_unlock.json"
+            unlock_file.write_text(
+                json.dumps({
+                    "child_id": 2,
+                    "child_name": "Crianca 2",
+                    "timestamp": time.time() - 1200,
+                }),
+                encoding="utf-8",
+            )
+            with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
+                cid, cname, ts = read_last_unlock_child()
+                self.assertIsNone(cid)
+                self.assertEqual(cname, "")
+                self.assertEqual(ts, 0.0)
+
+    def test_stale_event_in_loop_does_not_switch_child(self):
+        tracker = QuotaTracker(self.store)
+        tracker.current_child_id = None
+        last_seen_ts = time.time()
+
+        # Simulando evento antigo (2 horas atras)
+        stale_data = {"child_id": 2, "child_name": "Crianca 2", "timestamp": time.time() - 7200}
+        current_ts = float(stale_data.get("timestamp", 0.0))
+
+        # A condicao de frescor estreita deve rejeitar
+        is_fresh = (
+            (current_ts > last_seen_ts)
+            and ((time.time() - current_ts) < 600.0)
+        )
+        self.assertFalse(is_fresh)
+        # QuotaTracker deve permanecer sem crianca atribuida
+        self.assertIsNone(tracker.current_child_id)
+
+    def test_unidentified_child_state_safe(self):
+        tracker = QuotaTracker(self.store)
+        self.assertIsNone(tracker.current_child_id)
+        # Notifications should use fallback name without crashing
+        with patch("facekids.filhos_agent.show_toast"):
+            tracker.check_notifications_and_lock(500)
+            self.assertTrue(tracker.warned_10m)
+
+    def test_in_session_face_identifier_async(self):
+        from facekids.filhos_agent import InSessionFaceIdentifier
+        identifier = InSessionFaceIdentifier(interval_seconds=0.1)
+        self.assertIsNone(identifier.check_result())
+
+        # Mock query_auth_service
+        fake_payload = {"status": "ALLOW", "child_id": 2, "child_name": "Crianca 2"}
+        with patch("facekids.filhos_agent.query_auth_service", return_value=fake_payload):
+            identifier.trigger_if_due()
+            # Aguarda a thread de background concluir
+            if identifier.thread:
+                identifier.thread.join(timeout=1.0)
+            res = identifier.check_result()
+            self.assertIsNotNone(res)
+            self.assertEqual(res["child_id"], 2)
+            # Apos consumir, deve retornar None
+            self.assertIsNone(identifier.check_result())
+
+    def test_query_auth_service_cancels_stalled_overlapped_read(self):
+        import facekids.filhos_agent as filhos_agent
+        from ctypes import wintypes as real_wintypes
+
+        class FakeKernel32:
+            def __init__(self):
+                self.cancelled = False
+                self.closed = []
+
+            def WaitNamedPipeW(self, _name, _timeout):
+                return True
+
+            def CreateFileW(self, *_args):
+                return 123
+
+            def CreateEventW(self, *_args):
+                return 456
+
+            def WriteFile(self, _handle, _buffer, size, transferred, _overlapped):
+                transferred._obj.value = size
+                return True
+
+            def ReadFile(self, *_args):
+                return False
+
+            def GetLastError(self):
+                return 997  # ERROR_IO_PENDING
+
+            def WaitForSingleObject(self, _event, _timeout):
+                return 258  # WAIT_TIMEOUT
+
+            def CancelIoEx(self, _handle, _overlapped):
+                self.cancelled = True
+                return True
+
+            def GetOverlappedResult(self, *_args):
+                return False
+
+            def CloseHandle(self, handle):
+                self.closed.append(handle)
+                return True
+
+        fake_kernel32 = FakeKernel32()
+        fake_windll = types.SimpleNamespace(kernel32=fake_kernel32)
+        with patch("facekids.filhos_agent.sys.platform", "win32"), patch.object(
+            filhos_agent, "wintypes", real_wintypes
+        ), patch.object(ctypes, "windll", fake_windll, create=True):
+            result = filhos_agent.query_auth_service(timeout_seconds=0.1)
+
+        self.assertIsNone(result)
+        self.assertTrue(fake_kernel32.cancelled)
+        self.assertIn(456, fake_kernel32.closed)
+        self.assertIn(123, fake_kernel32.closed)
 
 
 if __name__ == "__main__":

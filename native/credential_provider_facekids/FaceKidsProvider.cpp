@@ -11,11 +11,13 @@ FaceKidsProvider::FaceKidsProvider() : m_pCredential(new(std::nothrow) FaceKidsC
 }
 
 FaceKidsProvider::~FaceKidsProvider() {
-    DeleteCriticalSection(&m_cs);
     if (m_pCredential) {
+        m_pCredential->ResetAuthentication();
+        m_pCredential->SetProvider(nullptr);
         m_pCredential->Release();
         m_pCredential = nullptr;
     }
+    DeleteCriticalSection(&m_cs);
     InterlockedDecrement(&g_cObjects);
     LogCP(L"[FaceKidsProvider] Destrutor");
 }
@@ -54,9 +56,25 @@ std::wstring FaceKidsProvider::ResolveTargetSid() {
     return L"";
 }
 
-bool FaceKidsProvider::IsAutoLogonReady() const {
-    return m_readyToAutoLogon;
+bool FaceKidsProvider::IsAutoLogonReady() {
+    EnterCriticalSection(&m_cs);
+    const bool ready = m_readyToAutoLogon;
+    LeaveCriticalSection(&m_cs);
+    return ready;
 }
+
+void FaceKidsProvider::ResetAuth() {
+    EnterCriticalSection(&m_cs);
+    m_readyToAutoLogon = false;
+    LeaveCriticalSection(&m_cs);
+}
+
+#ifdef FACEKIDS_RETRY_HOST_TEST
+FaceKidsCredential* FaceKidsProvider::HostTestCredential() {
+    m_pCredential->AddRef();
+    return m_pCredential;
+}
+#endif
 
 void FaceKidsProvider::NotifyAuthSuccess() {
     LogCP(L"[FaceKidsProvider] NotifyAuthSuccess recebido da credencial!");
@@ -94,6 +112,19 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::QueryInterface(REFIID riid, void** p
 
 ULONG STDMETHODCALLTYPE FaceKidsProvider::AddRef() {
     return static_cast<ULONG>(InterlockedIncrement(&m_cRef));
+}
+
+bool FaceKidsProvider::TryAddRef() {
+    // Credential holds its own lock while checking its weak parent pointer;
+    // the destructor must acquire that same lock to detach it. Never resurrect
+    // a parent whose final Release has already started destruction.
+    LONG count = InterlockedCompareExchange(&m_cRef, 0, 0);
+    while (count > 0) {
+        const LONG previous = InterlockedCompareExchange(&m_cRef, count + 1, count);
+        if (previous == count) return true;
+        count = previous;
+    }
+    return false;
 }
 
 ULONG STDMETHODCALLTYPE FaceKidsProvider::Release() {
@@ -135,6 +166,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::UnAdvise() {
     m_upAdviseContext = 0;
     m_readyToAutoLogon = false;
     LeaveCriticalSection(&m_cs);
+    if (m_pCredential) m_pCredential->ResetAuthentication();
     return S_OK;
 }
 
@@ -216,7 +248,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::GetCredentialCount(DWORD* pdwCount, 
     *pdwCount = (m_pCredential && m_eligible) ? 1 : 0;
 
     EnterCriticalSection(&m_cs);
-    const bool autoLogon = m_readyToAutoLogon;
+    const bool autoLogon = m_readyToAutoLogon && m_eligible;
     LeaveCriticalSection(&m_cs);
 
     if (autoLogon) {
