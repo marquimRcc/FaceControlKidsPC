@@ -68,6 +68,7 @@ class LinuxAuthTests(unittest.TestCase):
         self.assertIsNone(broker.observe(now=21, child_id=1, **base))
 
     @patch.dict("os.environ", {"PAM_TYPE": "auth", "PAM_USER": "filhos"}, clear=True)
+    @patch("facekids.linux_pam_helper.socket.AF_UNIX", 1, create=True)
     @patch("facekids.linux_pam_helper.socket.socket")
     @patch("facekids.linux_pam_helper.linux_display_session", return_value="4")
     def test_pam_helper_accepts_only_daemon_allow(self, _session, socket_factory):
