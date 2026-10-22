@@ -36,9 +36,9 @@ def default_programs_config() -> dict:
         "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
         "programs": [
             {
-                "name": "Firefox - YouTube Kids",
-                "executable": r"C:\Program Files\Mozilla Firefox\firefox.exe",
-                "arguments": "-new-window https://www.youtubekids.com",
+                "name": "Brave - YouTube Kids",
+                "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                "arguments": "--new-window https://www.youtubekids.com",
                 "enabled": True,
             }
         ],
