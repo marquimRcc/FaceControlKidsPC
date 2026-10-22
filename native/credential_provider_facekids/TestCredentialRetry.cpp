@@ -1,6 +1,7 @@
 // Isolated host: exercises the REAL credential worker with a fake local pipe.
 // No registration, account change, Windows logon, webcam or biometric access.
 #include "FaceKidsCredential.h"
+#include "FaceKidsProvider.h"
 #include <atomic>
 #include <cstdlib>
 #include <ctime>
@@ -115,6 +116,31 @@ int main() {
         credential->Release();
         WaitForWorkerExit();
         std::cout << "PASS: late authorization discarded after deselection\n";
+    }
+    {
+        Server server;
+        server.replies = 1;
+        ResetEvent(server.releaseReply);
+        HANDLE thread = CreateThread(nullptr, 0, Serve, &server, 0, nullptr);
+        Require(thread && WaitForSingleObject(server.ready, 3000) == WAIT_OBJECT_0, "server startup");
+        auto* provider = new FaceKidsProvider();
+        auto* credential = provider->HostTestCredential();
+        credential->Advise(nullptr);
+        Require(WaitForSingleObject(server.received, 3000) == WAIT_OBJECT_0, "request not received");
+        provider->Release(); // Pending worker must keep the parent alive.
+        SetEvent(server.releaseReply);
+        FinishServer(thread, server);
+        const ULONGLONG deadline = GetTickCount64() + 3000;
+        while (InterlockedCompareExchange(&g_cObjects, 0, 0) != 1 && GetTickCount64() < deadline) Sleep(25);
+        Require(InterlockedCompareExchange(&g_cObjects, 0, 0) == 1,
+                "parent not released after worker completion");
+        // Credential can outlive its provider as an independent COM reference.
+        // These callbacks must not dereference the now-destroyed parent.
+        credential->SetDeselected();
+        credential->UnAdvise();
+        credential->Release();
+        WaitForWorkerExit();
+        std::cout << "PASS: credential survives parent release without dangling callbacks\n";
     }
     return 0;
 }

@@ -24,6 +24,10 @@ public:
     void NotifyAuthSuccess();
     bool IsAutoLogonReady();
     void ResetAuth();
+    bool TryAddRef();
+#ifdef FACEKIDS_RETRY_HOST_TEST
+    FaceKidsCredential* HostTestCredential();
+#endif
 
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override;

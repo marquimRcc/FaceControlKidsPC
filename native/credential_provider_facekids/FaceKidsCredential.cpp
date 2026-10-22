@@ -53,8 +53,8 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredenti
     m_authEnabled = true;
     ++m_authGeneration;
     m_lastAuth = {};
-    LeaveCriticalSection(&m_cs);
     if (m_pProvider) m_pProvider->ResetAuth();
+    LeaveCriticalSection(&m_cs);
 
     // Dispara a autenticacao imediatamente assim que o tile e criado pelo LogonUI
     TriggerAsyncAuth();
@@ -71,8 +71,8 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::UnAdvise() {
         m_pEvents->Release();
         m_pEvents = nullptr;
     }
-    LeaveCriticalSection(&m_cs);
     if (m_pProvider) m_pProvider->ResetAuth();
+    LeaveCriticalSection(&m_cs);
     return S_OK;
 }
 
@@ -93,6 +93,10 @@ void FaceKidsCredential::TriggerAsyncAuth() {
     m_statusText = L"Identificando... Olhe para a webcam.";
     ICredentialProviderCredentialEvents* events = m_pEvents;
     if (events) events->AddRef();
+    AddRef();
+    FaceKidsProvider* provider = m_pProvider;
+    if (provider && !provider->TryAddRef()) provider = nullptr;
+    m_workerProvider = provider;
     LeaveCriticalSection(&m_cs);
 
     LogCP(L"[FaceKidsCredential] TriggerAsyncAuth disparado");
@@ -101,11 +105,8 @@ void FaceKidsCredential::TriggerAsyncAuth() {
         events->Release();
     }
 
-    AddRef();
     // Provider owns this credential. Hold it for the worker lifetime so an
     // in-flight request cannot call a raw pointer after LogonUI releases it.
-    FaceKidsProvider* provider = m_pProvider;
-    if (provider) provider->AddRef();
     uintptr_t hThread = _beginthreadex(nullptr, 0, AuthThreadProc, this, 0, nullptr);
     if (hThread) {
         CloseHandle(reinterpret_cast<HANDLE>(hThread));
@@ -119,7 +120,9 @@ void FaceKidsCredential::TriggerAsyncAuth() {
 }
 
 void FaceKidsCredential::PerformAuthentication() {
-    FaceKidsProvider* heldProvider = m_pProvider;
+    EnterCriticalSection(&m_cs);
+    FaceKidsProvider* heldProvider = m_workerProvider;
+    LeaveCriticalSection(&m_cs);
     for (;;) {
         EnterCriticalSection(&m_cs);
         if (!m_authEnabled || m_lastAuth.success) {
@@ -170,8 +173,9 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetSelected(BOOL* pbAutoLogon) {
     if (!pbAutoLogon) return E_POINTER;
     EnterCriticalSection(&m_cs);
     m_authEnabled = true;
+    const bool ready = m_lastAuth.success;
     LeaveCriticalSection(&m_cs);
-    if (m_pProvider && m_pProvider->IsAutoLogonReady()) {
+    if (ready) {
         *pbAutoLogon = TRUE;
     } else {
         *pbAutoLogon = FALSE;
@@ -186,8 +190,8 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetDeselected() {
     m_authEnabled = false;
     ++m_authGeneration;
     m_lastAuth = {};
-    LeaveCriticalSection(&m_cs);
     if (m_pProvider) m_pProvider->ResetAuth();
+    LeaveCriticalSection(&m_cs);
     return S_OK;
 }
 

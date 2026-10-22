@@ -37,7 +37,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipeClient.exe" }
 
     Write-Host "[FaceKids] Compilando teste de repeticao automatica..." -ForegroundColor Cyan
-    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ -DFACEKIDS_RETRY_HOST_TEST TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
         -o TestCredentialRetry.exe -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestCredentialRetry.exe" }
 

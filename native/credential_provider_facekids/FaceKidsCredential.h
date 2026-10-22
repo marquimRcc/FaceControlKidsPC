@@ -9,6 +9,7 @@ class FaceKidsCredential final : public ICredentialProviderCredential2 {
 private:
     volatile LONG m_cRef = 1;
     FaceKidsProvider* m_pProvider = nullptr;
+    FaceKidsProvider* m_workerProvider = nullptr;
     ICredentialProviderCredentialEvents* m_pEvents = nullptr;
     std::wstring m_boundSid;
     std::wstring m_statusText;
@@ -22,7 +23,11 @@ public:
     FaceKidsCredential(FaceKidsProvider* pProvider = nullptr);
     ~FaceKidsCredential();
 
-    void SetProvider(FaceKidsProvider* pProvider) { m_pProvider = pProvider; }
+    void SetProvider(FaceKidsProvider* pProvider) {
+        EnterCriticalSection(&m_cs);
+        m_pProvider = pProvider;
+        LeaveCriticalSection(&m_cs);
+    }
     void BindSid(const std::wstring& sid) { m_boundSid = sid; }
     void TriggerAsyncAuth();
     void PerformAuthentication();
