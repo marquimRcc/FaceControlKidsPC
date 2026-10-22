@@ -51,9 +51,6 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredenti
     m_pEvents = pcpce;
     if (m_pEvents) m_pEvents->AddRef();
     m_authEnabled = true;
-    ++m_authGeneration;
-    m_lastAuth = {};
-    if (m_pProvider) m_pProvider->ResetAuth();
     LeaveCriticalSection(&m_cs);
 
     // Dispara a autenticacao imediatamente assim que o tile e criado pelo LogonUI
@@ -66,14 +63,21 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::UnAdvise() {
     EnterCriticalSection(&m_cs);
     m_authEnabled = false;
     ++m_authGeneration;
-    m_lastAuth = {};
     if (m_pEvents) {
         m_pEvents->Release();
         m_pEvents = nullptr;
     }
-    if (m_pProvider) m_pProvider->ResetAuth();
     LeaveCriticalSection(&m_cs);
     return S_OK;
+}
+
+void FaceKidsCredential::ResetAuthentication() {
+    EnterCriticalSection(&m_cs);
+    m_authEnabled = false;
+    ++m_authGeneration;
+    m_lastAuth = {};
+    m_statusText = L"Olhe para a webcam para desbloquear...";
+    LeaveCriticalSection(&m_cs);
 }
 
 static unsigned __stdcall AuthThreadProc(void* param) {

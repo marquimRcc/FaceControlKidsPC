@@ -193,7 +193,11 @@ public:
 
     static AuthResult RequestAuthentication() {
         AuthResult result;
+#ifdef FACEKIDS_RETRY_HOST_TEST
+        const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipeRetryHost";
+#else
         const LPCWSTR pipeName = L"\\\\.\\pipe\\FaceKidsAuthPipe";
+#endif
 
         HANDLE hPipe = INVALID_HANDLE_VALUE;
         const ULONGLONG deadline = GetTickCount64() + kTotalRequestTimeoutMs;

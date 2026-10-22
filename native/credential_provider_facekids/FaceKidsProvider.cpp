@@ -12,6 +12,7 @@ FaceKidsProvider::FaceKidsProvider() : m_pCredential(new(std::nothrow) FaceKidsC
 
 FaceKidsProvider::~FaceKidsProvider() {
     if (m_pCredential) {
+        m_pCredential->ResetAuthentication();
         m_pCredential->SetProvider(nullptr);
         m_pCredential->Release();
         m_pCredential = nullptr;
@@ -165,6 +166,7 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::UnAdvise() {
     m_upAdviseContext = 0;
     m_readyToAutoLogon = false;
     LeaveCriticalSection(&m_cs);
+    if (m_pCredential) m_pCredential->ResetAuthentication();
     return S_OK;
 }
 

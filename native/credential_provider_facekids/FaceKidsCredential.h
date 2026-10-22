@@ -29,6 +29,7 @@ public:
         LeaveCriticalSection(&m_cs);
     }
     void BindSid(const std::wstring& sid) { m_boundSid = sid; }
+    void ResetAuthentication();
     void TriggerAsyncAuth();
     void PerformAuthentication();
 

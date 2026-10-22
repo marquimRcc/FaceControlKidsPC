@@ -20,7 +20,7 @@ struct Server {
 static DWORD WINAPI Serve(LPVOID context) {
     auto& server = *static_cast<Server*>(context);
     for (int i = 0; i < server.replies; ++i) {
-        HANDLE pipe = CreateNamedPipeW(L"\\\\.\\pipe\\FaceKidsAuthPipe", PIPE_ACCESS_DUPLEX,
+        HANDLE pipe = CreateNamedPipeW(L"\\\\.\\pipe\\FaceKidsAuthPipeRetryHost", PIPE_ACCESS_DUPLEX,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1, 4096, 4096, 0, nullptr);
         if (pipe == INVALID_HANDLE_VALUE) return 1;
         SetEvent(server.ready);
@@ -90,6 +90,52 @@ int main() {
         WaitForWorkerExit();
         FinishServer(thread, server);
         std::cout << "PASS: recognition retries without clicks; worker exits after UnAdvise\n";
+    }
+    {
+        Server server;
+        server.replies = 1;
+        HANDLE thread = CreateThread(nullptr, 0, Serve, &server, 0, nullptr);
+        Require(thread && WaitForSingleObject(server.ready, 3000) == WAIT_OBJECT_0, "server startup");
+        auto* provider = new FaceKidsProvider();
+        auto* credential = provider->HostTestCredential();
+        credential->Advise(nullptr);
+        bool recognized = false;
+        const ULONGLONG deadline = GetTickCount64() + 5000;
+        while (GetTickCount64() < deadline) {
+            PWSTR status = nullptr;
+            credential->GetStringValue(FIELD_STATUS, &status);
+            recognized = status && std::wstring(status).find(L"Desbloqueando") != std::wstring::npos;
+            CoTaskMemFree(status);
+            if (recognized) break;
+            Sleep(25);
+        }
+        Require(recognized, "ALLOW not received");
+        FinishServer(thread, server);
+        Require(provider->IsAutoLogonReady(), "provider did not arm auto-logon after ALLOW");
+
+        // CredentialsChanged makes LogonUI unadvise/advise the existing tile
+        // before it asks for GetSerialization. The authorization must survive
+        // that notification-only lifecycle transition.
+        credential->UnAdvise();
+        credential->Advise(nullptr);
+        Require(provider->IsAutoLogonReady(), "provider auto-logon flag lost during re-enumeration");
+        BOOL autoLogon = FALSE;
+        credential->SetSelected(&autoLogon);
+        Require(autoLogon == TRUE, "authorization lost during LogonUI re-enumeration");
+        CREDENTIAL_PROVIDER_GET_SERIALIZATION_RESPONSE response;
+        CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION serialization = {};
+        PWSTR text = nullptr;
+        CREDENTIAL_PROVIDER_STATUS_ICON icon;
+        credential->GetSerialization(&response, &serialization, &text, &icon);
+        Require(response == CPGSR_RETURN_CREDENTIAL_FINISHED && serialization.cbSerialization != 0,
+                "authorized credential was not serialized after re-enumeration");
+        CoTaskMemFree(serialization.rgbSerialization);
+        CoTaskMemFree(text);
+        provider->UnAdvise();
+        provider->Release();
+        credential->Release();
+        WaitForWorkerExit();
+        std::cout << "PASS: authorization survives CredentialsChanged re-enumeration\n";
     }
     {
         Server server;
