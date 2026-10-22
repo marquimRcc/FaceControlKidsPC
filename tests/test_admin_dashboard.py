@@ -3,9 +3,9 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from facekids.admin_dashboard import is_admin_account, time_format_hm
+from facekids.admin_dashboard import AdminDashboard, is_admin_account, time_format_hm
 from facekids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files
 from facekids.storage import Storage
 
@@ -49,6 +49,19 @@ class TestAdminDashboard(unittest.TestCase):
         res = set_child_photo_from_file(999, "arquivo_inexistente_12345.jpg")
         self.assertFalse(res)
         self.assertIn("Não foi possível carregar", res.message)
+
+    def test_welcome_photo_does_not_change_biometrics(self):
+        dashboard = MagicMock()
+        dashboard.store = MagicMock()
+        dashboard.status_text = MagicMock()
+        result = PhotoUpdateResult(True, "Foto atualizada", Path("avatar.png"))
+        with patch("facekids.admin_dashboard.filedialog.askopenfilename", return_value="foto.png"), \
+             patch("facekids.admin_dashboard.set_child_photo_from_file", return_value=result) as update, \
+             patch("facekids.admin_dashboard.messagebox.showinfo"):
+            AdminDashboard._pick_photo_file(dashboard, 2)
+
+        self.assertFalse(update.call_args.kwargs["update_biometrics"])
+        dashboard.refresh.assert_called_once_with()
 
     def test_storage_curfew_policy_flow(self):
         with tempfile.TemporaryDirectory() as td:
