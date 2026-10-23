@@ -15,6 +15,16 @@
 - Último commit funcional remoto antes deste documento: `15895bed37293d58c30b7832340997a124d37d90`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
+## Regra de continuidade autônoma
+
+Este trabalho deve continuar sem aguardar novas mensagens como `continue` ou
+`avance`. A automação `continuar-facekids-regata-os` permanece ativa neste
+chat. A cota da janela de cinco horas deve ser consultada durante o trabalho.
+Quando restarem 8% ou menos, atualizar e commitar este documento, enviar os
+commits à branch e pausar. A retomada deve ocorrer automaticamente três minutos
+depois do horário exato de renovação da cota. Atualizações rotineiras ficam em
+silêncio; somente bloqueios que exijam ação humana devem ser comunicados.
+
 ## Objetivo do produto no Linux
 
 O FaceKids deve controlar uma conta Linux compartilhada por uma ou mais
