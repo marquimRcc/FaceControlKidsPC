@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import sqlite3
 import threading
 from dataclasses import dataclass
 
@@ -89,5 +90,5 @@ def approval_still_allowed(store, approval: FaceApproval, day: str) -> bool:
     try:
         curfew, _reason = store.is_curfew_active()
         return not curfew and store.remaining(approval.child_id, day) > 0
-    except (KeyError, ValueError):
+    except (KeyError, ValueError, sqlite3.Error):
         return False

@@ -1,4 +1,5 @@
 import math
+import sqlite3
 import tempfile
 import unittest
 from datetime import date
@@ -121,6 +122,13 @@ class LinuxAuthTests(unittest.TestCase):
                 self.assertFalse(approval_still_allowed(store, approval, today))
             finally:
                 store.close()
+
+    def test_database_failure_denies_approval(self):
+        store = MagicMock()
+        store.is_curfew_active.side_effect = sqlite3.OperationalError("database locked")
+        self.assertFalse(
+            approval_still_allowed(store, FaceApproval("4", 1, 1), "2026-10-22")
+        )
 
 
 if __name__ == "__main__":
