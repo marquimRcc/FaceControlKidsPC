@@ -515,6 +515,26 @@ autostart KDE foram instalados no home de `filhos`, ambos `0644 filhos:filhos`.
 1. Manter a árvore limpa e concentrar a próxima etapa no
    empacotamento autocontido ou aguardar os testes físicos listados acima.
 
+## Identidade visual do aplicativo — 23/10/2026
+
+O usuário aprovou o conceito 4: rosto infantil dentro de um escudo, com um
+relógio sobreposto. O símbolo comunica reconhecimento, proteção e controle de
+tempo e usa a paleta já adotada pelo painel (azul-marinho, ciano, azul e
+verde-menta).
+
+O recurso principal `assets/facekids.svg` foi redesenhado como vetor e foram
+geradas versões PNG de 16, 24, 32, 48, 64, 128, 256 e 512 pixels. O processo
+Electron passou a definir explicitamente `assets/facekids-256.png` como ícone
+da janela, corrigindo o X genérico exibido pelo gerenciador de janelas. Os
+atalhos XDG administrativo e infantil continuam apontando para o SVG vetorial.
+O nome do aplicativo também é definido como `FaceKids` antes da inicialização.
+
+Validação: inspeção visual da versão 512 px; dimensões e formatos dos oito PNGs;
+typecheck e build Vite/Electron aprovados; teste de integração Linux garante
+que o ícone configurado existe. O aplicativo deve ser reiniciado para a janela
+aberta receber o novo ícone; o cache do KDE pode levar alguns segundos para
+atualizar o lançador.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch

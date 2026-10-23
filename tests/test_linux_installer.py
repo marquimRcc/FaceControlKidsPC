@@ -81,6 +81,17 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertTrue((desktop / "electron" / "preload.cts").is_file())
         self.assertFalse((desktop / "electron" / "preload.ts").exists())
 
+    def test_electron_window_uses_packaged_facekids_icon(self):
+        main = (ROOT / "apps" / "desktop" / "electron" / "main.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'const appIcon = path.join(here, "../../../assets/facekids-256.png")',
+            main,
+        )
+        self.assertIn("icon: appIcon", main)
+        self.assertTrue((ROOT / "assets" / "facekids-256.png").is_file())
+
     def test_uninstaller_restores_pam_before_removing_helper(self):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(
             encoding="utf-8"

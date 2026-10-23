@@ -5,6 +5,7 @@ import net from "node:net";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const role = process.argv.includes("--role=child") ? "child" : "admin";
+const appIcon = path.join(here, "../../../assets/facekids-256.png");
 const adminSocket = process.env.FACEKIDS_ADMIN_SOCKET ?? "/run/facekids/admin.sock";
 const childSocket = process.env.FACEKIDS_CHILD_SOCKET ?? "/run/facekids-child/status.sock";
 
@@ -44,6 +45,7 @@ function createWindow() {
     minWidth: role === "child" ? 520 : 1080,
     minHeight: role === "child" ? 600 : 700,
     backgroundColor: "#0b1020",
+    icon: appIcon,
     title: role === "child" ? "FaceKids — Meu tempo" : "FaceKids — Painel dos pais",
     autoHideMenuBar: true,
     webPreferences: {
@@ -65,6 +67,8 @@ function createWindow() {
   if (devUrl) void window.loadURL(`${devUrl}?role=${role}`);
   else void window.loadFile(path.join(here, "../dist/index.html"), { query: { role } });
 }
+
+app.setName("FaceKids");
 
 app.whenReady().then(() => {
   ipcMain.handle("facekids:get-context", () => ({
