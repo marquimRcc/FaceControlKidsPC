@@ -329,6 +329,10 @@ class LinuxFaceQuotaRuntime:
                 "bonusSeconds": int(store.bonus(person_id, today)),
                 "enrollmentSamples": store.enrollment_count(person_id),
                 "isPresent": person_id == current,
+                "usageHistory": [
+                    {"date": history_date, "usedSeconds": int(used_seconds)}
+                    for history_date, used_seconds in store.get_history(person_id, 7)
+                ],
                 "avatarPhoto": (
                     "data:image/jpeg;base64," + base64.b64encode(photo).decode("ascii")
                     if photo else None

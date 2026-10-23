@@ -10,6 +10,10 @@ export const childStatusSchema = z.object({
   enrollmentSamples: z.number().int().nonnegative(),
   isPresent: z.boolean(),
   avatarPhoto: z.string().startsWith("data:image/jpeg;base64,").max(140_000).nullable().optional(),
+  usageHistory: z.array(z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    usedSeconds: z.number().int().nonnegative(),
+  })).max(31).default([]),
 });
 
 export const systemSnapshotSchema = z.object({
@@ -83,7 +87,12 @@ export const demoSnapshot: SystemSnapshot = systemSnapshotSchema.parse({
       dailyLimitSeconds: 7200,
       bonusSeconds: 1800,
       enrollmentSamples: 12,
-      isPresent: true
+      isPresent: true,
+      usageHistory: [
+        { date: "2026-10-21", usedSeconds: 4200 },
+        { date: "2026-10-22", usedSeconds: 5100 },
+        { date: "2026-10-23", usedSeconds: 2160 }
+      ]
     },
     {
       id: 2,
@@ -93,7 +102,12 @@ export const demoSnapshot: SystemSnapshot = systemSnapshotSchema.parse({
       dailyLimitSeconds: 5400,
       bonusSeconds: 0,
       enrollmentSamples: 12,
-      isPresent: false
+      isPresent: false,
+      usageHistory: [
+        { date: "2026-10-21", usedSeconds: 2700 },
+        { date: "2026-10-22", usedSeconds: 3600 },
+        { date: "2026-10-23", usedSeconds: 3300 }
+      ]
     }
   ]
 });

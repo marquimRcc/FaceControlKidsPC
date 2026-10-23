@@ -294,6 +294,8 @@ class LinuxSessionTests(unittest.TestCase):
             status = runtime._dispatch_admin(store, {"op": "status"})
             self.assertEqual(status["snapshot"]["children"][0]["name"], "Ana")
             self.assertEqual(status["snapshot"]["children"][0]["dailyLimitSeconds"], 5400)
+            self.assertEqual(len(status["snapshot"]["children"][0]["usageHistory"]), 7)
+            self.assertEqual(status["snapshot"]["children"][0]["usageHistory"][-1]["usedSeconds"], 0)
             self.assertEqual(status["snapshot"]["camera"], "ready")
             self.assertEqual(status["enrollment"]["state"], "capturing")
             self.assertEqual(status["enrollment"]["feedback"], "waiting")
