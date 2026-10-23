@@ -11,7 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local e remoto: `69e119a`.
+- Último commit funcional local e remoto: `e0d7d9b`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -386,9 +386,20 @@ de vetores e retratos, operações administrativas `list_photos` e
 e vídeo permanecem dentro do serviço; somente retratos recortados atravessam o
 socket Unix administrativo, acessível ao grupo `wheel`.
 
-Validação local: 216 testes Python aprovados, com 2 skips exclusivos de
+Validação local: 217 testes Python aprovados, com 2 skips exclusivos de
 plataforma; Ruff aprovado nos módulos e testes alterados; 3 testes TypeScript,
-typecheck de todos os pacotes e build Vite/Electron aprovados. Falta somente a
-validação física desta função: atualizar o serviço instalado, abrir o painel,
-capturar o rosto da criança e escolher um dos retratos. Essa captura presencial
-não deve ser simulada pela automação.
+typecheck de todos os pacotes e build Vite/Electron aprovados. O serviço
+instalado foi atualizado às 14:34, permaneceu ativo e criou a migração sem
+alterar o perfil existente. A consulta real retornou o perfil `Crianca 1`,
+galeria vazia e permissões esperadas nos sockets. O painel foi aberto pelo
+aplicativo KDE com o build novo.
+
+O primeiro CI deste commit passou no Ubuntu, nos checks Regata OS e no
+diagnóstico Windows, mas revelou que `grp` e `pwd` eram importados no topo do
+módulo Linux e não existem no Python para Windows. O import foi tornado
+condicional e falha de forma fechada fora de POSIX; há teste específico para
+essa condição. Após o próximo push, confirmar novamente o job Windows.
+
+Pendente somente a validação física da galeria: com a criança diante da webcam,
+abrir **Gerenciar perfil**, capturar os retratos e escolher um deles. Essa
+captura presencial não deve ser simulada pela automação.

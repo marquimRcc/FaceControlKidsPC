@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import argparse
 import base64
-import grp
 import json
 import logging
 import os
-import pwd
 import signal
 import socket
 import struct
@@ -19,6 +17,13 @@ from datetime import date
 from pathlib import Path
 
 import numpy as np
+
+try:  # módulos POSIX ausentes no runner Windows que valida imports e testes comuns
+    import grp
+    import pwd
+except ImportError:  # pragma: no cover - exercitado pelo CI Windows
+    grp = None
+    pwd = None
 
 from .child_quota_pilot import ChildQuotaEngine, PilotEvent
 from .linux_auth import FaceApprovalBroker, approval_still_allowed
@@ -127,6 +132,8 @@ def uid_is_admin(uid: int, group_name: str) -> bool:
     """Autoriza root ou membro real do grupo administrativo configurado."""
     if uid == 0:
         return True
+    if grp is None or pwd is None:
+        return False
     try:
         account = pwd.getpwuid(uid)
         group = grp.getgrnam(group_name)
@@ -373,6 +380,8 @@ class LinuxFaceQuotaRuntime:
             self.admin_socket_path.unlink(missing_ok=True)
 
     def _start_admin_server(self) -> None:
+        if grp is None:
+            raise RuntimeError("Grupos POSIX indisponíveis nesta plataforma")
         group = grp.getgrnam(self.config.admin_group)
         self.admin_socket_path.parent.mkdir(parents=True, exist_ok=True)
         if self.admin_socket_path.parent.stat().st_gid != group.gr_gid:

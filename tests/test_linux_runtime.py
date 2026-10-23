@@ -15,6 +15,7 @@ from facekids.linux_runtime import (
     enrollments_complete,
     frame_is_usable,
     protected_data_path,
+    uid_is_admin,
     warm_up_camera,
 )
 from facekids.locker import unlock_linux_session
@@ -70,6 +71,12 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertEqual(
             protected_data_path(), Path("/tmp/facekids-test/criancas.sqlite3")
         )
+
+    @patch("facekids.linux_runtime.grp", None)
+    @patch("facekids.linux_runtime.pwd", None)
+    def test_admin_check_fails_closed_without_posix_modules(self):
+        self.assertTrue(uid_is_admin(0, "wheel"))
+        self.assertFalse(uid_is_admin(1000, "wheel"))
 
     def test_black_and_uniform_frames_are_rejected(self):
         self.assertFalse(frame_is_usable(None))
