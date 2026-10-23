@@ -74,6 +74,13 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("facekids-child.desktop", setup)
         self.assertIn('chown "${CHILD_USER}:${CHILD_GROUP}"', setup)
 
+    def test_electron_uses_sandbox_compatible_commonjs_preload(self):
+        desktop = ROOT / "apps" / "desktop"
+        main = (desktop / "electron" / "main.ts").read_text(encoding="utf-8")
+        self.assertIn('preload: path.join(here, "preload.cjs")', main)
+        self.assertTrue((desktop / "electron" / "preload.cts").is_file())
+        self.assertFalse((desktop / "electron" / "preload.ts").exists())
+
     def test_uninstaller_restores_pam_before_removing_helper(self):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(
             encoding="utf-8"

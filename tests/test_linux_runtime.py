@@ -89,6 +89,13 @@ class LinuxSessionTests(unittest.TestCase):
         varied[::2] = 100
         self.assertTrue(frame_is_usable(varied))
 
+    def test_candidate_reports_camera_read_failure(self):
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        capture = unittest.mock.Mock()
+        capture.read.return_value = (False, None)
+        with self.assertRaisesRegex(RuntimeError, "parou de fornecer"):
+            runtime._candidate(capture)
+
     def test_camera_warmup_discards_configured_frames(self):
         class Capture:
             def __init__(self):
@@ -286,6 +293,7 @@ class LinuxSessionTests(unittest.TestCase):
             status = runtime._dispatch_admin(store, {"op": "status"})
             self.assertEqual(status["snapshot"]["children"][0]["name"], "Ana")
             self.assertEqual(status["snapshot"]["children"][0]["dailyLimitSeconds"], 5400)
+            self.assertEqual(status["snapshot"]["camera"], "ready")
             self.assertEqual(status["enrollment"]["state"], "capturing")
             runtime._dispatch_admin(store, {"op": "cancel_enrollment"})
             self.assertEqual(store.people(), [])

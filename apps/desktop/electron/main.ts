@@ -30,7 +30,12 @@ function socketRequest(socketPath: string, request: Record<string, unknown>): Pr
   });
 }
 
-const adminRequest = (request: Record<string, unknown>) => socketRequest(adminSocket, request);
+const adminRequest = (request: Record<string, unknown>) => {
+  if (role !== "admin") {
+    return Promise.reject(new Error("Operação disponível somente no painel responsável"));
+  }
+  return socketRequest(adminSocket, request);
+};
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -42,7 +47,7 @@ function createWindow() {
     title: role === "child" ? "FaceKids — Meu tempo" : "FaceKids — Painel dos pais",
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(here, "preload.js"),
+      preload: path.join(here, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

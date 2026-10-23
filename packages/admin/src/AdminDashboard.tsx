@@ -44,7 +44,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
         <div className="brand"><div className="brand__mark"><Sparkles size={21} /></div><div><strong>FaceKids</strong><span>Painel dos pais</span></div></div>
         <nav>{nav.map(([Icon, label], index) => <button key={label} className={index === 0 ? "active" : ""}><Icon size={19} /><span>{label}</span>{index === 1 && <b>{snapshot.children.length}</b>}</button>)}</nav>
         <div className="sidebar__help"><CircleHelp size={20} /><div><strong>Precisa de ajuda?</strong><span>Veja o guia de configuração</span></div><ChevronRight size={18} /></div>
-        <div className="parent-chip"><div className="parent-chip__avatar">MQ</div><div><strong>Marcos</strong><span>Administrador</span></div></div>
+        <div className="parent-chip"><div className="parent-chip__avatar">R</div><div><strong>Responsável</strong><span>Administrador</span></div></div>
       </aside>
 
       <main className="admin-content">
@@ -57,7 +57,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
         <section className="health-strip" aria-label="Estado do sistema">
           <div><span className="health-icon health-icon--green"><ShieldCheck /></span><div><strong>{snapshot.service === "online" ? "Proteção ativa" : "Proteção indisponível"}</strong><StatusPill tone={snapshot.service === "online" ? "ok" : "warn"}>{snapshot.service === "online" ? "Serviço online" : "Serviço offline"}</StatusPill></div></div>
           <div><span className="health-icon health-icon--blue"><Camera /></span><div><strong>{snapshot.camera === "ready" ? "Câmera pronta" : snapshot.camera === "busy" ? "Câmera em uso" : "Câmera indisponível"}</strong><span>Reconhecimento local</span></div></div>
-          <div><span className="health-icon health-icon--purple"><Clock3 /></span><div><strong>{snapshot.curfew.enabled ? "Horário permitido" : "Horário livre"}</strong><span>{snapshot.curfew.enabled ? `${snapshot.curfew.start} – ${snapshot.curfew.end}` : "Controle desativado"}</span></div></div>
+          <div><span className="health-icon health-icon--purple"><Clock3 /></span><div><strong>{snapshot.curfew.enabled ? "Horário configurado" : "Horário livre"}</strong><span>{snapshot.curfew.enabled ? `${snapshot.curfew.start} – ${snapshot.curfew.end}` : "Controle desativado"}</span></div></div>
         </section>
 
         <section className="section-heading"><div><h2>Perfis das crianças</h2><p>{snapshot.children.length} perfis configurados neste computador</p></div><button className="text-button">Ver detalhes <ChevronRight size={16} /></button></section>

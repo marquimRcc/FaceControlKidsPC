@@ -23,7 +23,10 @@ export function App() {
         const state = adminStateSchema.parse(await window.facekids!.getAdminState());
         if (active) { setAdminState(state); setBackendError(null); }
       } catch (error) {
-        if (active) setBackendError(error instanceof Error ? error.message : "Serviço indisponível");
+        if (active) {
+          setAdminState({ snapshot: disconnectedSnapshot, enrollment: null });
+          setBackendError(error instanceof Error ? error.message : "Serviço indisponível");
+        }
       }
     };
     void refresh();

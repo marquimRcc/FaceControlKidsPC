@@ -194,6 +194,7 @@ class LinuxFaceQuotaRuntime:
         self._enrollment: dict | None = None
         self._current_child_id: int | None = None
         self._session_state = SessionState.UNKNOWN
+        self._camera_state = "ready"
         self._last_unlock_request = float("-inf")
         self._last_lock_request = float("-inf")
 
@@ -290,7 +291,7 @@ class LinuxFaceQuotaRuntime:
                     __import__("datetime").timezone.utc
                 ).isoformat().replace("+00:00", "Z"),
                 "service": "online",
-                "camera": "ready",
+                "camera": getattr(self, "_camera_state", "ready"),
                 "session": {
                     SessionState.ACTIVE: "active",
                     SessionState.LOCKED: "locked",
@@ -628,7 +629,7 @@ class LinuxFaceQuotaRuntime:
     def _candidate(self, capture) -> int | None:
         ok, frame = capture.read()
         if not ok or frame is None:
-            return None
+            raise RuntimeError("A câmera parou de fornecer quadros")
         # Quadros pretos/congelados não são evidência de ausência de rosto.
         if not frame_is_usable(frame):
             raise RuntimeError("A câmera forneceu quadro preto ou sem contraste")
@@ -710,7 +711,9 @@ class LinuxFaceQuotaRuntime:
                     candidate = self._candidate(capture) if not enrolling and enrollments_ready and state in {
                         SessionState.ACTIVE, SessionState.LOCKED
                     } else None
+                    self._camera_state = "busy" if enrolling else "ready"
                 except RuntimeError as exc:
+                    self._camera_state = "offline"
                     LOG.error("Falha de captura: %s", exc)
                     candidate = None
                 self._current_child_id = candidate
