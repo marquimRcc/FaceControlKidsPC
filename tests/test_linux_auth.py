@@ -67,7 +67,15 @@ class LinuxAuthTests(unittest.TestCase):
         broker.observe(now=20, child_id=1, **base)
         self.assertIsNone(broker.observe(now=21, child_id=1, **base))
 
-    @patch.dict("os.environ", {"PAM_TYPE": "auth", "PAM_USER": "filhos"}, clear=True)
+    @patch.dict(
+        "os.environ",
+        {
+            "PAM_TYPE": "auth",
+            "PAM_USER": "filhos",
+            "FACEKIDS_AUTH_SOCKET": "/tmp/untrusted.sock",
+        },
+        clear=True,
+    )
     @patch("facekids.linux_pam_helper.socket.AF_UNIX", 1, create=True)
     @patch("facekids.linux_pam_helper.socket.socket")
     @patch("facekids.linux_pam_helper.linux_display_session", return_value="4")
@@ -76,6 +84,7 @@ class LinuxAuthTests(unittest.TestCase):
         socket_factory.return_value = client
         client.recv.return_value = b"ALLOW\n"
         self.assertEqual(linux_pam_helper.main(), 0)
+        client.connect.assert_called_once_with("/run/facekids/auth.sock")
         client.sendall.assert_called_once_with(b"AUTH 4\n")
         client.recv.return_value = b"DENY\n"
         self.assertEqual(linux_pam_helper.main(), 1)

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .session import linux_display_session
 
+AUTH_SOCKET = Path("/run/facekids/auth.sock")
+
 
 def main() -> int:
     pam_type = os.environ.get("PAM_TYPE", "")
@@ -17,13 +19,10 @@ def main() -> int:
     session_id = linux_display_session(pam_user)
     if not session_id:
         return 1
-    socket_path = Path(os.environ.get(
-        "FACEKIDS_AUTH_SOCKET", "/run/facekids/auth.sock"
-    ))
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     client.settimeout(2.0)
     try:
-        client.connect(str(socket_path))
+        client.connect(str(AUTH_SOCKET))
         client.sendall(f"AUTH {session_id}\n".encode("ascii"))
         return 0 if client.recv(32).strip() == b"ALLOW" else 1
     except OSError:
