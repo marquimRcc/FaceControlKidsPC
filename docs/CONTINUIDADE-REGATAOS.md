@@ -499,9 +499,7 @@ autostart KDE foram instalados no home de `filhos`, ambos `0644 filhos:filhos`.
 2. Entrar na sessão gráfica normal de `filhos` e validar o autostart no login,
    débito de quota, bloqueio por ausência/tempo/horário e desbloqueio por rosto.
 3. Validar a senha de recuperação e somente depois avaliar a ponte PAM opt-in.
-4. Empacotar Electron e os recursos do frontend fora deste workspace antes de
-   instalar em outro computador.
-5. Após a validação física e a revisão final de segurança, decidir se o PR pode
+4. Após a validação física e a revisão final de segurança, decidir se o PR pode
    deixar de ser draft e ser integrado.
 
 ### Bloqueado por presença física
@@ -629,6 +627,28 @@ plataforma não oferece `AF_UNIX`; o código de produção já era restrito ao
 runtime Linux. No commit `8ea860d`, os três workflows passaram: Unit tests em
 Ubuntu e Windows, Linux Regata OS checks e Windows live WTS diagnostic.
 
+## Bundle Electron autocontido — 23/10/2026
+
+O commit `2372c39` concluiu o empacotamento da interface fora do workspace. O
+script `scripts/Empacotar-FaceKids-Desktop-Linux.sh` compila React/Electron e
+produz `artifacts/facekids-desktop-linux-x64.tar.gz`, contendo frontend,
+processo principal, ícones, runtime Electron 38.8.6 e lançadores. O diretório
+`artifacts/` permanece ignorado pelo Git para evitar versionar cerca de 110 MB
+de binários.
+
+O bundle inclui `VERSION`, manifesto SHA-256 de todos os arquivos e um
+`install.sh` independente. O instalador verifica integralmente o manifesto,
+prepara a nova árvore e troca `/opt/facekids/desktop` por renomeação, instala
+os wrappers em `/usr/local/bin` e atualiza os ícones do sistema. Ele não toca
+no serviço Python nem em `/var/lib/facekids`, portanto preserva biometria,
+quotas e histórico.
+
+Validação real do artefato: build aprovado; archive e manifesto interno
+verificados; 94 arquivos extraídos; runtime respondeu `v38.8.6`; versão do
+bundle `2372c39`; tamanho final de 110 MB. Os 12 testes do instalador Linux,
+Ruff, `bash -n` e `git diff --check` passaram. A instalação em `/opt` continua
+pendente apenas porque requer `sudo` interativo nesta máquina.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
@@ -638,4 +658,5 @@ Ubuntu e Windows, Linux Regata OS checks e Windows live WTS diagnostic.
 > revisão posterior: diretórios de runtime pertencem exclusivamente ao
 > `tmpfiles`, o ícone possui caminhos distintos para pacote e workspace e o
 > polling invalida ciclos assíncronos antigos.
-> Prossiga conforme orientações do usuário para testes físicos de sessão.
+> O bundle desktop autocontido está concluído no commit `2372c39`; não repita
+> essa etapa. Prossiga pelos testes físicos de sessão quando houver presença.
