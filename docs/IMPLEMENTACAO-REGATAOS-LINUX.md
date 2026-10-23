@@ -78,13 +78,13 @@ recuperação por senha, a autenticação facial no desbloqueio KDE pode ser
 habilitada explicitamente:
 
 ```bash
-sudo bash scripts/Ativar-PAM-FaceKids-RegataOS.sh
+sudo facekids-enable-pam
 ```
 
 Para retirar a integração PAM usando os backups guardados:
 
 ```bash
-sudo bash scripts/Desativar-PAM-FaceKids-RegataOS.sh
+sudo facekids-disable-pam
 ```
 
 Exemplos administrativos:

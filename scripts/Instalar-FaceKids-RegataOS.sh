@@ -32,6 +32,8 @@ install -m 0755 "${SOURCE_DIR}/packaging/facekids-admin" /usr/local/sbin/facekid
 install -m 0755 "${SOURCE_DIR}/packaging/facekids-linux-probe" /usr/local/bin/facekids-linux-probe
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "${SOURCE_DIR}/packaging/facekids-pam-helper" /usr/local/libexec/facekids-pam-helper
+install -m 0755 "${SOURCE_DIR}/scripts/Ativar-PAM-FaceKids-RegataOS.sh" /usr/local/sbin/facekids-enable-pam
+install -m 0755 "${SOURCE_DIR}/scripts/Desativar-PAM-FaceKids-RegataOS.sh" /usr/local/sbin/facekids-disable-pam
 
 python3 -m venv /opt/facekids/venv
 /opt/facekids/venv/bin/python -m pip install --disable-pip-version-check -r /usr/lib/facekids/requirements.txt
@@ -53,3 +55,4 @@ echo "Primeiro valide a webcam: facekids-linux-probe --camera 0 --seconds 5"
 echo "sudo -E facekids-admin enroll 1"
 echo "Repita para cada número configurado; depois: sudo systemctl enable --now facekids-linux"
 echo "A integração PAM opcional não foi ativada. Teste o serviço antes de habilitá-la."
+echo "Após os testes, habilite com: sudo facekids-enable-pam"

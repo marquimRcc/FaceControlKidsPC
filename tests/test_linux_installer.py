@@ -43,7 +43,9 @@ class LinuxInstallerTests(unittest.TestCase):
         installer = (ROOT / "scripts/Instalar-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
         enable = (ROOT / "scripts/Ativar-PAM-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
         disable = (ROOT / "scripts/Desativar-PAM-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
-        self.assertNotIn("Ativar-PAM-FaceKids-RegataOS.sh", installer)
+        self.assertNotIn('bash "${SOURCE_DIR}/scripts/Ativar-PAM-FaceKids-RegataOS.sh"', installer)
+        self.assertIn("/usr/local/sbin/facekids-enable-pam", installer)
+        self.assertIn("/usr/local/sbin/facekids-disable-pam", installer)
         self.assertIn("pam_exec.so quiet /usr/local/libexec/facekids-pam-helper", enable)
         self.assertIn("kde sddm", enable)
         self.assertIn("pam-backup", enable)
@@ -63,7 +65,7 @@ class LinuxInstallerTests(unittest.TestCase):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(
             encoding="utf-8"
         )
-        restore = script.index("Desativar-PAM-FaceKids-RegataOS.sh")
+        restore = script.index("facekids-disable-pam")
         remove_helper = script.index("rm -f /usr/local/libexec/facekids-pam-helper")
         self.assertLess(restore, remove_helper)
 
