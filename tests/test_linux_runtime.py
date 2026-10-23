@@ -330,6 +330,35 @@ class LinuxSessionTests(unittest.TestCase):
             self.assertTrue(chosen["selected"])
             store.close()
 
+    def test_admin_protocol_updates_time_controls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            child_id = store.add_person("Ana", 90)
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+
+            runtime._dispatch_admin(store, {
+                "op": "set_daily_limit", "childId": child_id, "minutes": 120,
+            })
+            runtime._dispatch_admin(store, {
+                "op": "add_bonus", "childId": child_id, "minutes": 30,
+            })
+            runtime._dispatch_admin(store, {
+                "op": "set_curfew", "enabled": True, "start": "08:30", "end": "20:15",
+            })
+
+            self.assertEqual(store.people()[0][2], 7200)
+            self.assertEqual(store.bonus(child_id), 1800)
+            self.assertEqual(store.get_curfew_config(), (True, "08:30", "20:15"))
+            for request in (
+                {"op": "set_daily_limit", "childId": child_id, "minutes": True},
+                {"op": "add_bonus", "childId": child_id, "minutes": 0},
+                {"op": "set_curfew", "enabled": "yes", "start": "08:00", "end": "20:00"},
+                {"op": "set_curfew", "enabled": True, "start": "25:00", "end": "20:00"},
+            ):
+                with self.subTest(request=request), self.assertRaises(ValueError):
+                    runtime._dispatch_admin(store, request)
+            store.close()
+
     def test_profile_photo_encoder_crops_a_bounded_jpeg(self):
         frame = np.zeros((240, 320, 3), dtype=np.uint8)
         frame[40:200, 80:240] = (40, 120, 220)

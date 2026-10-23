@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { EnrollmentWizard } from "./EnrollmentWizard";
 import { ProfilePhotoManager } from "./ProfilePhotoManager";
+import { ScheduleEditor } from "./ScheduleEditor";
 
 const nav = [
   [LayoutDashboard, "Visão geral"],
@@ -17,7 +18,7 @@ const nav = [
   [Settings, "Configurações"],
 ] as const;
 
-export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto }: {
+export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto, onSetDailyLimit, onAddBonus, onSetCurfew }: {
   snapshot: SystemSnapshot;
   enrollment: EnrollmentStatus | null;
   backendError: string | null;
@@ -26,9 +27,16 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
   onStartEnrollment: (childId: number) => Promise<void>;
   onListPhotos: (childId: number) => Promise<ProfilePhoto[]>;
   onSelectPhoto: (childId: number, photoId: number) => Promise<void>;
+  onSetDailyLimit: (childId: number, minutes: number) => Promise<void>;
+  onAddBonus: (childId: number, minutes: number) => Promise<void>;
+  onSetCurfew: (input: { enabled: boolean; start: string; end: string }) => Promise<void>;
 }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selected, setSelected] = useState<ChildStatus | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const today = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long", day: "2-digit", month: "long",
+  }).format(new Date()).toUpperCase();
 
   return (
     <div className="admin-shell">
@@ -42,7 +50,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
       <main className="admin-content">
         {backendError && <div className="backend-alert" role="alert"><strong>Serviço não conectado</strong><span>{backendError}</span></div>}
         <header className="page-header">
-          <div><span className="eyebrow">QUINTA-FEIRA, 23 DE OUTUBRO</span><h1>Bom dia, Marcos</h1><p>Acompanhe o tempo e cuide dos perfis das crianças.</p></div>
+          <div><span className="eyebrow">{today}</span><h1>Painel dos pais</h1><p>Acompanhe o tempo e cuide dos perfis das crianças.</p></div>
           <button className="button button--primary" onClick={() => setWizardOpen(true)}><Plus size={18} /> Nova criança</button>
         </header>
 
@@ -59,12 +67,13 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
         </section>
 
         <section className="bottom-grid">
-          <article className="panel"><div className="panel__heading"><div><span className="panel-icon"><CalendarClock /></span><div><h3>Rotina de hoje</h3><p>Horário compartilhado da conta filhos</p></div></div><button className="text-button">Editar</button></div><div className="schedule"><span>08:00</span><div><i /><b>Uso permitido</b></div><span>20:00</span></div></article>
-          <article className="panel"><div className="panel__heading"><div><span className="panel-icon panel-icon--violet"><Activity /></span><div><h3>Atividade recente</h3><p>Eventos processados localmente</p></div></div></div><ul className="activity-list"><li><i className="dot dot--green" /><div><strong>Miguel foi reconhecido</strong><span>há 4 minutos</span></div></li><li><i className="dot dot--blue" /><div><strong>Bônus de 30 min concedido</strong><span>hoje, 08:14</span></div></li></ul></article>
+          <article className="panel"><div className="panel__heading"><div><span className="panel-icon"><CalendarClock /></span><div><h3>Rotina de hoje</h3><p>Horário compartilhado da conta filhos</p></div></div><button className="text-button" onClick={() => setScheduleOpen(true)}>Editar</button></div><div className={`schedule${snapshot.curfew.enabled ? "" : " schedule--disabled"}`}><span>{snapshot.curfew.start}</span><div><i /><b>{snapshot.curfew.enabled ? "Uso permitido" : "Controle desativado"}</b></div><span>{snapshot.curfew.end}</span></div></article>
+          <article className="panel"><div className="panel__heading"><div><span className="panel-icon panel-icon--violet"><Activity /></span><div><h3>Estado atual</h3><p>Dados lidos do serviço local</p></div></div></div><ul className="activity-list"><li><i className="dot dot--green" /><div><strong>{snapshot.children.length} {snapshot.children.length === 1 ? "perfil configurado" : "perfis configurados"}</strong><span>cadastros protegidos neste computador</span></div></li><li><i className="dot dot--blue" /><div><strong>Câmera {snapshot.camera === "ready" ? "pronta" : snapshot.camera === "busy" ? "em uso" : "indisponível"}</strong><span>sessão {snapshot.session === "active" ? "ativa" : snapshot.session === "locked" ? "bloqueada" : "ausente"}</span></div></li></ul></article>
         </section>
       </main>
       {wizardOpen && <EnrollmentWizard enrollment={enrollment} onEnroll={onEnrollChild} onCancelEnrollment={onCancelEnrollment} onClose={() => setWizardOpen(false)} />}
-      {selected && <ProfilePhotoManager child={selected} enrollment={enrollment} loadPhotos={onListPhotos} selectPhoto={onSelectPhoto} startCapture={onStartEnrollment} cancelCapture={onCancelEnrollment} onClose={() => setSelected(null)} />}
+      {selected && <ProfilePhotoManager child={selected} enrollment={enrollment} loadPhotos={onListPhotos} selectPhoto={onSelectPhoto} startCapture={onStartEnrollment} cancelCapture={onCancelEnrollment} setDailyLimit={onSetDailyLimit} addBonus={onAddBonus} onClose={() => setSelected(null)} />}
+      {scheduleOpen && <ScheduleEditor current={snapshot.curfew} onSave={onSetCurfew} onClose={() => setScheduleOpen(false)} />}
     </div>
   );
 }

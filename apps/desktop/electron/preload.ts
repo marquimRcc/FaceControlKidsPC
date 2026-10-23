@@ -11,4 +11,10 @@ contextBridge.exposeInMainWorld("facekids", {
   listPhotos: (childId: number) => ipcRenderer.invoke("facekids:list-photos", childId),
   selectPhoto: (childId: number, photoId: number) =>
     ipcRenderer.invoke("facekids:select-photo", childId, photoId),
+  setDailyLimit: (childId: number, minutes: number) =>
+    ipcRenderer.invoke("facekids:set-daily-limit", childId, minutes),
+  addBonus: (childId: number, minutes: number) =>
+    ipcRenderer.invoke("facekids:add-bonus", childId, minutes),
+  setCurfew: (input: { enabled: boolean; start: string; end: string }) =>
+    ipcRenderer.invoke("facekids:set-curfew", input),
 });

@@ -99,6 +99,34 @@ app.whenReady().then(() => {
         !typeOfNumber(photoId) || photoId <= 0) throw new Error("Foto inválida");
     await adminRequest({ op: "select_photo", childId, photoId });
   });
+  ipcMain.handle("facekids:set-daily-limit", async (
+    _event, childId: unknown, minutes: unknown,
+  ) => {
+    if (!typeOfNumber(childId) || childId <= 0 ||
+        !typeOfNumber(minutes) || minutes < 1 || minutes > 1440) {
+      throw new Error("Criança ou limite diário inválido");
+    }
+    await adminRequest({ op: "set_daily_limit", childId, minutes });
+  });
+  ipcMain.handle("facekids:add-bonus", async (
+    _event, childId: unknown, minutes: unknown,
+  ) => {
+    if (!typeOfNumber(childId) || childId <= 0 ||
+        !typeOfNumber(minutes) || minutes < 1 || minutes > 480) {
+      throw new Error("Criança ou bônus inválido");
+    }
+    await adminRequest({ op: "add_bonus", childId, minutes });
+  });
+  ipcMain.handle("facekids:set-curfew", async (_event, input: unknown) => {
+    if (!input || typeof input !== "object") throw new Error("Horário inválido");
+    const { enabled, start, end } = input as Record<string, unknown>;
+    const clock = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    if (typeof enabled !== "boolean" || typeof start !== "string" ||
+        typeof end !== "string" || !clock.test(start) || !clock.test(end)) {
+      throw new Error("Horário inválido");
+    }
+    await adminRequest({ op: "set_curfew", enabled, start, end });
+  });
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

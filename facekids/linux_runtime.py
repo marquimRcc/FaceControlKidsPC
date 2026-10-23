@@ -336,6 +336,28 @@ class LinuxFaceQuotaRuntime:
             child_id, photo_id = request.get("childId"), request.get("photoId")
             store.select_profile_photo(child_id, photo_id)
             return {"ok": True}
+        if op == "set_daily_limit":
+            child_id, minutes = request.get("childId"), request.get("minutes")
+            if (type(child_id) is not int or child_id <= 0
+                    or type(minutes) is not int or not 1 <= minutes <= 1440):
+                raise ValueError("Criança ou limite diário inválido")
+            store.set_daily_limit(child_id, minutes)
+            return {"ok": True}
+        if op == "add_bonus":
+            child_id, minutes = request.get("childId"), request.get("minutes")
+            if (type(child_id) is not int or child_id <= 0
+                    or type(minutes) is not int or not 1 <= minutes <= 480):
+                raise ValueError("Criança ou bônus inválido")
+            store.add_bonus(child_id, minutes)
+            return {"ok": True}
+        if op == "set_curfew":
+            enabled, start, end = (
+                request.get("enabled"), request.get("start"), request.get("end")
+            )
+            if type(enabled) is not bool or not isinstance(start, str) or not isinstance(end, str):
+                raise ValueError("Horário permitido inválido")
+            store.set_curfew_config(enabled, start, end)
+            return {"ok": True}
         if op == "cancel_enrollment":
             with self._admin_lock:
                 enrollment = self._enrollment
