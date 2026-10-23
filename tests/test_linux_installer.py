@@ -18,9 +18,13 @@ class LinuxInstallerTests(unittest.TestCase):
     def test_installer_does_not_start_before_enrollment(self):
         script = (ROOT / "scripts/Instalar-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
         commands = [line.strip() for line in script.splitlines() if line.strip() and not line.lstrip().startswith("#") and not line.lstrip().startswith("echo ")]
-        self.assertIn("systemctl enable facekids-linux.service", script)
-        self.assertNotIn("systemctl enable --now", script)
+        self.assertNotIn("systemctl enable facekids-linux.service", script)
         self.assertFalse(any("systemctl start facekids-linux" in line for line in commands))
+        self.assertFalse(any("systemctl enable --now" in line for line in commands))
+        self.assertIn(
+            'echo "Repita para 2 e 3; depois: sudo systemctl enable --now facekids-linux"',
+            script,
+        )
         self.assertIn("chmod 0600 /var/lib/facekids/criancas.sqlite3", script)
 
     def test_uninstaller_preserves_database(self):

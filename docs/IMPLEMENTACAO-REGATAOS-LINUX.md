@@ -46,8 +46,8 @@ sudo bash scripts/Criar-Conta-Filhos-RegataOS.sh filhos
 sudo bash scripts/Instalar-FaceKids-RegataOS.sh filhos
 ```
 
-O instalador habilita o serviço, mas não o inicia sem perfis. Com cada criança
-presente e consentimento do responsável:
+O instalador copia e prepara o serviço, mas não o habilita nem inicia sem
+perfis. Com cada criança presente e consentimento do responsável:
 
 ```bash
 facekids-linux-probe --camera 0 --seconds 5
@@ -55,7 +55,7 @@ sudo -E facekids-admin enroll 1
 sudo -E facekids-admin enroll 2
 sudo -E facekids-admin enroll 3
 sudo facekids-admin status
-sudo systemctl start facekids-linux
+sudo systemctl enable --now facekids-linux
 ```
 
 Depois de comprovar o reconhecimento, o bloqueio, a conta administrativa e a

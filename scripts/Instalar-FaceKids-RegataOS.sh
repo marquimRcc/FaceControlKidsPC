@@ -42,10 +42,9 @@ chown -R root:root /usr/lib/facekids /opt/facekids /var/lib/facekids
 chmod 0700 /var/lib/facekids
 chmod 0600 /var/lib/facekids/criancas.sqlite3
 systemctl daemon-reload
-systemctl enable facekids-linux.service
 
 echo "Instalação preparada. Cadastre os três rostos antes de iniciar o serviço:"
 echo "Primeiro valide a webcam: facekids-linux-probe --camera 0 --seconds 5"
 echo "sudo -E facekids-admin enroll 1"
-echo "Repita para 2 e 3; depois: sudo systemctl start facekids-linux"
+echo "Repita para 2 e 3; depois: sudo systemctl enable --now facekids-linux"
 echo "A integração PAM opcional não foi ativada. Teste o serviço antes de habilitá-la."
