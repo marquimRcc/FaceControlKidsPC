@@ -701,14 +701,47 @@ Vitest, typecheck, build de produção, Ruff, `git diff --check` e inspeção vi
 do formulário. Os três workflows do commit passaram. O PR draft #3 foi
 atualizado e o bundle autocontido foi reconstruído com a versão `f2883a4`.
 
+## Controles completos do perfil e diagnóstico — 23/10/2026 às 20:45
+
+Três commits avançaram o painel sem exigir presença física:
+
+- `aa8cb79`: exclusão completa de perfil, limite diário personalizado e resumo
+  do histórico. A exclusão exige confirmação em duas etapas, é recusada durante
+  captura ativa e remove, na mesma transação SQLite, fotos, vetores faciais,
+  uso, bônus e a criança. A identidade ativa é revogada imediatamente. O limite
+  aceita qualquer valor inteiro de 1 a 1440 minutos. O histórico passou a mostrar
+  total de sete dias, média nos dias com uso, dias sem uso e excesso do limite.
+- `2fb8994`: diagnóstico de câmera executável no painel, usando telemetria do
+  daemon pelo socket administrativo. Exibe abertura, quadros úteis, detecções
+  de rosto e luminosidade média sem disputar `/dev/video0` nem expor imagem.
+- `acc9e69`: navegação inferior responsiva para larguras móveis, mantendo as seis
+  áreas acessíveis quando o painel for usado como web/PWA.
+
+A fronteira de exclusão e diagnóstico permanece restrita ao preload isolado,
+IPC validado e socket administrativo; nenhuma operação destrutiva foi adicionada
+ao socket infantil. Foram executados 231 testes Python (2 skips de plataforma),
+6 testes Vitest, typecheck, build de produção, Ruff nos módulos envolvidos,
+`git diff --check` e inspeção visual interativa dos controles, confirmação de
+exclusão, resumo histórico e diagnóstico. Os três workflows do HEAD passaram.
+O PR draft #3 foi atualizado e o bundle autocontido foi reconstruído na versão
+`acc9e69`.
+
+### Estado desta pausa
+
+- **Concluído:** CRUD de nome/exclusão, limites fixos e personalizados, bônus,
+  fotos, histórico resumido, horários, diagnóstico de câmera e navegação móvel.
+- **Em andamento:** nenhuma mudança local; branch e remoto alinhados.
+- **Pendente com ação humana:** instalar o bundle por `sudo` e executar os testes
+  físicos de captura, reconhecimento, débito, bloqueio e desbloqueio.
+- **Bloqueado por presença física:** recuperação de acesso e decisão sobre PAM.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto. A navegação completa,
-> histórico real e edição de nomes já estão implementados; não repita essas
-> etapas. O bundle local mais recente identifica `f2883a4`, e seus três
-> workflows estão verdes. Restam a instalação com `sudo` interativo e os testes
-> físicos de captura, reconhecimento, quota, sessão infantil, recuperação e
-> eventual PAM. Preserve `/var/lib/facekids`, não simule evidência física e,
-> antes de pausar, atualize, commite e envie este documento.
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto e não repita navegação,
+> histórico, renomeação, exclusão, limite personalizado ou diagnóstico: tudo
+> isso já está concluído e verde até `acc9e69`. O bundle local foi reconstruído
+> nessa versão. O próximo passo de maior valor é instalar com `sudo` interativo
+> e realizar testes físicos com a criança; não simule essas evidências. Preserve
+> `/var/lib/facekids`. Antes de pausar, atualize, commite e envie este documento.
