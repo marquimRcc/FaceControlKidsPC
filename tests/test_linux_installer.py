@@ -17,7 +17,8 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("RuntimeDirectoryMode=0750", unit)
         self.assertIn("RuntimeDirectory=facekids facekids-child", unit)
         self.assertIn("--admin-group wheel", unit)
-        self.assertIn("CapabilityBoundingSet=CAP_CHOWN", unit)
+        self.assertIn("CapabilityBoundingSet=\n", unit)
+        self.assertNotIn("CapabilityBoundingSet=CAP_CHOWN", unit)
         self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
         self.assertIn("IPAddressDeny=any", unit)
 

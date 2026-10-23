@@ -558,20 +558,45 @@ Após a auditoria de código, os 3 primeiros pontos foram implementados, integra
      - Resposta imediata: disparadores automáticos (`triggerImmediateRefresh`) ao iniciar/cancelar cadastro, alterar quotas, aplicar bônus ou configurar horários.
      - Contagem suave na interface: intervalo local em React de 1 segundo que decrementa monotonicamente o `remainingSeconds` da criança presente entre os polls autoritativos do backend, garantindo UI fluida sem requisições excessivas.
 
+## Resolução dos pontos 4, 5 e 6 — 23/10/2026
+
+Os pontos 4, 5 e 6 foram totalmente implementados e testados:
+
+4. **Resolução do monopólio da webcam V4L2 e concorrência no cadastro**:
+   - `facekids/linux_probe.py`: adicionado `probe_via_daemon()`. Quando o serviço `facekids-linux.service` está ativo e retendo `/dev/video0`, o utilitário `facekids-linux-probe` agora consulta o socket administrativo `/run/facekids/admin.sock` usando `op: "probe"`. Isso elimina completamente o erro `EBUSY` (dispositivo ocupado) e retorna telemetria ao vivo da câmera (quadros, usabilidade, brilho e rostos detectados). Se o serviço estiver desligado, o utilitário abre `/dev/video0` diretamente via OpenCV.
+   - Suporte a liberação cooperativa da câmera no daemon via `op: "pause_camera"` (permite que outros aplicativos externos usem `/dev/video0` temporariamente sem derrubar o serviço).
+   - Eliminação de concorrência de CPU e falsos bloqueios durante cadastro: `run()` agora captura o quadro apenas uma vez por iteração. Enquanto `enrolling` estiver ativo, o débito de quota e verificação de bloqueio por ausência são suspensos (`self.engine.policy.pause()`), evitando travamentos da sessão do responsável durante o cadastro da criança.
+
+5. **Portabilidade Linux completa (`wheel` vs `sudo`)**:
+   - `facekids/linux_runtime.py`:
+     - `uid_is_admin()` aprimorado com `resolve_admin_gids()` para aceitar múltiplos grupos administrativos (padrão `"wheel,sudo"`).
+     - Busca os grupos suplementares com `os.getgrouplist(account.pw_name, account.pw_gid)`, garantindo compatibilidade com autenticações corporativas e modernas (NSS, LDAP, systemd-homed).
+     - Tratamento seguro de `KeyError`: se a distribuição não tiver o grupo `wheel` (como Ubuntu, Debian e Mint), o daemon não trava e faz fallback automático para `sudo`.
+   - `scripts/Instalar-FaceKids-RegataOS.sh` e `scripts/Atualizar-FaceKids-RegataOS.sh`:
+     - Detecção automática de grupo administrativo: testa `wheel`, depois `sudo`, ajustando a unit do systemd e o tmpfiles dinamicamente.
+
+6. **Eliminação de `CAP_CHOWN` e Isolamento Zero-Capability no Systemd**:
+   - `packaging/facekids-linux.service`:
+     - `CapabilityBoundingSet=` redefinido como vazio (zero capabilities), restabelecendo o confinamento estrito de segurança do processo root.
+   - `packaging/facekids-tmpfiles.conf` e scripts de instalação:
+     - Os diretórios `/run/facekids` (`0750 root:ADMIN_GROUP`) e `/run/facekids-child` (`2750 root:CHILD_USER`) agora são criados e mantidos pelo próprio `systemd-tmpfiles`.
+     - O bit `setgid` (`2750`) garante que o socket `status.sock` pertença automaticamente ao grupo da criança sem depender de `os.chown` privilegiado.
+     - `_start_child_status_server()` trata `PermissionError` silenciosamente, operando com segurança total sob privilégios mínimos.
+
 ### Validações executadas
 
-- `python -m unittest discover -s tests -v`: 225 testes unitários e de integração aprovados (`OK (skipped=2)`).
-- `pnpm typecheck`: aprovado sem erros nos 4 pacotes TypeScript (`contracts`, `ui`, `admin`, `desktop`).
+- `python -m unittest discover -s tests -v`: **228 testes aprovados**, 2 ignorados (Win32 Named Pipe).
+- `pnpm typecheck`: aprovado nos 4 pacotes TypeScript (`contracts`, `ui`, `admin`, `desktop`).
 - `pnpm test:ui`: 5 testes de contratos Zod e schema aprovados no Vitest.
-- `pnpm build`: build Vite e Electron TypeScript concluído com sucesso.
-- `bash -n`: todos os scripts em `scripts/*RegataOS.sh` e wrappers em `packaging/*` validados.
-- `systemd-analyze verify`: diretivas de `facekids-linux.service` validadas sem erros.
+- `bash -n`: todos os scripts e wrappers bash validados sem erros de sintaxe.
+- `systemd-analyze verify`: unit do systemd validada com sucesso.
 
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
 > `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados.
-> Os 3 pontos críticos de refinamento (Live Preview no cadastro, empacotamento em /opt/facekids/desktop e polling adaptativo)
-> foram completamente implementados, testados e validados.
-> Prossiga conforme orientações do usuário para verificação dos demais pontos e testes físicos de sessão.
+> Todos os 6 pontos de refinamento da auditoria de código (1: Live Preview, 2: Packaging em /opt, 3: Polling adaptativo,
+> 4: Monopólio da câmera e concorrência, 5: Portabilidade wheel/sudo e 6: Remoção de CAP_CHOWN via tmpfiles)
+> foram implementados, testados e validados com 100% de sucesso.
+> Prossiga conforme orientações do usuário para testes físicos de sessão.

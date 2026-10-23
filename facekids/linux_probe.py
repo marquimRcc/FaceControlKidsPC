@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import socket
 import statistics
 import time
 from dataclasses import dataclass
@@ -33,7 +36,44 @@ class ProbeResult:
         return "CAMERA_UTILIZAVEL"
 
 
+def probe_via_daemon(admin_socket: Path, seconds: float) -> ProbeResult | None:
+    """Consulta diagnóstico seguro do daemon FaceKids ativo se disponível."""
+    if not admin_socket.is_socket():
+        return None
+    try:
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(seconds + 3.0)
+        client.connect(str(admin_socket))
+        client.sendall((json.dumps({"op": "probe", "seconds": seconds}) + "\n").encode("utf-8"))
+        buffer = b""
+        while b"\n" not in buffer:
+            chunk = client.recv(4096)
+            if not chunk:
+                break
+            buffer += chunk
+        client.close()
+        payload = json.loads(buffer.decode("utf-8").strip())
+        if payload.get("ok") and "probe" in payload:
+            data = payload["probe"]
+            return ProbeResult(
+                opened=bool(data.get("opened", True)),
+                frames=int(data.get("frames", 0)),
+                usable_frames=int(data.get("usable_frames", 0)),
+                faces_seen=int(data.get("faces_seen", 0)),
+                elapsed_seconds=float(data.get("elapsed_seconds", seconds)),
+                mean_brightness=float(data["mean_brightness"]) if data.get("mean_brightness") is not None else None,
+            )
+    except Exception:
+        return None
+    return None
+
+
 def run_probe(camera_index: int, models: Path, seconds: float) -> ProbeResult:
+    admin_socket = Path(os.environ.get("FACEKIDS_ADMIN_SOCKET", "/run/facekids/admin.sock"))
+    daemon_result = probe_via_daemon(admin_socket, seconds)
+    if daemon_result is not None:
+        return daemon_result
+
     import cv2
 
     recognizer = Recognizer(models)

@@ -1,5 +1,6 @@
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -408,6 +409,36 @@ class LinuxSessionTests(unittest.TestCase):
         preview = LinuxFaceQuotaRuntime._encode_camera_preview(frame, faces)
         self.assertIsNotNone(preview)
         self.assertTrue(preview.startswith("data:image/jpeg;base64,"))
+
+    def test_admin_protocol_handles_probe_and_pause_camera(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._camera_state = "ready"
+            runtime._camera_samples = __import__("collections").deque(maxlen=30)
+            runtime._camera_samples.append({
+                "timestamp": time.monotonic(),
+                "usable": True,
+                "brightness": 80.5,
+                "faces": 1,
+            })
+            runtime._pause_camera_until = float("-inf")
+            probe = runtime._dispatch_admin(store, {"op": "probe", "seconds": 5})
+            self.assertTrue(probe["ok"])
+            self.assertEqual(probe["probe"]["frames"], 1)
+            self.assertEqual(probe["probe"]["usable_frames"], 1)
+            self.assertEqual(probe["probe"]["faces_seen"], 1)
+
+            pause = runtime._dispatch_admin(store, {"op": "pause_camera", "seconds": 2})
+            self.assertTrue(pause["ok"])
+            self.assertEqual(pause["pausedSeconds"], 2.0)
+            self.assertGreater(runtime._pause_camera_until, time.monotonic())
+            store.close()
+
+    def test_admin_check_handles_multiple_groups_and_fallbacks(self):
+        self.assertTrue(uid_is_admin(0, "wheel,sudo"))
+        self.assertFalse(uid_is_admin(99999, "nonexistent_group"))
 
 
 if __name__ == "__main__":

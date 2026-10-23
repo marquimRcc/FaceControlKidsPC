@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import base64
+import collections
 import json
 import logging
 import os
 import signal
 import socket
+import statistics
 import struct
 import subprocess
 import threading
@@ -107,7 +109,7 @@ class LinuxRuntimeConfig:
     interval_seconds: float = 1.0
     lock_on_uncertain: bool = True
     auto_unlock: bool = True
-    admin_group: str = "wheel"
+    admin_group: str = "wheel,sudo"
 
     def validate(self) -> None:
         if not 0 <= self.camera <= 32:
@@ -123,23 +125,67 @@ class LinuxRuntimeConfig:
         ):
             raise ValueError("Usuário monitorado inválido")
         if not self.admin_group or not all(
-            ch.isalnum() or ch in "_-" for ch in self.admin_group
+            ch.isalnum() or ch in "_-," for ch in self.admin_group
         ):
             raise ValueError("Grupo administrador inválido")
 
 
-def uid_is_admin(uid: int, group_name: str) -> bool:
-    """Autoriza root ou membro real do grupo administrativo configurado."""
+def resolve_admin_gids(group_names: str | tuple[str, ...]) -> set[int]:
+    """Descobre os GIDs válidos para os grupos administrativos indicados."""
+    if grp is None:
+        return set()
+    if isinstance(group_names, str):
+        candidates = [g.strip() for g in group_names.split(",") if g.strip()]
+    else:
+        candidates = list(group_names)
+    gids: set[int] = set()
+    for name in candidates:
+        try:
+            gids.add(grp.getgrnam(name).gr_gid)
+        except KeyError:
+            continue
+    return gids
+
+
+def uid_is_admin(uid: int, group_name: str = "wheel,sudo") -> bool:
+    """Autoriza root ou membro real de grupo administrativo (wheel, sudo, etc.)."""
     if uid == 0:
         return True
     if grp is None or pwd is None:
         return False
     try:
         account = pwd.getpwuid(uid)
-        group = grp.getgrnam(group_name)
     except KeyError:
         return False
-    return account.pw_gid == group.gr_gid or account.pw_name in group.gr_mem
+
+    admin_gids = resolve_admin_gids(group_name)
+    if not admin_gids:
+        # Tenta fallback se nenhum dos grupos configurados existir na distro
+        admin_gids = resolve_admin_gids(("wheel", "sudo"))
+    if not admin_gids:
+        return False
+
+    if account.pw_gid in admin_gids:
+        return True
+
+    # os.getgrouplist resolve grupos suplementares de forma confiável (inclusive NSS/SSSD/homed)
+    if hasattr(os, "getgrouplist"):
+        try:
+            user_gids = set(os.getgrouplist(account.pw_name, account.pw_gid))
+            if admin_gids & user_gids:
+                return True
+        except Exception:
+            pass
+
+    # Fallback para membros estáticos em /etc/group
+    for gid in admin_gids:
+        try:
+            group = grp.getgrgid(gid)
+            if account.pw_name in group.gr_mem:
+                return True
+        except KeyError:
+            continue
+    return False
 
 
 def uid_is_monitored_user(uid: int, user_name: str | None) -> bool:
@@ -197,6 +243,8 @@ class LinuxFaceQuotaRuntime:
         self._camera_state = "ready"
         self._last_unlock_request = float("-inf")
         self._last_lock_request = float("-inf")
+        self._camera_samples: collections.deque = collections.deque(maxlen=30)
+        self._pause_camera_until = float("-inf")
 
     @staticmethod
     def _references_signature(references) -> tuple:
@@ -389,6 +437,36 @@ class LinuxFaceQuotaRuntime:
                     and not store.remove_unenrolled_person(enrollment["child_id"])):
                 raise RuntimeError("O perfil já possui dados e não pode ser removido")
             return {"ok": True}
+        if op == "probe":
+            seconds = float(request.get("seconds", 5.0))
+            with self._admin_lock:
+                samples = list(self._camera_samples)
+            now = time.monotonic()
+            recent = [s for s in samples if now - s["timestamp"] <= max(seconds, 10.0)]
+            if not recent and samples:
+                recent = samples[-10:]
+            frames = len(recent)
+            usable_frames = sum(1 for s in recent if s["usable"])
+            faces_seen = sum(s["faces"] for s in recent)
+            brightness_vals = [s["brightness"] for s in recent if s["brightness"] is not None]
+            mean_brightness = (
+                float(statistics.fmean(brightness_vals)) if brightness_vals else None
+            )
+            return {
+                "ok": True,
+                "probe": {
+                    "opened": self._camera_state != "offline",
+                    "frames": frames,
+                    "usable_frames": usable_frames,
+                    "faces_seen": faces_seen,
+                    "elapsed_seconds": seconds,
+                    "mean_brightness": mean_brightness,
+                },
+            }
+        if op == "pause_camera":
+            duration = min(max(float(request.get("seconds", 5.0)), 1.0), 30.0)
+            self._pause_camera_until = time.monotonic() + duration
+            return {"ok": True, "pausedSeconds": duration}
         raise ValueError("Operação administrativa desconhecida")
 
     def _serve_admin(self, server: socket.socket) -> None:
@@ -499,13 +577,19 @@ class LinuxFaceQuotaRuntime:
             raise RuntimeError("Conta infantil POSIX indisponível")
         account = pwd.getpwnam(self.config.monitored_user)
         self.child_socket_path.parent.mkdir(parents=True, exist_ok=True)
-        os.chown(self.child_socket_path.parent, 0, account.pw_gid)
-        os.chmod(self.child_socket_path.parent, 0o750)
+        try:
+            os.chown(self.child_socket_path.parent, 0, account.pw_gid)
+            os.chmod(self.child_socket_path.parent, 0o2750)
+        except PermissionError:
+            pass
         self.child_socket_path.unlink(missing_ok=True)
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             server.bind(str(self.child_socket_path))
-            os.chown(self.child_socket_path, 0, account.pw_gid)
+            try:
+                os.chown(self.child_socket_path, 0, account.pw_gid)
+            except PermissionError:
+                pass
             os.chmod(self.child_socket_path, 0o660)
             server.listen(4)
             server.settimeout(0.5)
@@ -518,18 +602,16 @@ class LinuxFaceQuotaRuntime:
         )
         self._child_server_thread.start()
 
-    def _process_enrollment(self, capture, now: float) -> bool:
+    def _process_enrollment_frame(self, frame, faces, now: float) -> bool:
         with self._admin_lock:
             enrollment = self._enrollment
             if enrollment is None or enrollment["state"] != "capturing":
                 return False
-        ok, frame = capture.read()
-        if not ok or not frame_is_usable(frame):
+        if frame is None or not frame_is_usable(frame):
             with self._admin_lock:
                 if self._enrollment is enrollment:
                     enrollment["feedback"] = "waiting"
             return True
-        faces = self.recognizer.faces(frame)
         preview_data = self._encode_camera_preview(frame, faces)
         feedback = "waiting"
         vector = None
@@ -564,6 +646,16 @@ class LinuxFaceQuotaRuntime:
                     enrollment["state"] = "error"
                     enrollment["error"] = str(exc)
         return True
+
+    def _process_enrollment(self, capture, now: float) -> bool:
+        with self._admin_lock:
+            if self._enrollment is None or self._enrollment["state"] != "capturing":
+                return False
+        ok, frame = capture.read()
+        if not ok or frame is None:
+            return True
+        faces = self.recognizer.faces(frame) if frame_is_usable(frame) else []
+        return self._process_enrollment_frame(frame, faces, now)
 
     @staticmethod
     def _encode_camera_preview(frame, faces) -> str | None:
@@ -731,22 +823,62 @@ class LinuxFaceQuotaRuntime:
         try:
             while not self._stopping:
                 started = time.monotonic()
+                if self._pause_camera_until > started:
+                    if capture.isOpened():
+                        capture.release()
+                    self._camera_state = "paused"
+                    time.sleep(0.5)
+                    continue
+                elif not capture.isOpened():
+                    capture.open(self.config.camera, cv2.CAP_V4L2)
+                    warm_up_camera(capture)
+
                 enrollments_ready = self._refresh_references(started)
                 session_id = self.config.session_id or linux_display_session(
                     self.config.monitored_user
                 )
                 state = current_linux_session_state(session_id) if session_id else SessionState.UNKNOWN
                 self._session_state = state
-                try:
-                    enrolling = self._process_enrollment(capture, started)
-                    candidate = self._candidate(capture) if not enrolling and enrollments_ready and state in {
-                        SessionState.ACTIVE, SessionState.LOCKED
-                    } else None
-                    self._camera_state = "busy" if enrolling else "ready"
-                except RuntimeError as exc:
+
+                ok, frame = capture.read()
+                if not ok or frame is None:
                     self._camera_state = "offline"
-                    LOG.error("Falha de captura: %s", exc)
+                    LOG.error("Falha de captura: a câmera parou de fornecer quadros")
+                    time.sleep(0.5)
+                    continue
+
+                usable = frame_is_usable(frame)
+                brightness = float(np.mean(frame))
+                faces = self.recognizer.faces(frame) if usable else []
+                with self._admin_lock:
+                    self._camera_samples.append({
+                        "timestamp": started,
+                        "usable": usable,
+                        "brightness": brightness,
+                        "faces": len(faces),
+                    })
+
+                enrolling = self._process_enrollment_frame(frame, faces, started)
+                if enrolling:
+                    self._camera_state = "busy"
+                    self._current_child_id = None
+                    # Suspende débito de quota e bloqueios enquanto o cadastro facial estiver ativo
+                    self.engine.policy.pause()
+                    elapsed = time.monotonic() - started
+                    time.sleep(max(0.0, 0.4 - elapsed))
+                    continue
+
+                self._camera_state = "ready"
+                if not usable:
+                    self._camera_state = "offline"
+                    LOG.error("Falha de captura: a câmera forneceu quadro preto ou sem contraste")
                     candidate = None
+                elif enrollments_ready and state in {SessionState.ACTIVE, SessionState.LOCKED} and len(faces) == 1:
+                    vector = self.recognizer.features(frame, faces[0])
+                    candidate, _score = self.recognizer.identify(vector, self.references)
+                else:
+                    candidate = None
+
                 self._current_child_id = candidate
                 today = date.today().isoformat()
                 reading = self.engine.step(started, today, state, candidate)
@@ -797,7 +929,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--session-id")
     parser.add_argument("--user", dest="monitored_user", default="filhos")
-    parser.add_argument("--admin-group", default="wheel")
+    parser.add_argument("--admin-group", default="wheel,sudo")
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument(
         "--allow-uncertain", action="store_true",

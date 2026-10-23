@@ -9,7 +9,16 @@ fi
 SOURCE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 CHILD_USER=${1:-filhos}
 CHILD_COUNT=${2:-1}
-ADMIN_GROUP=${3:-wheel}
+ADMIN_GROUP=${3:-}
+if [[ -z "${ADMIN_GROUP}" ]]; then
+  if getent group wheel >/dev/null; then
+    ADMIN_GROUP="wheel"
+  elif getent group sudo >/dev/null; then
+    ADMIN_GROUP="sudo"
+  else
+    ADMIN_GROUP="wheel"
+  fi
+fi
 if [[ ! ${CHILD_USER} =~ ^[a-z_][a-z0-9_.-]*$ ]]; then
   echo "Nome de usuário inválido: ${CHILD_USER}" >&2
   exit 1
@@ -26,6 +35,7 @@ if ! getent passwd "${CHILD_USER}" >/dev/null; then
   echo "A conta compartilhada '${CHILD_USER}' ainda não existe." >&2
   exit 1
 fi
+CHILD_GROUP=$(id -gn "${CHILD_USER}")
 
 zypper --non-interactive install python313 v4l-utils
 
@@ -67,6 +77,14 @@ PYTHONPATH=/usr/lib/facekids /opt/facekids/venv/bin/python -m facekids.cli \
   --models /usr/lib/facekids/models download-models
 PYTHONPATH=/usr/lib/facekids /opt/facekids/venv/bin/python -m facekids.linux_admin \
   --database /var/lib/facekids/criancas.sqlite3 setup --children "${CHILD_COUNT}"
+
+# Configuração de runtime protegida via systemd-tmpfiles (elimina necessidade de CAP_CHOWN)
+install -d -m 0755 /usr/lib/tmpfiles.d /etc/tmpfiles.d
+cat > /etc/tmpfiles.d/facekids.conf <<TMPFILES
+d /run/facekids 0750 root ${ADMIN_GROUP} -
+d /run/facekids-child 2750 root ${CHILD_GROUP} -
+TMPFILES
+systemd-tmpfiles --create /etc/tmpfiles.d/facekids.conf 2>/dev/null || true
 
 install -m 0644 "${SOURCE_DIR}/packaging/facekids-linux.service" /etc/systemd/system/facekids-linux.service
 sed -i "s/--user filhos/--user ${CHILD_USER}/" /etc/systemd/system/facekids-linux.service

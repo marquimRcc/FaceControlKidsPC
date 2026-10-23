@@ -22,8 +22,8 @@ RuntimeDirectoryMode=0750
 DevicePolicy=closed
 DeviceAllow=/dev/video0 rw
 NoNewPrivileges=true
-# Necessária somente para entregar o socket de leitura ao grupo da conta infantil.
-CapabilityBoundingSet=CAP_CHOWN
+# Nenhum privilégio residual: permissões de runtime gerenciadas via systemd-tmpfiles.
+CapabilityBoundingSet=
 RestrictAddressFamilies=AF_UNIX
 IPAddressDeny=any
 LockPersonality=true

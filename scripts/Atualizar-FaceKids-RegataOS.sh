@@ -6,7 +6,16 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 SOURCE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 CHILD_USER=${1:-filhos}
-ADMIN_GROUP=${2:-wheel}
+ADMIN_GROUP=${2:-}
+if [[ -z "${ADMIN_GROUP}" ]]; then
+  if getent group wheel >/dev/null; then
+    ADMIN_GROUP="wheel"
+  elif getent group sudo >/dev/null; then
+    ADMIN_GROUP="sudo"
+  else
+    ADMIN_GROUP="wheel"
+  fi
+fi
 if [[ ! ${CHILD_USER} =~ ^[a-z_][a-z0-9_.-]*$ ]] || ! getent passwd "${CHILD_USER}" >/dev/null; then
   echo "Conta infantil inválida ou inexistente: ${CHILD_USER}" >&2
   exit 1
@@ -15,6 +24,7 @@ if [[ ! ${ADMIN_GROUP} =~ ^[a-z_][a-z0-9_-]*$ ]] || ! getent group "${ADMIN_GROU
   echo "Grupo administrador inválido ou inexistente: ${ADMIN_GROUP}" >&2
   exit 1
 fi
+CHILD_GROUP=$(id -gn "${CHILD_USER}")
 if [[ ! -x /opt/facekids/venv/bin/python || ! -f /var/lib/facekids/criancas.sqlite3 ]]; then
   echo "Instalação existente não encontrada; use Instalar-FaceKids-RegataOS.sh." >&2
   exit 1
@@ -43,6 +53,14 @@ if [[ -d "${SOURCE_DIR}/apps/desktop/dist" && -d "${SOURCE_DIR}/apps/desktop/dis
   install -m 0755 "${SOURCE_DIR}/packaging/facekids-child-gui" /usr/local/bin/facekids-child-gui
   chown -R root:root /opt/facekids/desktop
 fi
+# Atualiza configuração de runtime do tmpfiles (dispensa CAP_CHOWN)
+install -d -m 0755 /usr/lib/tmpfiles.d /etc/tmpfiles.d
+cat > /etc/tmpfiles.d/facekids.conf <<TMPFILES
+d /run/facekids 0750 root ${ADMIN_GROUP} -
+d /run/facekids-child 2750 root ${CHILD_GROUP} -
+TMPFILES
+systemd-tmpfiles --create /etc/tmpfiles.d/facekids.conf 2>/dev/null || true
+
 install -m 0644 "${SOURCE_DIR}/packaging/facekids-linux.service" /etc/systemd/system/facekids-linux.service
 sed -i "s/--user filhos/--user ${CHILD_USER}/" /etc/systemd/system/facekids-linux.service
 sed -i "s/--admin-group wheel/--admin-group ${ADMIN_GROUP}/" /etc/systemd/system/facekids-linux.service
