@@ -735,13 +735,41 @@ O PR draft #3 foi atualizado e o bundle autocontido foi reconstruído na versão
   físicos de captura, reconhecimento, débito, bloqueio e desbloqueio.
 - **Bloqueado por presença física:** recuperação de acesso e decisão sobre PAM.
 
+## Auditoria iniciada antes da renovação de cota — 23/10/2026
+
+A próxima frente autônoma foi inspecionada: testes funcionais da interface e
+robustez de instalação/rollback. O instalador autocontido faz troca atômica de
+`/opt/facekids/desktop`, mas o teste atual em `tests/test_linux_installer.py`
+verifica apenas trechos do script; ele não executa cenários isolados de primeira
+instalação, atualização, manifesto corrompido ou restauração após falha. Não há
+mudança de código parcial nesta pausa e a árvore está limpa.
+
+### Próximos passos autônomos definidos
+
+1. Parametrizar destinos do instalador por variáveis internas seguras para que
+   testes possam usar diretórios temporários sem root, preservando os caminhos
+   fixos como padrão de produção.
+2. Criar testes funcionais para instalação limpa, atualização, checksum inválido,
+   rollback e preservação de dados externos a `/opt/facekids/desktop`.
+3. Auditar manifesto e links simbólicos do runtime Electron, garantindo que todo
+   conteúdo instalado seja coberto pela verificação de integridade.
+4. Adicionar testes de componente para confirmação de exclusão, limite livre,
+   falhas do backend e diagnóstico, sem duplicar testes triviais de implementação.
+5. Rodar suíte completa, rebuild do bundle, CI e revisão do PR.
+
+A cota confiável da janela de cinco horas indicava 13% restantes nesta pausa;
+a margem permanente exige interromper antes dos 8%. A retomada foi programada
+para 01:13:15 de 24/10/2026, três minutos após a renovação informada para
+01:10:15 no horário de Brasília.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto e não repita navegação,
-> histórico, renomeação, exclusão, limite personalizado ou diagnóstico: tudo
-> isso já está concluído e verde até `acc9e69`. O bundle local foi reconstruído
-> nessa versão. O próximo passo de maior valor é instalar com `sudo` interativo
-> e realizar testes físicos com a criança; não simule essas evidências. Preserve
-> `/var/lib/facekids`. Antes de pausar, atualize, commite e envie este documento.
+> `docs/CONTINUIDADE-REGATAOS.md`. A árvore estava limpa em `cb53176`. Retome
+> pela seção “Auditoria iniciada antes da renovação de cota”: torne o instalador
+> testável em diretórios temporários, implemente testes funcionais de instalação,
+> atualização, corrupção e rollback, e audite a cobertura do manifesto sobre
+> links simbólicos. Preserve os caminhos de produção, `/var/lib/facekids` e o
+> isolamento de privilégios. Depois faça testes de interface de alto valor, rode
+> a suíte, atualize o PR e, antes de pausar, atualize, commite e envie este arquivo.
