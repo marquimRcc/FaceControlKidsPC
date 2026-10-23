@@ -61,6 +61,24 @@ class Storage:
                 (name.strip(), int(limit_minutes * 60)))
         return int(cur.lastrowid)
 
+    def remove_unenrolled_person(self, person_id: int) -> bool:
+        """Remove somente perfil novo sem biometria, uso ou bônus."""
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador de criança inválido.")
+        with self.db:
+            counts = self.db.execute("""
+                SELECT
+                  (SELECT COUNT(*) FROM embeddings WHERE person_id=?),
+                  (SELECT COUNT(*) FROM daily_usage WHERE person_id=?),
+                  (SELECT COUNT(*) FROM daily_bonus WHERE person_id=?)
+            """, (person_id, person_id, person_id)).fetchone()
+            if counts is None or any(counts):
+                return False
+            removed = self.db.execute(
+                "DELETE FROM people WHERE id=?", (person_id,)
+            ).rowcount
+        return removed == 1
+
     def set_daily_limit(self, person_id: int, minutes: int):
         if not 1 <= minutes <= 1440:
             raise ValueError("Limite permitido: 1 a 1440 minutos.")

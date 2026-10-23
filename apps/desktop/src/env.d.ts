@@ -1,8 +1,8 @@
-import type { DesktopContext } from "@facekids/contracts";
+import type { FaceKidsDesktopApi } from "@facekids/contracts";
 
 declare global {
   interface Window {
-    facekids?: { getContext(): Promise<DesktopContext> };
+    facekids?: FaceKidsDesktopApi;
   }
 }
 

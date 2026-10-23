@@ -23,6 +23,7 @@ from facekids.session import (
     current_linux_session_state,
     parse_loginctl_properties,
 )
+from facekids.storage import Storage
 
 
 class LinuxSessionTests(unittest.TestCase):
@@ -259,6 +260,43 @@ class LinuxSessionTests(unittest.TestCase):
         mock_thread.join.assert_called_once_with(timeout=1.0)
         mock_socket_path.unlink.assert_called_once_with(missing_ok=True)
         runtime.store.close.assert_called_once_with()
+
+    def test_admin_protocol_adds_child_and_reports_real_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._enrollment = None
+            runtime._current_child_id = None
+            runtime._session_state = SessionState.ACTIVE
+            added = runtime._dispatch_admin(
+                store, {"op": "add_child_and_start_enrollment", "name": "Ana", "minutes": 90}
+            )
+            self.assertTrue(added["ok"])
+            status = runtime._dispatch_admin(store, {"op": "status"})
+            self.assertEqual(status["snapshot"]["children"][0]["name"], "Ana")
+            self.assertEqual(status["snapshot"]["children"][0]["dailyLimitSeconds"], 5400)
+            self.assertEqual(status["enrollment"]["state"], "capturing")
+            runtime._dispatch_admin(store, {"op": "cancel_enrollment"})
+            self.assertEqual(store.people(), [])
+            store.close()
+
+    def test_admin_protocol_rejects_unknown_and_invalid_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._enrollment = None
+            for request in (
+                {"op": "unknown"},
+                {"op": "add_child", "name": "", "minutes": 90},
+                {"op": "start_enrollment", "childId": 999},
+            ):
+                with self.subTest(request=request), self.assertRaises(
+                    (ValueError, KeyError)
+                ):
+                    runtime._dispatch_admin(store, request)
+            store.close()
 
 
 if __name__ == "__main__":

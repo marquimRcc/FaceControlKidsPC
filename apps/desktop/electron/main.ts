@@ -1,9 +1,33 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import net from "node:net";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const role = process.argv.includes("--role=child") ? "child" : "admin";
+const adminSocket = process.env.FACEKIDS_ADMIN_SOCKET ?? "/run/facekids/admin.sock";
+
+function adminRequest(request: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection(adminSocket);
+    let response = "";
+    const fail = (error: Error) => { client.destroy(); reject(error); };
+    client.setTimeout(4000, () => fail(new Error("O serviço FaceKids não respondeu")));
+    client.on("connect", () => client.write(`${JSON.stringify(request)}\n`));
+    client.on("data", chunk => {
+      response += chunk.toString("utf8");
+      if (response.length > 1_000_000) fail(new Error("Resposta do serviço excedeu o limite"));
+      if (!response.includes("\n")) return;
+      client.end();
+      try {
+        const parsed = JSON.parse(response.split("\n", 1)[0]!) as Record<string, unknown>;
+        if (parsed.ok !== true) reject(new Error(String(parsed.error ?? "Operação recusada")));
+        else resolve(parsed);
+      } catch (error) { reject(error); }
+    });
+    client.on("error", reject);
+  });
+}
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -40,8 +64,31 @@ app.whenReady().then(() => {
     platform: process.platform,
     backendConnected: false,
   }));
+  ipcMain.handle("facekids:admin-state", async () => {
+    const response = await adminRequest({ op: "status" });
+    return { snapshot: response.snapshot, enrollment: response.enrollment ?? null };
+  });
+  ipcMain.handle("facekids:enroll-child", async (_event, input: unknown) => {
+    if (!input || typeof input !== "object") throw new Error("Cadastro inválido");
+    const { name, minutes } = input as { name?: unknown; minutes?: unknown };
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 80 ||
+        typeOfNumber(minutes) === false || minutes < 1 || minutes > 1440) {
+      throw new Error("Nome ou limite inválido");
+    }
+    const added = await adminRequest({
+      op: "add_child_and_start_enrollment", name: name.trim(), minutes,
+    });
+    return { childId: added.childId };
+  });
+  ipcMain.handle("facekids:cancel-enrollment", async () => {
+    await adminRequest({ op: "cancel_enrollment" });
+  });
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
+
+function typeOfNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

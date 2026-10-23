@@ -327,3 +327,38 @@ Antes de qualquer pausa planejada, a IA deve:
    branch remota.
 6. Só então encerrar ou aguardar a próxima janela de trabalho.
 
+
+## Integração real do painel — 23/10/2026
+
+Foi implementado o socket administrativo `/run/facekids/admin.sock`, separado
+do socket PAM. Ele usa `SO_PEERCRED`, grupo administrativo configurável,
+diretório `0750` e socket `0660`. O renderer Electron continua sem Node.js e
+sem acesso ao SQLite; somente o processo principal fala o protocolo JSON
+limitado. A conta `filhos` não pertence ao grupo `wheel`.
+
+O painel agora lê perfis, quotas, bônus, horário, sessão e progresso reais. O
+fluxo **Nova criança** cria o perfil e inicia no serviço a captura real de 12
+amostras. O serviço mantém a câmera, não envia imagens à interface e grava os
+vetores atomicamente. Cancelar remove o perfil novo ainda vazio. O runtime pode
+permanecer ativo com cadastro incompleto para permitir a recuperação pelo
+painel, mas mantém a sessão bloqueada até todos os perfis terem amostras.
+
+Foi criado o aplicativo KDE **FaceKids — Painel dos pais** em
+`~/.local/share/applications/facekids-admin.desktop`, além dos scripts
+`Abrir-Painel-RegataOS.sh`, `Criar-Atalho-Painel-RegataOS.sh` e
+`Atualizar-FaceKids-RegataOS.sh`.
+
+Validação desta etapa: 213 testes Python aprovados (2 skips específicos do
+Windows), typecheck dos quatro pacotes, 2 testes TypeScript, build Vite/Electron,
+Ruff dos módulos Linux alterados, sintaxe shell e `systemd-analyze verify` da
+unidade. O lançador abriu o Electron no KDE; o aviso VA-API do driver híbrido
+não impediu a execução.
+
+Pendência operacional única: executar como root o atualizador do serviço para
+copiar esta versão a `/usr/lib/facekids`, instalar a unidade com grupo `wheel`
+e reiniciar o daemon. Até isso ocorrer, o aplicativo abre, mas informa que o
+socket administrativo ainda não existe. Comando:
+
+```bash
+sudo bash scripts/Atualizar-FaceKids-RegataOS.sh filhos wheel
+```

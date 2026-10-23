@@ -17,6 +17,23 @@ desbloqueio pelo logind. A integração PAM opcional permanece desativada até o
 responsável testar reconhecimento, recuperação e fallback por senha. O login
 inicial pelo SDDM ainda pode exigir integração gráfica específica.
 
+### Painel dos pais no Regata OS
+
+O painel Electron comunica-se com o serviço protegido pelo socket Unix
+`/run/facekids/admin.sock`. Somente `root` e membros do grupo administrativo
+configurado (por padrão `wheel`) conseguem consultar ou alterar cadastros. A
+interface não abre o banco SQLite diretamente.
+
+Depois de instalar ou atualizar o serviço, crie o aplicativo no menu KDE:
+
+```bash
+./scripts/Criar-Atalho-Painel-RegataOS.sh
+```
+
+Abra **FaceKids — Painel dos pais** no menu de aplicativos. O botão **Nova
+criança** cria o perfil no serviço e inicia a captura real de 12 amostras pela
+webcam. Fotos e vídeos não são persistidos.
+
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
 Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao

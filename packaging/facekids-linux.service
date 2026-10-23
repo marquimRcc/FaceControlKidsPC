@@ -6,10 +6,10 @@ Wants=systemd-logind.service
 [Service]
 Type=simple
 User=root
-Group=root
+Group=wheel
 Environment=PYTHONUNBUFFERED=1
 UMask=0077
-ExecStart=/opt/facekids/venv/bin/python -m facekids.linux_runtime --database /var/lib/facekids/criancas.sqlite3 --models /usr/lib/facekids/models --user filhos --camera 0
+ExecStart=/opt/facekids/venv/bin/python -m facekids.linux_runtime --database /var/lib/facekids/criancas.sqlite3 --models /usr/lib/facekids/models --user filhos --admin-group wheel --camera 0
 WorkingDirectory=/usr/lib/facekids
 Restart=on-failure
 RestartSec=5
@@ -18,7 +18,7 @@ ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/facekids
 RuntimeDirectory=facekids
-RuntimeDirectoryMode=0700
+RuntimeDirectoryMode=0750
 DevicePolicy=closed
 DeviceAllow=/dev/video0 rw
 NoNewPrivileges=true

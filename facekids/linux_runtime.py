@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import grp
+import json
 import logging
 import os
+import pwd
 import signal
 import socket
 import struct
@@ -19,6 +22,7 @@ import numpy as np
 from .child_quota_pilot import ChildQuotaEngine, PilotEvent
 from .linux_auth import FaceApprovalBroker, approval_still_allowed
 from .locker import lock_current_session, unlock_linux_session
+from .parent_face_pilot import REQUIRED_SAMPLES, _valid_features, replace_templates
 from .recognition import Recognizer
 from .session import SessionState, current_linux_session_state, linux_display_session
 from .storage import Storage
@@ -97,6 +101,7 @@ class LinuxRuntimeConfig:
     interval_seconds: float = 1.0
     lock_on_uncertain: bool = True
     auto_unlock: bool = True
+    admin_group: str = "wheel"
 
     def validate(self) -> None:
         if not 0 <= self.camera <= 32:
@@ -111,6 +116,22 @@ class LinuxRuntimeConfig:
             ch.isalnum() or ch in "_.-" for ch in self.monitored_user
         ):
             raise ValueError("Usuário monitorado inválido")
+        if not self.admin_group or not all(
+            ch.isalnum() or ch in "_-" for ch in self.admin_group
+        ):
+            raise ValueError("Grupo administrador inválido")
+
+
+def uid_is_admin(uid: int, group_name: str) -> bool:
+    """Autoriza root ou membro real do grupo administrativo configurado."""
+    if uid == 0:
+        return True
+    try:
+        account = pwd.getpwuid(uid)
+        group = grp.getgrnam(group_name)
+    except KeyError:
+        return False
+    return account.pw_gid == group.gr_gid or account.pw_name in group.gr_mem
 
 
 class LinuxFaceQuotaRuntime:
@@ -140,7 +161,15 @@ class LinuxFaceQuotaRuntime:
         self.socket_path = Path(os.environ.get(
             "FACEKIDS_AUTH_SOCKET", "/run/facekids/auth.sock"
         ))
+        self.admin_socket_path = Path(os.environ.get(
+            "FACEKIDS_ADMIN_SOCKET", "/run/facekids/admin.sock"
+        ))
         self._server_thread: threading.Thread | None = None
+        self._admin_server_thread: threading.Thread | None = None
+        self._admin_lock = threading.Lock()
+        self._enrollment: dict | None = None
+        self._current_child_id: int | None = None
+        self._session_state = SessionState.UNKNOWN
         self._last_unlock_request = float("-inf")
         self._last_lock_request = float("-inf")
 
@@ -181,10 +210,194 @@ class LinuxFaceQuotaRuntime:
 
     def close(self) -> None:
         self._stopping = True
-        if self._server_thread is not None and self._server_thread.is_alive():
-            self._server_thread.join(timeout=1.0)
+        for thread in (
+            getattr(self, "_server_thread", None),
+            getattr(self, "_admin_server_thread", None),
+        ):
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=1.0)
         self.socket_path.unlink(missing_ok=True)
+        admin_socket = getattr(self, "admin_socket_path", None)
+        if admin_socket is not None:
+            admin_socket.unlink(missing_ok=True)
         self.store.close()
+
+    def _enrollment_snapshot(self) -> dict | None:
+        with self._admin_lock:
+            if self._enrollment is None:
+                return None
+            return {
+                "childId": self._enrollment["child_id"],
+                "samples": len(self._enrollment["vectors"]),
+                "requiredSamples": REQUIRED_SAMPLES,
+                "state": self._enrollment["state"],
+                "error": self._enrollment.get("error"),
+            }
+
+    def _admin_status(self, store: Storage) -> dict:
+        today = date.today().isoformat()
+        enabled, start, end = store.get_curfew_config()
+        current = self._current_child_id
+        children = []
+        for person_id, name, limit_seconds in store.people():
+            children.append({
+                "id": person_id,
+                "name": name,
+                "initials": "".join(part[0] for part in name.split()[:2]).upper()[:3] or "?",
+                "remainingSeconds": int(store.remaining(person_id, today)),
+                "dailyLimitSeconds": int(limit_seconds),
+                "bonusSeconds": int(store.bonus(person_id, today)),
+                "enrollmentSamples": store.enrollment_count(person_id),
+                "isPresent": person_id == current,
+            })
+        return {
+            "ok": True,
+            "snapshot": {
+                "generatedAt": __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc
+                ).isoformat().replace("+00:00", "Z"),
+                "service": "online",
+                "camera": "ready",
+                "session": {
+                    SessionState.ACTIVE: "active",
+                    SessionState.LOCKED: "locked",
+                }.get(self._session_state, "absent"),
+                "curfew": {"enabled": enabled, "start": start, "end": end},
+                "children": children,
+            },
+            "enrollment": self._enrollment_snapshot(),
+        }
+
+    def _dispatch_admin(self, store: Storage, request: dict) -> dict:
+        op = request.get("op")
+        if op == "status":
+            return self._admin_status(store)
+        if op in {"add_child", "add_child_and_start_enrollment"}:
+            name, minutes = request.get("name"), request.get("minutes")
+            if not isinstance(name, str) or type(minutes) is not int:
+                raise ValueError("Nome ou limite inválido")
+            if op == "add_child_and_start_enrollment":
+                with self._admin_lock:
+                    if self._enrollment and self._enrollment["state"] == "capturing":
+                        raise RuntimeError("Já existe um cadastro facial em andamento")
+            person_id = store.add_person(name, minutes)
+            index = next(i for i, row in enumerate(store.people(), 1) if row[0] == person_id)
+            if op == "add_child_and_start_enrollment":
+                with self._admin_lock:
+                    self._enrollment = {
+                        "child_id": person_id, "vectors": [], "state": "capturing",
+                        "last_at": float("-inf"), "error": None, "new_profile": True,
+                    }
+            return {"ok": True, "childId": person_id, "childIndex": index}
+        if op == "start_enrollment":
+            child_id = request.get("childId")
+            if type(child_id) is not int or child_id <= 0:
+                raise ValueError("Identificador de criança inválido")
+            if child_id not in {row[0] for row in store.people()}:
+                raise KeyError(child_id)
+            with self._admin_lock:
+                if self._enrollment and self._enrollment["state"] == "capturing":
+                    raise RuntimeError("Já existe um cadastro facial em andamento")
+                self._enrollment = {
+                    "child_id": child_id, "vectors": [], "state": "capturing",
+                    "last_at": float("-inf"), "error": None, "new_profile": False,
+                }
+            return {"ok": True}
+        if op == "cancel_enrollment":
+            with self._admin_lock:
+                enrollment = self._enrollment
+                self._enrollment = None
+            if (enrollment and enrollment.get("new_profile")
+                    and not store.remove_unenrolled_person(enrollment["child_id"])):
+                raise RuntimeError("O perfil já possui dados e não pode ser removido")
+            return {"ok": True}
+        raise ValueError("Operação administrativa desconhecida")
+
+    def _serve_admin(self, server: socket.socket) -> None:
+        store = Storage(self.config.database)
+        try:
+            while not self._stopping:
+                try:
+                    connection, _ = server.accept()
+                except TimeoutError:
+                    continue
+                with connection:
+                    connection.settimeout(3.0)
+                    response = {"ok": False, "error": "Pedido recusado"}
+                    try:
+                        credentials = connection.getsockopt(
+                            socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")
+                        )
+                        _pid, uid, _gid = struct.unpack("3i", credentials)
+                        if not uid_is_admin(uid, self.config.admin_group):
+                            raise PermissionError("Conta sem permissão administrativa")
+                        raw = connection.recv(4097)
+                        if len(raw) > 4096 or not raw.endswith(b"\n"):
+                            raise ValueError("Pedido administrativo inválido")
+                        request = json.loads(raw.decode("utf-8"))
+                        if not isinstance(request, dict):
+                            raise TypeError("Pedido administrativo inválido")
+                        response = self._dispatch_admin(store, request)
+                    except Exception as exc:  # noqa: BLE001 - limite IPC deve responder fechado
+                        response = {"ok": False, "error": str(exc) or type(exc).__name__}
+                    connection.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode())
+        finally:
+            store.close()
+            server.close()
+            self.admin_socket_path.unlink(missing_ok=True)
+
+    def _start_admin_server(self) -> None:
+        group = grp.getgrnam(self.config.admin_group)
+        self.admin_socket_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.admin_socket_path.parent.stat().st_gid != group.gr_gid:
+            raise RuntimeError("Diretório de runtime não pertence ao grupo administrador")
+        os.chmod(self.admin_socket_path.parent, 0o750)
+        self.admin_socket_path.unlink(missing_ok=True)
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            server.bind(str(self.admin_socket_path))
+            if self.admin_socket_path.stat().st_gid != group.gr_gid:
+                raise RuntimeError("Socket administrativo criado com grupo incorreto")
+            os.chmod(self.admin_socket_path, 0o660)
+            server.listen(4)
+            server.settimeout(0.5)
+        except Exception:
+            server.close()
+            self.admin_socket_path.unlink(missing_ok=True)
+            raise
+        self._admin_server_thread = threading.Thread(
+            target=self._serve_admin, args=(server,), daemon=True
+        )
+        self._admin_server_thread.start()
+
+    def _process_enrollment(self, capture, now: float) -> bool:
+        with self._admin_lock:
+            enrollment = self._enrollment
+            if enrollment is None or enrollment["state"] != "capturing":
+                return False
+        ok, frame = capture.read()
+        if not ok or not frame_is_usable(frame):
+            return True
+        faces = self.recognizer.faces(frame)
+        if len(faces) != 1:
+            return True
+        vector = self.recognizer.features(frame, faces[0])
+        if not _valid_features(vector):
+            return True
+        with self._admin_lock:
+            if self._enrollment is not enrollment or now - enrollment["last_at"] < 0.55:
+                return True
+            enrollment["vectors"].append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
+            enrollment["last_at"] = now
+            if len(enrollment["vectors"]) >= REQUIRED_SAMPLES:
+                try:
+                    replace_templates(self.store, enrollment["child_id"], enrollment["vectors"])
+                    enrollment["state"] = "complete"
+                    self._refresh_references(now, force=True)
+                except Exception as exc:  # noqa: BLE001 - mantém serviço vivo e expõe erro
+                    enrollment["state"] = "error"
+                    enrollment["error"] = str(exc)
+        return True
 
     def _serve_auth(self, server: socket.socket) -> None:
         verifier = Storage(self.config.database)
@@ -296,10 +509,6 @@ class LinuxFaceQuotaRuntime:
     def run(self) -> int:
         import cv2
 
-        if not enrollments_complete(self.references, self.engine.people):
-            raise RuntimeError(
-                "Cada perfil infantil configurado precisa de ao menos três amostras faciais"
-            )
         capture = cv2.VideoCapture(self.config.camera, cv2.CAP_V4L2)
         if not capture.isOpened():
             capture.release()
@@ -313,6 +522,7 @@ class LinuxFaceQuotaRuntime:
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
         self._start_auth_server()
+        self._start_admin_server()
         try:
             while not self._stopping:
                 started = time.monotonic()
@@ -321,13 +531,16 @@ class LinuxFaceQuotaRuntime:
                     self.config.monitored_user
                 )
                 state = current_linux_session_state(session_id) if session_id else SessionState.UNKNOWN
+                self._session_state = state
                 try:
-                    candidate = self._candidate(capture) if enrollments_ready and state in {
+                    enrolling = self._process_enrollment(capture, started)
+                    candidate = self._candidate(capture) if not enrolling and enrollments_ready and state in {
                         SessionState.ACTIVE, SessionState.LOCKED
                     } else None
                 except RuntimeError as exc:
                     LOG.error("Falha de captura: %s", exc)
                     candidate = None
+                self._current_child_id = candidate
                 today = date.today().isoformat()
                 reading = self.engine.step(started, today, state, candidate)
                 curfew, reason = self.store.is_curfew_active()
@@ -377,6 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--session-id")
     parser.add_argument("--user", dest="monitored_user", default="filhos")
+    parser.add_argument("--admin-group", default="wheel")
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument(
         "--allow-uncertain", action="store_true",
@@ -404,6 +618,7 @@ def main(argv=None) -> int:
         interval_seconds=args.interval,
         lock_on_uncertain=not args.allow_uncertain,
         auto_unlock=not args.no_auto_unlock,
+        admin_group=args.admin_group,
     ))
     try:
         return runtime.run()

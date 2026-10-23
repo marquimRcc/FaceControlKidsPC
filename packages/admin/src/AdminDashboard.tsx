@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChildStatus, SystemSnapshot } from "@facekids/contracts";
+import type { ChildStatus, EnrollmentStatus, SystemSnapshot } from "@facekids/contracts";
 import { ChildStatusCard, StatusPill } from "@facekids/ui";
 import {
   Activity, CalendarClock, Camera, ChevronRight, CircleHelp, Clock3,
@@ -16,7 +16,13 @@ const nav = [
   [Settings, "Configurações"],
 ] as const;
 
-export function AdminDashboard({ snapshot }: { snapshot: SystemSnapshot }) {
+export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment }: {
+  snapshot: SystemSnapshot;
+  enrollment: EnrollmentStatus | null;
+  backendError: string | null;
+  onEnrollChild: (name: string, minutes: number) => Promise<number>;
+  onCancelEnrollment: () => Promise<void>;
+}) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selected, setSelected] = useState<ChildStatus | null>(null);
 
@@ -30,6 +36,7 @@ export function AdminDashboard({ snapshot }: { snapshot: SystemSnapshot }) {
       </aside>
 
       <main className="admin-content">
+        {backendError && <div className="backend-alert" role="alert"><strong>Serviço não conectado</strong><span>{backendError}</span></div>}
         <header className="page-header">
           <div><span className="eyebrow">QUINTA-FEIRA, 23 DE OUTUBRO</span><h1>Bom dia, Marcos</h1><p>Acompanhe o tempo e cuide dos perfis das crianças.</p></div>
           <button className="button button--primary" onClick={() => setWizardOpen(true)}><Plus size={18} /> Nova criança</button>
@@ -52,7 +59,7 @@ export function AdminDashboard({ snapshot }: { snapshot: SystemSnapshot }) {
           <article className="panel"><div className="panel__heading"><div><span className="panel-icon panel-icon--violet"><Activity /></span><div><h3>Atividade recente</h3><p>Eventos processados localmente</p></div></div></div><ul className="activity-list"><li><i className="dot dot--green" /><div><strong>Miguel foi reconhecido</strong><span>há 4 minutos</span></div></li><li><i className="dot dot--blue" /><div><strong>Bônus de 30 min concedido</strong><span>hoje, 08:14</span></div></li></ul></article>
         </section>
       </main>
-      {wizardOpen && <EnrollmentWizard onClose={() => setWizardOpen(false)} />}
+      {wizardOpen && <EnrollmentWizard enrollment={enrollment} onEnroll={onEnrollChild} onCancelEnrollment={onCancelEnrollment} onClose={() => setWizardOpen(false)} />}
       {selected && <div className="toast" role="status">Perfil de {selected.name} selecionado para a próxima etapa.<button onClick={() => setSelected(null)}>Fechar</button></div>}
     </div>
   );

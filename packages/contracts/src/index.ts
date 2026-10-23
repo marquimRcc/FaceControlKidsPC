@@ -30,6 +30,29 @@ export interface DesktopContext {
   backendConnected: boolean;
 }
 
+export const enrollmentStatusSchema = z.object({
+  childId: z.number().int().positive(),
+  samples: z.number().int().nonnegative(),
+  requiredSamples: z.number().int().positive(),
+  state: z.enum(["capturing", "complete", "error"]),
+  error: z.string().nullable(),
+});
+
+export const adminStateSchema = z.object({
+  snapshot: systemSnapshotSchema,
+  enrollment: enrollmentStatusSchema.nullable(),
+});
+
+export type EnrollmentStatus = z.infer<typeof enrollmentStatusSchema>;
+export type AdminState = z.infer<typeof adminStateSchema>;
+
+export interface FaceKidsDesktopApi {
+  getContext(): Promise<DesktopContext>;
+  getAdminState(): Promise<AdminState>;
+  enrollChild(input: { name: string; minutes: number }): Promise<{ childId: number }>;
+  cancelEnrollment(): Promise<void>;
+}
+
 export const demoSnapshot: SystemSnapshot = systemSnapshotSchema.parse({
   generatedAt: "2026-10-23T12:00:00.000Z",
   service: "online",

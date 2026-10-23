@@ -56,3 +56,28 @@ contratos de autorização e persistência.
 4. Ligar cadastro, ajustes de quota, bônus e horários ao serviço.
 5. Testar permissões, reconexão, indisponibilidade do serviço e validação no
    hardware antes de tornar a interface operacional.
+
+## Integração operacional no Linux
+
+O serviço publica `/run/facekids/admin.sock` com modo `0660`, pertencente a
+`root:wheel` por padrão. O diretório de runtime usa `0750`. Cada conexão é
+validada por `SO_PEERCRED`; somente UID 0 ou uma conta realmente pertencente ao
+grupo configurado pode prosseguir. A conta compartilhada `filhos` é removida de
+grupos suplementares pelo instalador e não consegue atravessar esse limite.
+
+O protocolo usa uma mensagem JSON por conexão, limitada a 4096 bytes. O painel
+consulta snapshots reais e pode criar um perfil e iniciar seu cadastro em uma
+única operação. Durante o cadastro, o mesmo processo root que já possui a
+câmera coleta 12 vetores, publica apenas a contagem de progresso e substitui os
+templates atomicamente. Quadros de câmera nunca atravessam o socket. Cancelar
+um cadastro novo remove o perfil ainda vazio para não deixar o runtime travado
+por um cadastro incompleto.
+
+O Electron conecta ao socket apenas no processo principal. O preload oferece
+quatro métodos estreitos ao renderer: contexto, estado, novo cadastro e
+cancelamento. As respostas são novamente validadas com Zod no renderer.
+
+O aplicativo do menu KDE é criado por
+`scripts/Criar-Atalho-Painel-RegataOS.sh`. Ele abre o build local usando o
+Electron fixado no workspace. A atualização do serviço instalado, preservando
+o banco, é feita por `scripts/Atualizar-FaceKids-RegataOS.sh`.
