@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("facekids", {
     ipcRenderer.invoke("facekids:select-photo", childId, photoId),
   renameChild: (childId: number, name: string) =>
     ipcRenderer.invoke("facekids:rename-child", childId, name),
+  deleteChild: (childId: number) => ipcRenderer.invoke("facekids:delete-child", childId),
   setDailyLimit: (childId: number, minutes: number) =>
     ipcRenderer.invoke("facekids:set-daily-limit", childId, minutes),
   addBonus: (childId: number, minutes: number) =>

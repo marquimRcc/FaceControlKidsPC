@@ -125,6 +125,10 @@ app.whenReady().then(() => {
     }
     await adminRequest({ op: "rename_child", childId, name: name.trim() });
   });
+  ipcMain.handle("facekids:delete-child", async (_event, childId: unknown) => {
+    if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
+    await adminRequest({ op: "delete_child", childId });
+  });
   ipcMain.handle("facekids:set-daily-limit", async (
     _event, childId: unknown, minutes: unknown,
   ) => {

@@ -400,6 +400,34 @@ class LinuxSessionTests(unittest.TestCase):
                     runtime._dispatch_admin(store, request)
             store.close()
 
+    def test_admin_protocol_deletes_child_and_revokes_current_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            child_id = store.add_person("Ana", 90)
+            store.add_embedding(child_id, np.ones(128, dtype=np.float32))
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._enrollment = {
+                "child_id": child_id, "state": "capturing", "vectors": [],
+            }
+            runtime._current_child_id = child_id
+
+            with self.assertRaises(RuntimeError):
+                runtime._dispatch_admin(
+                    store, {"op": "delete_child", "childId": child_id}
+                )
+            runtime._enrollment = None
+            runtime._dispatch_admin(store, {"op": "delete_child", "childId": child_id})
+
+            self.assertEqual(store.people(), [])
+            self.assertIsNone(runtime._current_child_id)
+            self.assertEqual(runtime._last_reference_refresh, float("-inf"))
+            with self.assertRaises(KeyError):
+                runtime._dispatch_admin(
+                    store, {"op": "delete_child", "childId": child_id}
+                )
+            store.close()
+
     def test_profile_photo_encoder_crops_a_bounded_jpeg(self):
         frame = np.zeros((240, 320, 3), dtype=np.uint8)
         frame[40:200, 80:240] = (40, 120, 220)

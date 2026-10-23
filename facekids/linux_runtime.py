@@ -418,6 +418,23 @@ class LinuxFaceQuotaRuntime:
                 raise ValueError("Criança ou nome inválido")
             store.update_person_name(child_id, name)
             return {"ok": True}
+        if op == "delete_child":
+            child_id = request.get("childId")
+            if type(child_id) is not int or child_id <= 0:
+                raise ValueError("Criança inválida")
+            with self._admin_lock:
+                if (self._enrollment and self._enrollment["child_id"] == child_id
+                        and self._enrollment["state"] == "capturing"):
+                    raise RuntimeError("Cancele a captura antes de excluir o perfil")
+            store.delete_person(child_id)
+            if getattr(self, "_current_child_id", None) == child_id:
+                self._current_child_id = None
+            self._last_reference_refresh = float("-inf")
+            if hasattr(self, "approvals"):
+                self.approvals.reset()
+            if hasattr(self, "engine"):
+                self.engine.policy.pause()
+            return {"ok": True}
         if op == "set_daily_limit":
             child_id, minutes = request.get("childId"), request.get("minutes")
             if (type(child_id) is not int or child_id <= 0

@@ -85,6 +85,23 @@ class Storage:
             ).rowcount
         return removed == 1
 
+    def delete_person(self, person_id: int) -> None:
+        """Remove um perfil e todos os dados locais associados em uma transação."""
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador de criança inválido.")
+        with self.db:
+            if self.db.execute(
+                "SELECT 1 FROM people WHERE id=?", (person_id,)
+            ).fetchone() is None:
+                raise KeyError(person_id)
+            for table in ("profile_photos", "embeddings", "daily_usage", "daily_bonus"):
+                self.db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))
+            removed = self.db.execute(
+                "DELETE FROM people WHERE id=?", (person_id,)
+            ).rowcount
+            if removed != 1:
+                raise KeyError(person_id)
+
     def set_daily_limit(self, person_id: int, minutes: int):
         if not 1 <= minutes <= 1440:
             raise ValueError("Limite permitido: 1 a 1440 minutos.")
