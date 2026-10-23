@@ -43,12 +43,22 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("pam-backup", enable)
         self.assertIn("pam-backup", disable)
         self.assertIn("facekids-pam-helper", disable)
+        self.assertIn("STAGED_FILES", enable)
+        self.assertIn("Só altera PAM depois", enable)
 
     def test_child_account_script_removes_admin_group(self):
         script = (ROOT / "scripts/Criar-Conta-Filhos-RegataOS.sh").read_text(encoding="utf-8")
         self.assertIn("gpasswd --delete", script)
         self.assertIn("wheel", script)
         self.assertIn("--groups video", script)
+
+    def test_uninstaller_restores_pam_before_removing_helper(self):
+        script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(
+            encoding="utf-8"
+        )
+        restore = script.index("Desativar-PAM-FaceKids-RegataOS.sh")
+        remove_helper = script.index("rm -f /usr/local/libexec/facekids-pam-helper")
+        self.assertLess(restore, remove_helper)
 
     def test_linux_ci_checks_scripts_and_integration_modules(self):
         workflow = (ROOT / ".github/workflows/linux-regataos.yml").read_text(

@@ -6,6 +6,11 @@ if [[ ${EUID} -ne 0 ]]; then
   exit 1
 fi
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ -x ${SCRIPT_DIR}/Desativar-PAM-FaceKids-RegataOS.sh ]]; then
+  "${SCRIPT_DIR}/Desativar-PAM-FaceKids-RegataOS.sh"
+fi
+
 systemctl disable --now facekids-linux.service 2>/dev/null || true
 rm -f /etc/systemd/system/facekids-linux.service
 rm -f /usr/local/sbin/facekids-admin

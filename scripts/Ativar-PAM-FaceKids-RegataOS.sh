@@ -24,7 +24,17 @@ if ! find /lib64/security /usr/lib64/security -name pam_exec.so -print -quit 2>/
 fi
 
 install -d -m 0700 -o root -g root "${BACKUP_DIR}"
-for name in kde sddm; do
+declare -a PAM_NAMES=(kde sddm)
+declare -a STAGED_FILES=()
+cleanup_staged() {
+  local staged
+  for staged in "${STAGED_FILES[@]:-}"; do
+    [[ -z ${staged} ]] || rm -f -- "${staged}"
+  done
+}
+trap cleanup_staged EXIT
+
+for name in "${PAM_NAMES[@]}"; do
   target="/usr/lib/pam.d/${name}"
   backup="${BACKUP_DIR}/${name}.original"
   if [[ ! -f ${target} ]]; then
@@ -32,6 +42,7 @@ for name in kde sddm; do
     exit 1
   fi
   if grep -Fq '/usr/local/libexec/facekids-pam-helper' "${target}"; then
+    STAGED_FILES+=("")
     continue
   fi
   if [[ ! -f ${backup} ]]; then
@@ -49,8 +60,19 @@ for name in kde sddm; do
   }
   chown root:root "${temporary}"
   chmod 0644 "${temporary}"
-  mv "${temporary}" "${target}"
+  STAGED_FILES+=("${temporary}")
 done
+
+# Só altera PAM depois que os dois arquivos foram validados e preparados.
+for index in "${!PAM_NAMES[@]}"; do
+  temporary=${STAGED_FILES[${index}]}
+  if [[ -n ${temporary} ]]; then
+    target="/usr/lib/pam.d/${PAM_NAMES[${index}]}"
+    mv "${temporary}" "${target}"
+    STAGED_FILES[${index}]=""
+  fi
+done
+trap - EXIT
 
 echo "FaceKids foi adicionado a KDE e SDDM com fallback para senha."
 echo "Mantenha a conta administrativa disponível e teste primeiro o bloqueio KDE."
