@@ -261,6 +261,8 @@ class LinuxFaceQuotaRuntime:
                 "requiredSamples": REQUIRED_SAMPLES,
                 "state": self._enrollment["state"],
                 "error": self._enrollment.get("error"),
+                "preview": self._enrollment.get("preview"),
+                "feedback": self._enrollment.get("feedback", "waiting"),
             }
 
     def _admin_status(self, store: Storage) -> dict:
@@ -523,15 +525,26 @@ class LinuxFaceQuotaRuntime:
                 return False
         ok, frame = capture.read()
         if not ok or not frame_is_usable(frame):
+            with self._admin_lock:
+                if self._enrollment is enrollment:
+                    enrollment["feedback"] = "waiting"
             return True
         faces = self.recognizer.faces(frame)
-        if len(faces) != 1:
-            return True
-        vector = self.recognizer.features(frame, faces[0])
-        if not _valid_features(vector):
-            return True
+        preview_data = self._encode_camera_preview(frame, faces)
+        feedback = "waiting"
+        vector = None
+        if len(faces) > 1:
+            feedback = "multiple"
+        elif len(faces) == 1:
+            vector = self.recognizer.features(frame, faces[0])
+            feedback = "ok" if _valid_features(vector) else "low_quality"
+
         with self._admin_lock:
-            if self._enrollment is not enrollment or now - enrollment["last_at"] < 0.55:
+            if self._enrollment is not enrollment:
+                return True
+            enrollment["preview"] = preview_data
+            enrollment["feedback"] = feedback
+            if feedback != "ok" or vector is None or now - enrollment["last_at"] < 0.55:
                 return True
             enrollment["vectors"].append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
             sample_number = len(enrollment["vectors"])
@@ -551,6 +564,24 @@ class LinuxFaceQuotaRuntime:
                     enrollment["state"] = "error"
                     enrollment["error"] = str(exc)
         return True
+
+    @staticmethod
+    def _encode_camera_preview(frame, faces) -> str | None:
+        """Gera uma miniatura JPEG leve com guia facial para visualização no painel."""
+        import cv2
+
+        preview = cv2.resize(frame, (320, 240))
+        scale_x = 320.0 / frame.shape[1]
+        scale_y = 240.0 / frame.shape[0]
+        for face in faces[:2]:
+            x, y, w, h = (int(v) for v in face[:4])
+            px, py, pw, ph = int(x * scale_x), int(y * scale_y), int(w * scale_x), int(h * scale_y)
+            color = (235, 240, 25) if len(faces) == 1 else (50, 50, 240)
+            cv2.rectangle(preview, (px, py), (px + pw, py + ph), color, 2)
+        ok, encoded = cv2.imencode(".jpg", preview, [cv2.IMWRITE_JPEG_QUALITY, 65])
+        if not ok:
+            return None
+        return "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
 
     @staticmethod
     def _encode_profile_photo(frame, face) -> bytes | None:

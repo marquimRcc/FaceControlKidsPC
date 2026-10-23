@@ -17,10 +17,17 @@ if [[ -z ${ACCOUNT} ]]; then
 fi
 CHILD_HOME=$(cut -d: -f6 <<<"${ACCOUNT}")
 CHILD_GROUP=$(id -gn "${CHILD_USER}")
-LAUNCHER="${ROOT_DIR}/scripts/Abrir-Tela-Infantil-RegataOS.sh"
+LAUNCHER="/usr/local/bin/facekids-child-gui"
 if [[ ! -x ${LAUNCHER} ]]; then
-  echo "Lançador infantil ausente ou sem permissão de execução." >&2
+  LAUNCHER="${ROOT_DIR}/scripts/Abrir-Tela-Infantil-RegataOS.sh"
+fi
+if [[ ! -x ${LAUNCHER} ]]; then
+  echo "Lançador infantil ausente ou sem permissão de execução (${LAUNCHER})." >&2
   exit 1
+fi
+ICON="facekids"
+if [[ ! -f /usr/share/icons/hicolor/scalable/apps/facekids.svg && ! -f /usr/share/pixmaps/facekids.png ]]; then
+  ICON="${ROOT_DIR}/assets/facekids.svg"
 fi
 APPLICATIONS="${CHILD_HOME}/.local/share/applications"
 AUTOSTART="${CHILD_HOME}/.config/autostart"
@@ -33,7 +40,7 @@ Version=1.0
 Name=FaceKids — Meu tempo
 Comment=Mostra a criança reconhecida e o tempo disponível
 Exec=${LAUNCHER}
-Icon=${ROOT_DIR}/assets/facekids.svg
+Icon=${ICON}
 Terminal=false
 Categories=Utility;
 StartupNotify=true

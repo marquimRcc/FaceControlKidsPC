@@ -60,7 +60,44 @@ export function EnrollmentWizard({ enrollment, onEnroll, onCancelEnrollment, onC
 
         <div className="wizard__content">
           {step === 0 && <div className="profile-step"><div className="profile-avatar"><UserRound /></div><label>Nome da criança<input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="Como ela deve ser chamada?" /></label><label>Limite diário<div className="choice-row">{[60, 90, 120, 180].map(value => <button key={value} className={minutes === value ? "selected" : ""} onClick={() => setMinutes(value)}>{value < 120 ? `${value} min` : `${value / 60} horas`}</button>)}</div></label><aside className="privacy-note"><ShieldCheck /><div><strong>Privacidade por padrão</strong><span>Três retratos recortados serão guardados localmente para o perfil. Nenhum vídeo ou dado é enviado à internet.</span></div></aside></div>}
-          {step === 1 && <div className="camera-step"><div className="camera-preview"><div className="face-guide"><span /><span /><span /><span /></div><div className="camera-person"><UserRound /></div><span className="camera-badge"><i /> {enrollment?.state === "complete" ? "Cadastro concluído" : "Câmera protegida ativa"}</span></div><div className="capture-status"><div><strong>Mantenha apenas um rosto centralizado</strong><span>Vire levemente a cabeça; três retratos serão salvos para o perfil</span></div><b aria-live="polite">{samples}/{requiredSamples}</b></div><div className="sample-track"><i style={{ width: `${samples / requiredSamples * 100}%` }} /></div>{enrollment?.state === "error" && <p className="form-error">{enrollment.error}</p>}</div>}
+          {step === 1 && (
+            <div className="camera-step">
+              <div className="camera-preview">
+                {enrollment?.preview ? (
+                  <img
+                    src={enrollment.preview}
+                    alt="Câmera ao vivo"
+                    className="camera-preview__stream"
+                  />
+                ) : (
+                  <>
+                    <div className="face-guide"><span /><span /><span /><span /></div>
+                    <div className="camera-person"><UserRound /></div>
+                  </>
+                )}
+                <span className="camera-badge">
+                  <i /> {enrollment?.state === "complete" ? "Cadastro concluído" : "Câmera ao vivo ativa"}
+                </span>
+              </div>
+              <div className="capture-status">
+                <div>
+                  <strong>
+                    {enrollment?.feedback === "multiple"
+                      ? "⚠️ Mais de um rosto no quadro! Mantenha apenas a criança."
+                      : enrollment?.feedback === "low_quality"
+                      ? "Ajuste a iluminação ou aproxime-se da câmera."
+                      : enrollment?.feedback === "ok"
+                      ? "Rosto detectado! Coletando amostras..."
+                      : "Posicione a criança de frente para a câmera"}
+                  </strong>
+                  <span>Vire levemente o rosto; 12 amostras e 3 retratos serão salvos.</span>
+                </div>
+                <b aria-live="polite">{samples}/{requiredSamples}</b>
+              </div>
+              <div className="sample-track"><i style={{ width: `${samples / requiredSamples * 100}%` }} /></div>
+              {enrollment?.state === "error" && <p className="form-error">{enrollment.error}</p>}
+            </div>
+          )}
           {step === 2 && <div className="confirmation-step"><span className="success-seal"><Check /></span><h3>Perfil criado</h3><p>Os vetores faciais foram salvos pelo serviço protegido.</p><dl><div><dt>Nome</dt><dd>{name}</dd></div><div><dt>Limite diário</dt><dd>{minutes} minutos</dd></div><div><dt>Cadastro facial</dt><dd>{samples} amostras válidas</dd></div></dl></div>}
           {error && <p className="form-error" role="alert">{error}</p>}
         </div>

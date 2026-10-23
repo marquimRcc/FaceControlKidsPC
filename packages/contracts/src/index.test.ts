@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoSnapshot, disconnectedSnapshot, profilePhotoSchema, systemSnapshotSchema } from ".";
+import { demoSnapshot, disconnectedSnapshot, enrollmentStatusSchema, profilePhotoSchema, systemSnapshotSchema } from ".";
 
 describe("systemSnapshotSchema", () => {
   it("accepts the typed demo state", () => {
@@ -26,5 +26,19 @@ describe("systemSnapshotSchema", () => {
     waiting.children = [];
     expect(systemSnapshotSchema.parse(waiting).children).toHaveLength(0);
     expect(disconnectedSnapshot.service).toBe("offline");
+  });
+
+  it("accepts enrollment status with camera preview and feedback", () => {
+    const status = enrollmentStatusSchema.parse({
+      childId: 1,
+      samples: 3,
+      requiredSamples: 12,
+      state: "capturing",
+      error: null,
+      preview: "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+      feedback: "ok",
+    });
+    expect(status.preview).toBeDefined();
+    expect(status.feedback).toBe("ok");
   });
 });

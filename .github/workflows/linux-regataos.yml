@@ -29,6 +29,8 @@ jobs:
           for script in \
             scripts/*RegataOS.sh \
             packaging/facekids-admin \
+            packaging/facekids-admin-gui \
+            packaging/facekids-child-gui \
             packaging/facekids-linux-probe \
             packaging/facekids-pam-helper
           do

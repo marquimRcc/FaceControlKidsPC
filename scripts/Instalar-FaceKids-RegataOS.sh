@@ -43,6 +43,24 @@ install -m 0755 "${SOURCE_DIR}/scripts/Ativar-PAM-FaceKids-RegataOS.sh" /usr/loc
 install -m 0755 "${SOURCE_DIR}/scripts/Desativar-PAM-FaceKids-RegataOS.sh" /usr/local/sbin/facekids-disable-pam
 install -m 0755 "${SOURCE_DIR}/scripts/Desativar-PAM-FaceKids-RegataOS.sh" /usr/local/bin/facekids-disable-pam
 
+# Interface Desktop Unificada (Electron + React)
+install -d -m 0755 /opt/facekids/desktop /opt/facekids/desktop/electron /usr/share/icons/hicolor/scalable/apps /usr/share/pixmaps
+if [[ -d "${SOURCE_DIR}/apps/desktop/dist" && -d "${SOURCE_DIR}/apps/desktop/dist-electron" ]]; then
+  cp -a "${SOURCE_DIR}/apps/desktop/dist" /opt/facekids/desktop/
+  cp -a "${SOURCE_DIR}/apps/desktop/dist-electron" /opt/facekids/desktop/
+  install -m 0644 "${SOURCE_DIR}/apps/desktop/package.json" /opt/facekids/desktop/package.json
+fi
+if [[ -d "${SOURCE_DIR}/apps/desktop/node_modules/electron/dist" ]]; then
+  cp -a "${SOURCE_DIR}/apps/desktop/node_modules/electron/dist/." /opt/facekids/desktop/electron/
+  chmod 0755 /opt/facekids/desktop/electron/electron /opt/facekids/desktop/electron/chrome_crashpad_handler || true
+fi
+install -d -m 0755 /opt/facekids/desktop/assets
+cp -a "${SOURCE_DIR}/assets/." /opt/facekids/desktop/assets/
+install -m 0644 "${SOURCE_DIR}/assets/facekids.svg" /usr/share/icons/hicolor/scalable/apps/facekids.svg
+install -m 0644 "${SOURCE_DIR}/assets/facekids-256.png" /usr/share/pixmaps/facekids.png
+install -m 0755 "${SOURCE_DIR}/packaging/facekids-admin-gui" /usr/local/bin/facekids-admin-gui
+install -m 0755 "${SOURCE_DIR}/packaging/facekids-child-gui" /usr/local/bin/facekids-child-gui
+
 python3 -m venv /opt/facekids/venv
 /opt/facekids/venv/bin/python -m pip install --disable-pip-version-check -r /usr/lib/facekids/requirements.txt
 PYTHONPATH=/usr/lib/facekids /opt/facekids/venv/bin/python -m facekids.cli \

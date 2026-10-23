@@ -535,15 +535,43 @@ que o ícone configurado existe. O aplicativo deve ser reiniciado para a janela
 aberta receber o novo ícone; o cache do KDE pode levar alguns segundos para
 atualizar o lançador.
 
+## Correção e avanço dos 3 pontos críticos — 23/10/2026
+
+Após a auditoria de código, os 3 primeiros pontos foram implementados, integrados e validados:
+
+1. **Prévia da webcam em tempo real no cadastro facial (Live Camera Preview)**:
+   - Contratos Zod (`packages/contracts/src/index.ts`): estendidos para incluir `preview` (JPEG em base64) e `feedback` (`waiting`, `ok`, `multiple`, `low_quality`).
+   - Serviço Linux (`facekids/linux_runtime.py`): adicionado helper seguro `_encode_camera_preview` que redimensiona quadros da webcam para miniatura 320x240 com bounding boxes desenhadas nos rostos detectados (ciano para 1 rosto, vermelho para múltiplos rostos). O feedback é calculado a cada quadro lido durante o enrollment ativo.
+   - Restrição estrita de acesso: a prévia da câmera e o estado de enrollment são transmitidos **exclusivamente** pelo socket administrativo `/run/facekids/admin.sock` (restrito ao root/wheel). O socket infantil `/run/facekids-child/status.sock` omite explicitamente qualquer dado de cadastro ou câmera.
+   - Frontend administrativo (`packages/admin/src/EnrollmentWizard.tsx` e `apps/desktop/src/styles.css`): a etapa 1 de captura substitui o avatar estático pelo streaming ao vivo da webcam (`<img className="camera-preview__stream" />`) com alertas visuais dinâmicos ("Posicione a criança", "Rosto detectado! Coletando amostras...", "⚠️ Mais de um rosto no quadro!", "Ajuste a iluminação").
+
+2. **Empacotamento desacoplado da interface desktop em `/opt/facekids/desktop/`**:
+   - Criação dos wrappers universais `packaging/facekids-admin-gui` e `packaging/facekids-child-gui`.
+   - Desacoplamento de `/home/marcos/`: `scripts/Criar-Tela-Infantil-RegataOS.sh` e `scripts/Criar-Atalho-Painel-RegataOS.sh` agora apontam os lançadores `.desktop` para `/usr/local/bin/facekids-*-gui` e usam o ícone do sistema `Icon=facekids`. A conta restrita `filhos` consegue iniciar o painel infantil mesmo se `/home/marcos` tiver permissão `0700`.
+   - Os instaladores `scripts/Instalar-FaceKids-RegataOS.sh` e `scripts/Atualizar-FaceKids-RegataOS.sh` instalam `dist/`, `dist-electron/`, `package.json`, `assets/`, runtime do Electron e os wrappers com permissões seguras em `/opt/facekids/desktop/`, `/usr/local/bin/`, `/usr/share/icons/` e `/usr/share/pixmaps/`.
+   - Adicionado teste de regressão em `tests/test_linux_installer.py` (`test_desktop_gui_wrappers_and_packaging_decoupled_from_user_home`).
+
+3. **Otimização de polling e contagem suave**:
+   - Em `apps/desktop/src/App.tsx`, o polling agressivo incondicional de 1 segundo foi substituído por polling adaptativo recursivo:
+     - Durante cadastro facial ativo (`capturing`): intervalo de 600 ms (~1.6 FPS de prévia responsiva sem sobrecarga de CPU).
+     - Em repouso / monitoramento normal: intervalo de 5000 ms (redução de 80% nas requisições IPC).
+     - Resposta imediata: disparadores automáticos (`triggerImmediateRefresh`) ao iniciar/cancelar cadastro, alterar quotas, aplicar bônus ou configurar horários.
+     - Contagem suave na interface: intervalo local em React de 1 segundo que decrementa monotonicamente o `remainingSeconds` da criança presente entre os polls autoritativos do backend, garantindo UI fluida sem requisições excessivas.
+
+### Validações executadas
+
+- `python -m unittest discover -s tests -v`: 225 testes unitários e de integração aprovados (`OK (skipped=2)`).
+- `pnpm typecheck`: aprovado sem erros nos 4 pacotes TypeScript (`contracts`, `ui`, `admin`, `desktop`).
+- `pnpm test:ui`: 5 testes de contratos Zod e schema aprovados no Vitest.
+- `pnpm build`: build Vite e Electron TypeScript concluído com sucesso.
+- `bash -n`: todos os scripts em `scripts/*RegataOS.sh` e wrappers em `packaging/*` validados.
+- `systemd-analyze verify`: diretivas de `facekids-linux.service` validadas sem erros.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados e
-> confira o CI do commit `ed66f11` e o texto do PR draft #3.
-> Não repita os testes já concluídos sem mudança relevante. O serviço e os dois
-> sockets estão instalados e validados; preserve o banco em
-> `/var/lib/facekids`. Avance no empacotamento Electron autocontido quando isso
-> puder ser feito sem presença física. Captura de foto, reconhecimento real,
-> sessão infantil e PAM exigem presença e devem permanecer pendentes. Antes de
-> pausar, atualize, commite e envie este documento novamente.
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados.
+> Os 3 pontos críticos de refinamento (Live Preview no cadastro, empacotamento em /opt/facekids/desktop e polling adaptativo)
+> foram completamente implementados, testados e validados.
+> Prossiga conforme orientações do usuário para verificação dos demais pontos e testes físicos de sessão.

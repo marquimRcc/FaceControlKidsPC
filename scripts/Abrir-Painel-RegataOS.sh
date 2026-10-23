@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -x /usr/local/bin/facekids-admin-gui && -f /opt/facekids/desktop/dist/index.html ]]; then
+  exec /usr/local/bin/facekids-admin-gui "$@"
+fi
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 ELECTRON="${ROOT_DIR}/apps/desktop/node_modules/.bin/electron"
 if [[ ! -x ${ELECTRON} ]]; then

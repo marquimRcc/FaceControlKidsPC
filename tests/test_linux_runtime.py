@@ -295,6 +295,8 @@ class LinuxSessionTests(unittest.TestCase):
             self.assertEqual(status["snapshot"]["children"][0]["dailyLimitSeconds"], 5400)
             self.assertEqual(status["snapshot"]["camera"], "ready")
             self.assertEqual(status["enrollment"]["state"], "capturing")
+            self.assertEqual(status["enrollment"]["feedback"], "waiting")
+            self.assertIsNone(status["enrollment"]["preview"])
             runtime._dispatch_admin(store, {"op": "cancel_enrollment"})
             self.assertEqual(store.people(), [])
             store.close()
@@ -399,6 +401,13 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertIsNotNone(payload)
         self.assertTrue(payload.startswith(b"\xff\xd8"))
         self.assertLessEqual(len(payload), 100000)
+
+    def test_encode_camera_preview_generates_jpeg_data_uri(self):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        faces = [np.array([100, 100, 150, 150, 0.9], dtype=np.float32)]
+        preview = LinuxFaceQuotaRuntime._encode_camera_preview(frame, faces)
+        self.assertIsNotNone(preview)
+        self.assertTrue(preview.startswith("data:image/jpeg;base64,"))
 
 
 if __name__ == "__main__":

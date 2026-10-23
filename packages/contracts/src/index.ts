@@ -37,6 +37,8 @@ export const enrollmentStatusSchema = z.object({
   requiredSamples: z.number().int().positive(),
   state: z.enum(["capturing", "complete", "error"]),
   error: z.string().nullable(),
+  preview: z.string().startsWith("data:image/jpeg;base64,").nullable().optional(),
+  feedback: z.enum(["waiting", "ok", "multiple", "low_quality"]).nullable().optional(),
 });
 
 export const adminStateSchema = z.object({

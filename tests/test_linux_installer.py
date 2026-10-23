@@ -110,6 +110,27 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn('bash -n "$script"', workflow)
         self.assertIn('systemd-analyze verify "$unit"', workflow)
 
+    def test_desktop_gui_wrappers_and_packaging_decoupled_from_user_home(self):
+        admin_gui = (ROOT / "packaging/facekids-admin-gui").read_text(encoding="utf-8")
+        child_gui = (ROOT / "packaging/facekids-child-gui").read_text(encoding="utf-8")
+        self.assertIn("/opt/facekids/desktop/electron/electron", admin_gui)
+        self.assertIn("/opt/facekids/desktop", admin_gui)
+        self.assertIn("--role=admin", admin_gui)
+        self.assertIn("/opt/facekids/desktop/electron/electron", child_gui)
+        self.assertIn("/opt/facekids/desktop", child_gui)
+        self.assertIn("--role=child", child_gui)
+
+        installer = (ROOT / "scripts/Instalar-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
+        self.assertIn("/opt/facekids/desktop", installer)
+        self.assertIn("/usr/local/bin/facekids-admin-gui", installer)
+        self.assertIn("/usr/local/bin/facekids-child-gui", installer)
+        self.assertIn("/usr/share/icons/hicolor/scalable/apps/facekids.svg", installer)
+        self.assertIn("/usr/share/pixmaps/facekids.png", installer)
+
+        child_desktop = (ROOT / "scripts/Criar-Tela-Infantil-RegataOS.sh").read_text(encoding="utf-8")
+        self.assertIn("/usr/local/bin/facekids-child-gui", child_desktop)
+        self.assertIn("Icon=${ICON}", child_desktop)
+
 
 if __name__ == "__main__":
     unittest.main()
