@@ -73,6 +73,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("tests.test_linux_runtime", workflow)
         self.assertIn("scripts/*RegataOS.sh", workflow)
         self.assertIn('bash -n "$script"', workflow)
+        self.assertIn('systemd-analyze verify "$unit"', workflow)
 
 
 if __name__ == "__main__":

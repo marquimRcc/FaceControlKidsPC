@@ -34,3 +34,14 @@ jobs:
           do
             bash -n "$script"
           done
+      - name: Validate systemd service directives
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit=$(mktemp --suffix=.service)
+          cp packaging/facekids-linux.service "$unit"
+          sed -i \
+            -e 's#^ExecStart=.*#ExecStart=/usr/bin/true#' \
+            -e 's#^WorkingDirectory=.*#WorkingDirectory=/tmp#' \
+            "$unit"
+          systemd-analyze verify "$unit"
