@@ -14,8 +14,8 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("DevicePolicy=closed", unit)
         self.assertIn("DeviceAllow=/dev/video0 rw", unit)
         self.assertIn("UMask=0077", unit)
-        self.assertIn("RuntimeDirectoryMode=0750", unit)
-        self.assertIn("RuntimeDirectory=facekids facekids-child", unit)
+        self.assertNotIn("RuntimeDirectory=", unit)
+        self.assertIn("systemd-tmpfiles", unit)
         self.assertIn("--admin-group wheel", unit)
         self.assertIn("CapabilityBoundingSet=\n", unit)
         self.assertNotIn("CapabilityBoundingSet=CAP_CHOWN", unit)
@@ -87,9 +87,10 @@ class LinuxInstallerTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            'const appIcon = path.join(here, "../../../assets/facekids-256.png")',
+            'const packagedIcon = path.join(here, "../assets/facekids-256.png")',
             main,
         )
+        self.assertIn("existsSync(packagedIcon) ? packagedIcon : workspaceIcon", main)
         self.assertIn("icon: appIcon", main)
         self.assertTrue((ROOT / "assets" / "facekids-256.png").is_file())
 
@@ -127,6 +128,12 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("/usr/local/bin/facekids-child-gui", installer)
         self.assertIn("/usr/share/icons/hicolor/scalable/apps/facekids.svg", installer)
         self.assertIn("/usr/share/pixmaps/facekids.png", installer)
+        self.assertIn("/etc/tmpfiles.d/facekids.conf", installer)
+
+        unit = (ROOT / "packaging" / "facekids-linux.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("RuntimeDirectory=facekids-child", unit)
 
         child_desktop = (ROOT / "scripts/Criar-Tela-Infantil-RegataOS.sh").read_text(encoding="utf-8")
         self.assertIn("/usr/local/bin/facekids-child-gui", child_desktop)

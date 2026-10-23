@@ -11,7 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional de código local e remoto: `ed66f11`.
+- Último commit funcional publicado antes deste checkpoint: `e775fce`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -591,12 +591,43 @@ Os pontos 4, 5 e 6 foram totalmente implementados e testados:
 - `bash -n`: todos os scripts e wrappers bash validados sem erros de sintaxe.
 - `systemd-analyze verify`: unit do systemd validada com sucesso.
 
+## Revisão das mudanças autônomas — 23/10/2026 às 20:11
+
+A revisão dos commits `c2b4f89` e `e775fce` encontrou e corrigiu três
+regressões antes da atualização da instalação real:
+
+1. `RuntimeDirectory=facekids facekids-child` recriaria os dois diretórios com
+   o mesmo grupo e modo da unidade, anulando a separação definida pelo
+   `tmpfiles`. A unidade deixou de administrar esses diretórios; agora
+   `/etc/tmpfiles.d/facekids.conf` é a única autoridade para seus grupos e
+   modos. Isso preserva `/run/facekids-child` como `2750 root:<grupo-filhos>` e
+   permite que o socket herde o grupo infantil sem `CAP_CHOWN`.
+2. O ícone Electron possuía somente o caminho do workspace. O processo agora
+   procura primeiro `../assets/facekids-256.png`, correto para a instalação em
+   `/opt/facekids/desktop`, e usa o caminho do workspace apenas no ambiente de
+   desenvolvimento.
+3. O polling recursivo podia reagendar uma consulta depois da desmontagem ou
+   troca de papel do componente. Um identificador de ciclo e um marcador de
+   montagem agora invalidam respostas e temporizadores antigos.
+
+Durante a revisão também foram corrigidas capturas genéricas de exceção em
+`linux_probe.py` e `linux_runtime.py`; o socket do diagnóstico agora sempre é
+fechado por gerenciador de contexto e somente erros esperados provocam o
+fallback conservador.
+
+Validação posterior: 228 testes Python aprovados e 2 skips de plataforma; 5
+testes Vitest aprovados; Ruff aprovado nos módulos e testes Linux envolvidos;
+typecheck e build Vite/Electron aprovados; todos os scripts Bash aprovados em
+`bash -n`; `systemd-analyze verify` aceitou a unidade FaceKids. Os avisos
+restantes pertencem a unidades antigas do Regata OS.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
 > `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados.
-> Todos os 6 pontos de refinamento da auditoria de código (1: Live Preview, 2: Packaging em /opt, 3: Polling adaptativo,
-> 4: Monopólio da câmera e concorrência, 5: Portabilidade wheel/sudo e 6: Remoção de CAP_CHOWN via tmpfiles)
-> foram implementados, testados e validados com 100% de sucesso.
+> Os seis pontos de refinamento foram implementados. Preserve as correções da
+> revisão posterior: diretórios de runtime pertencem exclusivamente ao
+> `tmpfiles`, o ícone possui caminhos distintos para pacote e workspace e o
+> polling invalida ciclos assíncronos antigos.
 > Prossiga conforme orientações do usuário para testes físicos de sessão.

@@ -17,8 +17,8 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/facekids
-RuntimeDirectory=facekids facekids-child
-RuntimeDirectoryMode=0750
+# /run/facekids e /run/facekids-child são criados por facekids.conf via
+# systemd-tmpfiles, pois cada diretório precisa de um grupo e modo diferentes.
 DevicePolicy=closed
 DeviceAllow=/dev/video0 rw
 NoNewPrivileges=true

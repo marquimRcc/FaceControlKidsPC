@@ -174,8 +174,8 @@ def uid_is_admin(uid: int, group_name: str = "wheel,sudo") -> bool:
             user_gids = set(os.getgrouplist(account.pw_name, account.pw_gid))
             if admin_gids & user_gids:
                 return True
-        except Exception:
-            pass
+        except OSError:
+            LOG.warning("Não foi possível consultar grupos suplementares de UID %s", uid)
 
     # Fallback para membros estáticos em /etc/group
     for gid in admin_gids:

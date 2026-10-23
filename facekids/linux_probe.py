@@ -41,17 +41,17 @@ def probe_via_daemon(admin_socket: Path, seconds: float) -> ProbeResult | None:
     if not admin_socket.is_socket():
         return None
     try:
-        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client.settimeout(seconds + 3.0)
-        client.connect(str(admin_socket))
-        client.sendall((json.dumps({"op": "probe", "seconds": seconds}) + "\n").encode("utf-8"))
-        buffer = b""
-        while b"\n" not in buffer:
-            chunk = client.recv(4096)
-            if not chunk:
-                break
-            buffer += chunk
-        client.close()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(seconds + 3.0)
+            client.connect(str(admin_socket))
+            request = json.dumps({"op": "probe", "seconds": seconds}) + "\n"
+            client.sendall(request.encode("utf-8"))
+            buffer = b""
+            while b"\n" not in buffer:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                buffer += chunk
         payload = json.loads(buffer.decode("utf-8").strip())
         if payload.get("ok") and "probe" in payload:
             data = payload["probe"]
@@ -61,9 +61,13 @@ def probe_via_daemon(admin_socket: Path, seconds: float) -> ProbeResult | None:
                 usable_frames=int(data.get("usable_frames", 0)),
                 faces_seen=int(data.get("faces_seen", 0)),
                 elapsed_seconds=float(data.get("elapsed_seconds", seconds)),
-                mean_brightness=float(data["mean_brightness"]) if data.get("mean_brightness") is not None else None,
+                mean_brightness=(
+                    float(data["mean_brightness"])
+                    if data.get("mean_brightness") is not None
+                    else None
+                ),
             )
-    except Exception:
+    except (OSError, TypeError, ValueError, UnicodeError):
         return None
     return None
 

@@ -1,11 +1,14 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import net from "node:net";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const role = process.argv.includes("--role=child") ? "child" : "admin";
-const appIcon = path.join(here, "../../../assets/facekids-256.png");
+const packagedIcon = path.join(here, "../assets/facekids-256.png");
+const workspaceIcon = path.join(here, "../../../assets/facekids-256.png");
+const appIcon = existsSync(packagedIcon) ? packagedIcon : workspaceIcon;
 const adminSocket = process.env.FACEKIDS_ADMIN_SOCKET ?? "/run/facekids/admin.sock";
 const childSocket = process.env.FACEKIDS_CHILD_SOCKET ?? "/run/facekids-child/status.sock";
 

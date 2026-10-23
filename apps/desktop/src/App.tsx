@@ -15,6 +15,16 @@ export function App() {
   });
   const [backendError, setBackendError] = useState<string | null>(null);
   const pollTimerRef = useRef<number | null>(null);
+  const pollCycleRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pollCycleRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => { void window.facekids?.getContext().then(context => setRole(context.role)); }, []);
 
@@ -44,35 +54,49 @@ export function App() {
     if (!window.facekids) return false;
     try {
       const state = adminStateSchema.parse(await window.facekids.getAdminState());
+      if (!mountedRef.current) return false;
       setAdminState(state);
       setBackendError(null);
       return state.enrollment?.state === "capturing";
     } catch (error) {
+      if (!mountedRef.current) return false;
       setAdminState({ snapshot: disconnectedSnapshot, enrollment: null });
       setBackendError(error instanceof Error ? error.message : "Serviço indisponível");
       return false;
     }
   }, []);
 
-  const scheduleNextPoll = useCallback((delayMs: number) => {
+  const scheduleNextPoll = useCallback((delayMs: number, cycle: number) => {
+    if (!mountedRef.current || cycle !== pollCycleRef.current) return;
     if (pollTimerRef.current !== null) {
       window.clearTimeout(pollTimerRef.current);
     }
     pollTimerRef.current = window.setTimeout(async () => {
+      if (!mountedRef.current || cycle !== pollCycleRef.current) return;
       const isCapturing = await refresh();
-      scheduleNextPoll(isCapturing ? 600 : 5000);
+      if (mountedRef.current && cycle === pollCycleRef.current) {
+        scheduleNextPoll(isCapturing ? 600 : 5000, cycle);
+      }
     }, delayMs);
   }, [refresh]);
 
   const triggerImmediateRefresh = useCallback(async () => {
+    const cycle = ++pollCycleRef.current;
+    if (pollTimerRef.current !== null) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     const isCapturing = await refresh();
-    scheduleNextPoll(isCapturing ? 600 : 5000);
+    if (mountedRef.current && cycle === pollCycleRef.current) {
+      scheduleNextPoll(isCapturing ? 600 : 5000, cycle);
+    }
   }, [refresh, scheduleNextPoll]);
 
   useEffect(() => {
     if (!window.facekids) return;
     void triggerImmediateRefresh();
     return () => {
+      pollCycleRef.current += 1;
       if (pollTimerRef.current !== null) {
         window.clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
