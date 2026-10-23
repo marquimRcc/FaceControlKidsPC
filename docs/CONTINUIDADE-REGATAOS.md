@@ -6,13 +6,13 @@
 
 ## Estado de referência
 
-- Data da atualização: 22/10/2026, fuso `America/Sao_Paulo`.
+- Data da atualização: 23/10/2026, fuso `America/Sao_Paulo`.
 - Repositório: `marquimRcc/FaceControlKidsPC`.
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `f66c17d`.
-- Último commit funcional remoto antes deste documento: `78bd46e7015f304c7c7166d3727a0c94db4d28d2`.
+- Último commit funcional local antes deste documento: `c94cce5`.
+- Último commit funcional remoto antes deste documento: `16e11bd6473e8bfe530d66762cbef3ecc33812a2`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
