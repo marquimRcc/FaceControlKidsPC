@@ -4,7 +4,7 @@
 
 O trabalho Linux está na branch `feature/regataos-linux-implementation-20261022`.
 Ela inclui um controlador protegido por `systemd`, reconhecimento local
-YuNet/SFace, quotas individuais para três crianças na mesma conta, observação
+YuNet/SFace, quotas individuais para uma ou mais crianças na mesma conta, observação
 de bloqueio via `systemd-logind`, cadastro sem salvar imagens e instalador para
 Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
 Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
@@ -64,7 +64,7 @@ O sistema integra três componentes principais:
 
 ## 2. Decisões Operacionais e Diretrizes
 
-1. **Conta Filhos e Senha Fixa "1":** Decisão consciente do proprietário para o computador doméstico compartilhado pelas três crianças.
+1. **Conta Filhos e Senha Fixa "1":** Decisão consciente do proprietário para o computador doméstico compartilhado pelas crianças cadastradas; a quantidade de perfis não é fixa.
 2. **Conta Administradora Intacta:** O Credential Provider do FaceKids filtra estritamente pelo SID da conta `Filhos`. A conta administrativa nunca é alvo de autologon ou bloqueios do agente.
 3. **Quotas Independentes:** Cada criança possui sua quota configurável (padrão de 120 minutos/dia), bônus diários acumuláveis e horários permitidos gerenciados no Painel dos Pais.
 4. **Login Manual por PIN:** Caso a entrada seja realizada manualmente por PIN ou senha convencional, o sistema entra em modo *UNIDENTIFIED*, sem atribuir tempo arbitrário a nenhuma das crianças até haver identificação facial válida.

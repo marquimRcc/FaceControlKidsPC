@@ -11,8 +11,9 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `c94cce5`.
-- Último commit funcional remoto antes deste documento: `16e11bd6473e8bfe530d66762cbef3ecc33812a2`.
+- Último commit funcional local antes deste documento: `60a5b24`.
+- Último commit funcional remoto antes deste documento: `e504a22` (o push da
+  interface e deste registro ainda será feito ao encerrar esta etapa).
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -62,6 +63,58 @@ Serviço root facekids-linux.service
             - quota e horário revalidados no consumo
             - senha continua disponível como fallback
 ```
+
+### Interface compartilhada definida em 23/10/2026
+
+- Monorepo `pnpm` com React + TypeScript compartilhado e Electron no desktop.
+- `apps/desktop`: composição dos papéis administrativo e infantil, main e
+  preload Electron.
+- `packages/admin`: painel e fluxo de cadastro.
+- `packages/ui`: componentes compartilhados.
+- `packages/contracts`: esquemas Zod e tipos das mensagens.
+- O renderer está isolado, sem Node.js e sem acesso direto ao SQLite. O serviço
+  Python permanece autoridade sobre biometria, quota e sessão.
+- Integração planejada por socket Unix autenticado no Linux e named pipe com
+  ACL no Windows. A interface móvel será uma etapa posterior, com API opt-in e
+  pareamento explícito.
+- A decisão completa está em `docs/ARQUITETURA-INTERFACE-DESKTOP.md`.
+
+## Interface implementada em 23/10/2026
+
+O commit `60a5b24` adicionou o primeiro protótipo navegável do painel dos pais
+e da tela de boas-vindas infantil. O painel lista quantidade variável de
+perfis, saldo, limite, amostras e bônus; inclui rotina, atividade e cadastro em
+três etapas. O cadastro impede avançar sem nome e sem completar 12 amostras
+simuladas. A tela infantil mostra identidade reconhecida, saldo, horário e
+próximo aviso. Há layout responsivo e alternador de papéis no navegador.
+
+O protótipo usa dados de demonstração e ainda não persiste operações. Isso é
+intencional: a API privilegiada será ligada somente após definir autorização e
+contratos de erro. O Electron foi configurado com `contextIsolation`, sandbox,
+`nodeIntegration: false`, navegação bloqueada, CSP e preload mínimo.
+
+Validações executadas:
+
+- `pnpm typecheck`: aprovado nos quatro pacotes.
+- `pnpm test:ui`: 2 testes de contratos aprovados.
+- `pnpm build`: build Vite e Electron TypeScript aprovado.
+- Fluxo visual no navegador: painel, cadastro completo com 12 amostras e tela
+  infantil revisados.
+- Smoke test do Electron: iniciou por oito segundos sem erro da aplicação; a
+  mensagem `hybrid_drv_video.so init failed` é do driver VA-API e não impediu a
+  janela. O processo foi encerrado pelo timeout esperado.
+- Suite Python completa: 211 testes aprovados, 2 ignorados por dependerem do
+  Windows.
+
+Pendências específicas da interface:
+
+1. Definir comandos e respostas reais em `packages/contracts`.
+2. Implementar cliente do socket Unix e autorização de cada operação.
+3. Substituir o snapshot de demonstração por leitura do serviço.
+4. Ligar cadastro, quota, bônus e horários ao backend e tratar indisponibilidade.
+5. Criar empacotamento e inicialização integrada ao instalador do Regata OS.
+6. Validar a janela Electron no monitor real em resolução desktop e na conta
+   `filhos` depois que a integração estiver operacional.
 
 O serviço protegido é a autoridade única. A conta infantil não informa sua
 identidade nem escreve quota, vetores ou tickets. A mesma captura que reconhece

@@ -4,3 +4,7 @@ __pycache__/
 *.sqlite3*
 models/*.onnx
 .pytest_cache/
+node_modules/
+dist/
+dist-electron/
+*.tsbuildinfo
