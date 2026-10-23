@@ -418,6 +418,9 @@ mostra apenas o estado obtido do serviço.
 Validação antes da instalação: 218 testes Python aprovados, com 2 skips de
 plataforma; Ruff, typecheck, 3 testes TypeScript e build Vite/Electron
 aprovados. O teste novo cobre limite, bônus, horário e entradas inválidas no
-protocolo administrativo. Após publicar esta etapa, atualizar o serviço,
-reiniciar o painel, verificar operações sem alterar indevidamente os valores
-reais e confirmar os workflows do GitHub.
+protocolo administrativo. A etapa foi publicada no commit funcional `f44b015`. O serviço foi atualizado
+às 15:27 e permaneceu ativo; o painel foi reiniciado com o novo build. A
+validação real reaplicou o limite atual de 120 minutos e o horário já existente
+sem mudar a política doméstica, e confirmou que bônus inválido é recusado. Os
+três workflows passaram: Unit tests em Ubuntu e Windows, Linux Regata OS checks
+e Windows live WTS diagnostic.
