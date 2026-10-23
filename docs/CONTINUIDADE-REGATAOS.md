@@ -11,8 +11,8 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `d508e57`.
-- Último commit funcional remoto antes deste documento: `0799de3ec195b3019dbe2e99438b43783f66c793`.
+- Último commit funcional local antes deste documento: `826fa83`.
+- Último commit funcional remoto antes deste documento: `5ffdcac8a2769cb7c323254ad9838d3b5ee34c34`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -129,7 +129,7 @@ instalação e remoção, wrappers e ativação/desativação reversível do PAM
 
 ### Fase 4 — verificação automatizada
 
-Concluída para o estado atual. A suíte local passou com 207 testes, dois
+Concluída para o estado atual. A suíte local passou com 208 testes, dois
 ignorados por dependerem de Windows real. Os workflows `Unit tests` passaram
 em Ubuntu e Windows, e `Linux Regata OS checks` passou. Os scripts passaram em
 `bash -n` e os novos módulos Linux passaram no Ruff.
@@ -167,6 +167,8 @@ KScreenLocker/SDDM permanece pendente.
   `libvirt`, além de `wheel` e `video`.
 - Os comandos reversíveis de ativação e recuperação PAM são instalados em
   `/usr/local/sbin`, para não depender da permanência do checkout do Git.
+- Erros de leitura ou bloqueio do SQLite durante a revalidação de um ticket
+  negam o desbloqueio de forma fechada, sem encerrar o serviço principal.
 - Implementada ponte PAM opcional, com backup e restauração.
 - Criados instalador, desinstalador, criador da conta infantil e wrappers.
 - Corrigidos caminhos Windows que criavam `C:` acidentalmente no Linux.
