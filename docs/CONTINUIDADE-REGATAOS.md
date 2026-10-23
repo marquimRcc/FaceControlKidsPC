@@ -11,7 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local e remoto: `17365bb`.
+- Último commit funcional local e remoto: `69e119a`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -354,10 +354,14 @@ Ruff dos módulos Linux alterados, sintaxe shell e `systemd-analyze verify` da
 unidade. O lançador abriu o Electron no KDE; o aviso VA-API do driver híbrido
 não impediu a execução.
 
-Pendência operacional única: executar como root o atualizador do serviço para
-copiar esta versão a `/usr/lib/facekids`, instalar a unidade com grupo `wheel`
-e reiniciar o daemon. Até isso ocorrer, o aplicativo abre, mas informa que o
-socket administrativo ainda não existe. Comando:
+O atualizador foi executado com sucesso na máquina em 23/10/2026 às 10:08
+(`America/Sao_Paulo`). O serviço foi reiniciado e permaneceu ativo, com grupo
+`wheel`. As permissões observadas foram `/run/facekids` `0750`, `admin.sock`
+`0660 root:wheel` e `auth.sock` `0600`. Uma consulta real feita pela conta
+`marcos` retornou serviço online, um perfil existente, nenhuma captura em
+andamento e resposta JSON válida. O banco existente foi preservado.
+
+Para reaplicar esta versão após alterações futuras, use:
 
 ```bash
 sudo bash scripts/Atualizar-FaceKids-RegataOS.sh filhos wheel
