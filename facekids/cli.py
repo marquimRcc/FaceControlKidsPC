@@ -2,8 +2,8 @@
 import argparse
 import hashlib
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from urllib.request import urlretrieve
 
 from .storage import Storage, default_data_path
@@ -46,6 +46,7 @@ def download_models(model_dir: Path) -> None:
                     f"SHA-256 inesperado para {name}: {actual_hash}"
                 )
             temporary_path.replace(target)
+            target.chmod(0o644)
         finally:
             temporary_path.unlink(missing_ok=True)
         print(f"OK: {target}")
@@ -72,7 +73,7 @@ def main():
     if args.cmd=="download-models":
         download_models(args.models)
         return
-    from .monitor import enroll,monitor
+    from .monitor import enroll, monitor
     store=Storage(args.database)
     try:
         if args.cmd=="add":

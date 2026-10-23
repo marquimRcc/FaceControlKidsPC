@@ -15,10 +15,11 @@ fi
 
 systemctl disable --now facekids-linux.service 2>/dev/null || true
 rm -f /etc/systemd/system/facekids-linux.service
-rm -f /usr/local/sbin/facekids-admin
+rm -f /usr/local/sbin/facekids-admin /usr/local/bin/facekids-admin
 rm -f /usr/local/bin/facekids-linux-probe
 rm -f /usr/local/libexec/facekids-pam-helper
-rm -f /usr/local/sbin/facekids-enable-pam /usr/local/sbin/facekids-disable-pam
+rm -f /usr/local/sbin/facekids-enable-pam /usr/local/bin/facekids-enable-pam
+rm -f /usr/local/sbin/facekids-disable-pam /usr/local/bin/facekids-disable-pam
 systemctl daemon-reload
 rm -rf /usr/lib/facekids /opt/facekids
 

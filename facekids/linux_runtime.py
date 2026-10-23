@@ -68,6 +68,25 @@ def enrollments_complete(
     return all(count >= minimum_samples for count in counts.values())
 
 
+def determine_lock_state(
+    reading_event: PilotEvent,
+    curfew_active: bool,
+    curfew_reason: str,
+    enrollments_ready: bool,
+    lock_on_uncertain: bool = True,
+) -> tuple[bool, str]:
+    """Determina se a sessão ativa deve ser bloqueada e o motivo fechado."""
+    if not enrollments_ready:
+        return True, "cadastro facial incompleto ou revogado"
+    if curfew_active:
+        return True, curfew_reason
+    if reading_event is PilotEvent.QUOTA_EXHAUSTED:
+        return True, "quota esgotada"
+    if reading_event is PilotEvent.UNCERTAIN and lock_on_uncertain:
+        return True, "identidade não confirmada"
+    return False, ""
+
+
 @dataclass(frozen=True)
 class LinuxRuntimeConfig:
     database: Path
@@ -161,6 +180,10 @@ class LinuxFaceQuotaRuntime:
         self._stopping = True
 
     def close(self) -> None:
+        self._stopping = True
+        if self._server_thread is not None and self._server_thread.is_alive():
+            self._server_thread.join(timeout=1.0)
+        self.socket_path.unlink(missing_ok=True)
         self.store.close()
 
     def _serve_auth(self, server: socket.socket) -> None:
@@ -241,7 +264,8 @@ class LinuxFaceQuotaRuntime:
             return False
         try:
             unlock_linux_session(approval.session_id)
-        except (OSError, ValueError, subprocess.SubprocessError):
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+            self._last_unlock_request = now
             LOG.exception(
                 "Falha ao solicitar desbloqueio da sessão %s",
                 approval.session_id,
@@ -317,17 +341,13 @@ class LinuxFaceQuotaRuntime:
                     curfew_clear=not curfew,
                 )
                 self._maybe_unlock(approval, started, today)
-                should_lock = (
-                    reading.event is PilotEvent.QUOTA_EXHAUSTED
-                    or curfew
-                    or not enrollments_ready
+                should_lock, lock_reason = determine_lock_state(
+                    reading.event,
+                    curfew_active=curfew,
+                    curfew_reason=reason,
+                    enrollments_ready=enrollments_ready,
+                    lock_on_uncertain=self.config.lock_on_uncertain,
                 )
-                if not enrollments_ready:
-                    reason = "cadastro facial incompleto ou revogado"
-                if (reading.event is PilotEvent.UNCERTAIN
-                        and self.config.lock_on_uncertain):
-                    should_lock = True
-                    reason = "identidade não confirmada"
                 current_signal = (reading.event, reading.child_id, should_lock)
                 if current_signal != self._last_signal:
                     LOG.info(
@@ -337,7 +357,7 @@ class LinuxFaceQuotaRuntime:
                     )
                     self._last_signal = current_signal
                 if should_lock and state is SessionState.ACTIVE:
-                    self._maybe_lock(session_id, reason, started)
+                    self._maybe_lock(session_id, lock_reason, started)
                 elapsed = time.monotonic() - started
                 time.sleep(max(0.0, self.config.interval_seconds - elapsed))
         finally:

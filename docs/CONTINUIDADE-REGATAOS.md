@@ -11,8 +11,8 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `826fa83`.
-- Último commit funcional remoto antes deste documento: `5ffdcac8a2769cb7c323254ad9838d3b5ee34c34`.
+- Último commit funcional local antes deste documento: `f66c17d`.
+- Último commit funcional remoto antes deste documento: `78bd46e7015f304c7c7166d3727a0c94db4d28d2`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -129,24 +129,32 @@ instalação e remoção, wrappers e ativação/desativação reversível do PAM
 
 ### Fase 4 — verificação automatizada
 
-Concluída para o estado atual. A suíte local passou com 208 testes, dois
+Concluída para o estado atual. A suíte local passou com 211 testes, dois
 ignorados por dependerem de Windows real. Os workflows `Unit tests` passaram
-em Ubuntu e Windows, e `Linux Regata OS checks` passou. Os scripts passaram em
-`bash -n` e os novos módulos Linux passaram no Ruff.
+em Ubuntu e Windows, e `Linux Regata OS checks` passou (todos os 4 jobs com
+status success no commit remoto 78bd46e). Os scripts passaram em `bash -n`,
+os novos módulos Linux passaram no Ruff e as diretivas de serviço systemd foram
+validadas com `systemd-analyze verify`.
 
 ### Fase 5 — validação física e experiência sem clique
 
-Parcial. A webcam real passou no probe depois do aquecimento da autoexposição.
-Ainda depende de instalar como root, cadastrar todas as crianças configuradas
-e executar testes controlados de sessão e recuperação. O serviço já solicita
-desbloqueio direto pelo logind após três confirmações; a validação física no
-KScreenLocker/SDDM permanece pendente.
+Avançada. A webcam real passou no probe com detecções faciais confirmadas,
+o perfil da criança 1 foi cadastrado localmente com sucesso, e o serviço
+`facekids-linux.service` foi habilitado e iniciado com status ativo/running
+sob o isolamento systemd (`User=root`, `UMask=0077`, `RuntimeDirectory=0700`,
+sem sockets IP ou privilégios extras). O próximo passo é efetuar login na
+conta `filhos` e validar o reconhecimento em sessão gráfica ativa, o débito
+monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
 
 ## Trabalho realizado
 
 - Criadas as branches de pesquisa e implementação.
 - Implementado runtime Linux para uma conta compartilhada e quantidade
   variável de perfis.
+- A conta compartilhada `filhos` foi criada sem grupos suplementares ou acesso
+  direto à webcam; o serviço `facekids-linux.service` foi instalado e iniciado.
+- O perfil da criança 1 foi cadastrado com sucesso presencialmente via
+  `facekids-admin enroll 1`.
 - O instalador aceita de uma a vinte crianças e usa uma quando a quantidade é
   omitida; o runtime não contém mais a exigência fixa de três perfis.
 - Implementada descoberta de sessão por logind e bloqueio dirigido por ID.
@@ -169,6 +177,17 @@ KScreenLocker/SDDM permanece pendente.
   `/usr/local/sbin`, para não depender da permanência do checkout do Git.
 - Erros de leitura ou bloqueio do SQLite durante a revalidação de um ticket
   negam o desbloqueio de forma fechada, sem encerrar o serviço principal.
+- Implementado isolamento de motivos de bloqueio (`determine_lock_state`),
+  corrigindo o problema de registro onde a exaustão de quota herdava
+  indevidamente o motivo do horário permitido (`Dentro do horário permitido`),
+  garantindo que o journal registre `quota esgotada`.
+- Falhas de solicitação de desbloqueio pelo logind (`_maybe_unlock`) agora
+  capturam `RuntimeError` e são limitadas a uma tentativa a cada dez segundos,
+  evitando repetição contínua em loop.
+- O método `close()` do runtime finaliza de forma limpa a thread servidora de
+  autorização e remove o arquivo de socket em `/run/facekids/auth.sock`.
+- Corrigida a permissão de instalação dos modelos ONNX (`0644`), permitindo que
+  o diagnóstico `facekids-linux-probe` leia os modelos sem privilégios de root.
 - Implementada ponte PAM opcional, com backup e restauração.
 - Criados instalador, desinstalador, criador da conta infantil e wrappers.
 - Corrigidos caminhos Windows que criavam `C:` acidentalmente no Linux.
@@ -183,9 +202,11 @@ KScreenLocker/SDDM permanece pendente.
 - `/dev/video1` é um nó de metadados e não serve para captura.
 - A conta atual pertence ao grupo `video`.
 - Após descartar 15 quadros para estabilizar a autoexposição, o probe real
-  retornou `CAMERA_UTILIZAVEL`: 31/31 quadros utilizáveis, 6,11 fps e brilho
-  médio aproximado de 90,74. Nenhum rosto estava no quadro durante o teste.
-- A conta `filhos` ainda não existia durante a análise.
+  retornou `CAMERA_UTILIZAVEL`: no segundo teste em 22/10/2026 (22:24), registrou
+  30/30 quadros utilizáveis, 5,95 fps, brilho médio de 87,07 e 8 detecções
+  faciais confirmadas na câmera.
+- A conta `filhos` e os arquivos de sistema em `/usr/lib/facekids` e
+  `/var/lib/facekids` foram instalados pelo responsável.
 - A instalação do sistema exige `sudo` interativo; a sessão automatizada não
   possui a senha do responsável.
 - O helper PAM atende uma conversa de autenticação já iniciada. O runtime agora
@@ -196,24 +217,18 @@ KScreenLocker/SDDM permanece pendente.
 
 ## O que falta fazer
 
-1. Criar a conta compartilhada `filhos` e confirmar que ela não tem privilégios
-   administrativos.
-2. Instalar o serviço com `sudo`, informando a quantidade desejada, validar
-   permissões e revisar o journal.
-3. Cadastrar presencialmente todas as crianças configuradas com consentimento
-   do responsável.
-4. Testar troca de criança, ausência, múltiplos rostos, quota esgotada, bônus,
-   virada do dia, suspensão e toque de recolher.
-5. Testar bloqueio e desbloqueio KDE, além da recuperação pela conta
-   administrativa e por senha.
-6. Somente depois, testar a ponte PAM opt-in e seu script de recuperação.
-7. Avaliar plugin de KScreenLocker/SDDM se o desbloqueio direto pelo logind não
-   produzir a experiência sem clique desejada.
-8. Avaliar uma verificação de vivacidade adequada; a confirmação temporal
-   atual não impede apresentação de foto ou vídeo.
-9. Avaliar notificações por um canal seguro para o barramento da sessão.
-10. Fazer revisão final do PR, atualizar documentação de operação e decidir a
-    estratégia de merge para a branch principal.
+1. Entrar na sessão gráfica da conta compartilhada `filhos` e verificar se o
+   serviço reconhece o rosto cadastrado e inicia o débito da quota diária.
+2. Testar bloqueio por ausência ou tempo esgotado e comprovar se o logind
+   desbloqueia automaticamente sem clique quando o rosto reaparecer.
+3. Testar a senha de recuperação da conta `filhos` e a administração pela conta
+   `marcos` (ajuste de limite, concessão de bônus e consulta de status).
+4. Testar toque de recolher e virada de dia civil.
+5. Avaliar aviso sonoro ou notificação segura na sessão ativa antes do bloqueio
+   (ex.: aviso prévio de 15 segundos antes de travar a tela).
+6. Somente depois de homologado o desbloqueio por aproximação, testar a ponte
+   PAM opt-in (`facekids-enable-pam`) e seu retorno (`facekids-disable-pam`).
+7. Fazer revisão final do PR draft #3 e preparar o merge para a branch principal.
 
 ## Próximos passos recomendados para outra IA
 

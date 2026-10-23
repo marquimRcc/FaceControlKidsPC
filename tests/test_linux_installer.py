@@ -32,6 +32,7 @@ class LinuxInstallerTests(unittest.TestCase):
         runtime = (ROOT / "facekids/linux_runtime.py").read_text(encoding="utf-8")
         self.assertIn("enrollments_complete(self.references, self.engine.people)", runtime)
         self.assertIn("chmod 0600 /var/lib/facekids/criancas.sqlite3", script)
+        self.assertIn("chmod 0644 /usr/lib/facekids/models/*.onnx", script)
 
     def test_uninstaller_preserves_database(self):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(encoding="utf-8")

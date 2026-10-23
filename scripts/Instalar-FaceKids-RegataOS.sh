@@ -29,11 +29,14 @@ install -d -m 0700 -o root -g root /var/lib/facekids
 cp -a "${SOURCE_DIR}/facekids" /usr/lib/facekids/
 install -m 0644 "${SOURCE_DIR}/requirements.txt" /usr/lib/facekids/requirements.txt
 install -m 0755 "${SOURCE_DIR}/packaging/facekids-admin" /usr/local/sbin/facekids-admin
+install -m 0755 "${SOURCE_DIR}/packaging/facekids-admin" /usr/local/bin/facekids-admin
 install -m 0755 "${SOURCE_DIR}/packaging/facekids-linux-probe" /usr/local/bin/facekids-linux-probe
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "${SOURCE_DIR}/packaging/facekids-pam-helper" /usr/local/libexec/facekids-pam-helper
 install -m 0755 "${SOURCE_DIR}/scripts/Ativar-PAM-FaceKids-RegataOS.sh" /usr/local/sbin/facekids-enable-pam
+install -m 0755 "${SOURCE_DIR}/scripts/Ativar-PAM-FaceKids-RegataOS.sh" /usr/local/bin/facekids-enable-pam
 install -m 0755 "${SOURCE_DIR}/scripts/Desativar-PAM-FaceKids-RegataOS.sh" /usr/local/sbin/facekids-disable-pam
+install -m 0755 "${SOURCE_DIR}/scripts/Desativar-PAM-FaceKids-RegataOS.sh" /usr/local/bin/facekids-disable-pam
 
 python3 -m venv /opt/facekids/venv
 /opt/facekids/venv/bin/python -m pip install --disable-pip-version-check -r /usr/lib/facekids/requirements.txt
@@ -46,6 +49,7 @@ install -m 0644 "${SOURCE_DIR}/packaging/facekids-linux.service" /etc/systemd/sy
 sed -i "s/--user filhos/--user ${CHILD_USER}/" /etc/systemd/system/facekids-linux.service
 sed -i "s/FACEKIDS_CHILD_USER=filhos/FACEKIDS_CHILD_USER=${CHILD_USER}/" /usr/local/libexec/facekids-pam-helper
 chown -R root:root /usr/lib/facekids /opt/facekids /var/lib/facekids
+chmod 0644 /usr/lib/facekids/models/*.onnx
 chmod 0700 /var/lib/facekids
 chmod 0600 /var/lib/facekids/criancas.sqlite3
 systemctl daemon-reload

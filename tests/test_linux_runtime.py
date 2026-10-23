@@ -6,10 +6,12 @@ from unittest.mock import patch
 
 import numpy as np
 
+from facekids.child_quota_pilot import PilotEvent
 from facekids.linux_auth import FaceApproval
 from facekids.linux_runtime import (
     LinuxFaceQuotaRuntime,
     LinuxRuntimeConfig,
+    determine_lock_state,
     enrollments_complete,
     frame_is_usable,
     protected_data_path,
@@ -177,6 +179,86 @@ class LinuxSessionTests(unittest.TestCase):
         lock.side_effect = None
         self.assertTrue(runtime._maybe_lock("4", "quota encerrada", 20.0))
         runtime.engine.policy.pause.assert_called_once_with()
+
+    @patch("facekids.linux_runtime.approval_still_allowed", return_value=True)
+    @patch("facekids.linux_runtime.unlock_linux_session")
+    def test_unlock_failure_is_rate_limited(self, unlock, _allowed):
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        runtime.config = LinuxRuntimeConfig(Path("db"), Path("models"))
+        runtime.store = object()
+        runtime._last_unlock_request = float("-inf")
+        approval = FaceApproval("4", 2, 1.0)
+        unlock.side_effect = RuntimeError("logind indisponível")
+
+        self.assertFalse(runtime._maybe_unlock(approval, 10.0, "2026-10-22"))
+        self.assertFalse(runtime._maybe_unlock(approval, 11.0, "2026-10-22"))
+        self.assertEqual(unlock.call_count, 1)
+
+        unlock.side_effect = None
+        self.assertTrue(runtime._maybe_unlock(approval, 21.0, "2026-10-22"))
+        self.assertEqual(unlock.call_count, 2)
+
+    def test_determine_lock_state_reasons(self):
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.COUNTING, curfew_active=False,
+                curfew_reason="ok", enrollments_ready=False,
+            ),
+            (True, "cadastro facial incompleto ou revogado"),
+        )
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.COUNTING, curfew_active=True,
+                curfew_reason="Fora do horário", enrollments_ready=True,
+            ),
+            (True, "Fora do horário"),
+        )
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.QUOTA_EXHAUSTED, curfew_active=False,
+                curfew_reason="Dentro do horário permitido", enrollments_ready=True,
+            ),
+            (True, "quota esgotada"),
+        )
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.UNCERTAIN, curfew_active=False,
+                curfew_reason="Dentro do horário permitido", enrollments_ready=True,
+                lock_on_uncertain=True,
+            ),
+            (True, "identidade não confirmada"),
+        )
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.UNCERTAIN, curfew_active=False,
+                curfew_reason="Dentro do horário permitido", enrollments_ready=True,
+                lock_on_uncertain=False,
+            ),
+            (False, ""),
+        )
+        self.assertEqual(
+            determine_lock_state(
+                PilotEvent.COUNTING, curfew_active=False,
+                curfew_reason="Dentro do horário", enrollments_ready=True,
+            ),
+            (False, ""),
+        )
+
+    def test_runtime_close_shuts_down_cleanly(self):
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        runtime._stopping = False
+        runtime.store = unittest.mock.Mock()
+        mock_thread = unittest.mock.Mock()
+        mock_thread.is_alive.return_value = True
+        runtime._server_thread = mock_thread
+        mock_socket_path = unittest.mock.Mock()
+        runtime.socket_path = mock_socket_path
+
+        runtime.close()
+        self.assertTrue(runtime._stopping)
+        mock_thread.join.assert_called_once_with(timeout=1.0)
+        mock_socket_path.unlink.assert_called_once_with(missing_ok=True)
+        runtime.store.close.assert_called_once_with()
 
 
 if __name__ == "__main__":
