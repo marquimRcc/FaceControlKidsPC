@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
-import type { ChildStatus, EnrollmentStatus, ProfilePhoto, SystemSnapshot } from "@facekids/contracts";
+import type { CameraProbe, ChildStatus, EnrollmentStatus, ProfilePhoto, SystemSnapshot } from "@facekids/contracts";
 import { ChildStatusCard, formatTime, StatusPill } from "@facekids/ui";
-import { Activity, CalendarClock, Camera, ChevronRight, CircleHelp, Clock3, Database, LayoutDashboard, LockKeyhole, Plus, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Activity, CalendarClock, Camera, ChevronRight, CircleHelp, Clock3, Database, LayoutDashboard, LockKeyhole, Plus, RefreshCw, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { EnrollmentWizard } from "./EnrollmentWizard";
 import { ProfilePhotoManager } from "./ProfilePhotoManager";
 import { ScheduleEditor } from "./ScheduleEditor";
@@ -29,12 +29,13 @@ function StatePanel({ snapshot }: { snapshot: SystemSnapshot }) {
   </section>;
 }
 
-export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto, onRenameChild, onDeleteChild, onSetDailyLimit, onAddBonus, onSetCurfew }: {
+export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto, onRenameChild, onDeleteChild, onProbeCamera, onSetDailyLimit, onAddBonus, onSetCurfew }: {
   snapshot: SystemSnapshot; enrollment: EnrollmentStatus | null; backendError: string | null;
   onEnrollChild: (name: string, minutes: number) => Promise<number>; onCancelEnrollment: () => Promise<void>;
   onStartEnrollment: (childId: number) => Promise<void>; onListPhotos: (childId: number) => Promise<ProfilePhoto[]>;
   onSelectPhoto: (childId: number, photoId: number) => Promise<void>; onRenameChild: (childId: number, name: string) => Promise<void>;
   onDeleteChild: (childId: number) => Promise<void>;
+  onProbeCamera: () => Promise<CameraProbe>;
   onSetDailyLimit: (childId: number, minutes: number) => Promise<void>;
   onAddBonus: (childId: number, minutes: number) => Promise<void>; onSetCurfew: (input: { enabled: boolean; start: string; end: string }) => Promise<void>;
 }) {
@@ -42,6 +43,9 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selected, setSelected] = useState<ChildStatus | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [probe, setProbe] = useState<CameraProbe | null>(null);
+  const [probeBusy, setProbeBusy] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
   const today = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date()).toUpperCase();
   const children = <section className="children-grid">
     {snapshot.children.map(child => <ChildStatusCard key={child.id} child={child} onOpen={setSelected} />)}
@@ -58,7 +62,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
   else if (activeSection === "children") content = <><section className="section-heading"><div><h2>Perfis cadastrados</h2><p>Selecione uma criança para trocar a foto, ajustar o limite ou adicionar bônus.</p></div></section>{children}</>;
   else if (activeSection === "schedule") content = <section className="single-column"><article className="panel panel--feature"><div className="panel__heading"><div><span className="panel-icon"><CalendarClock /></span><div><h3>Horário da conta filhos</h3><p>A regra vale para todas as crianças deste computador.</p></div></div><button className="button button--secondary" onClick={() => setScheduleOpen(true)}>Editar horário</button></div><Schedule snapshot={snapshot} /><p className="panel-note">Fora deste período, a sessão infantil permanece bloqueada mesmo quando ainda existe tempo diário.</p></article></section>;
   else if (activeSection === "history") content = snapshot.children.length ? <section className="history-grid">{snapshot.children.map(child => <HistoryCard key={child.id} child={child} />)}</section> : <EmptyState icon={<Activity />} title="Nenhum histórico disponível" text="Cadastre uma criança para começar a acompanhar o uso." />;
-  else if (activeSection === "diagnostics") content = <><StatePanel snapshot={snapshot} /><section className="diagnostic-grid"><InfoCard icon={<Database />} title="Dados locais" value="Armazenamento protegido" text="Perfis, fotos e histórico ficam neste computador." /><InfoCard icon={<LockKeyhole />} title="Sessão infantil" value={snapshot.session === "active" ? "Ativa" : snapshot.session === "locked" ? "Bloqueada" : "Ausente"} text={`Última leitura: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(snapshot.generatedAt))}`} /><InfoCard icon={<Camera />} title="Reconhecimento" value={snapshot.camera === "ready" ? "Disponível" : snapshot.camera === "busy" ? "Em uso" : "Indisponível"} text="O processamento facial acontece localmente." /></section></>;
+  else if (activeSection === "diagnostics") content = <><StatePanel snapshot={snapshot} /><section className="diagnostic-grid"><InfoCard icon={<Database />} title="Dados locais" value="Armazenamento protegido" text="Perfis, fotos e histórico ficam neste computador." /><InfoCard icon={<LockKeyhole />} title="Sessão infantil" value={snapshot.session === "active" ? "Ativa" : snapshot.session === "locked" ? "Bloqueada" : "Ausente"} text={`Última leitura: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(snapshot.generatedAt))}`} /><InfoCard icon={<Camera />} title="Reconhecimento" value={snapshot.camera === "ready" ? "Disponível" : snapshot.camera === "busy" ? "Em uso" : "Indisponível"} text="O processamento facial acontece localmente." /></section><section className="camera-diagnostic panel"><div className="panel__heading"><div><span className="panel-icon"><Camera /></span><div><h3>Diagnóstico da câmera</h3><p>Usa a telemetria recente do serviço sem interromper o reconhecimento.</p></div></div><button className="button button--secondary" disabled={probeBusy || snapshot.service !== "online"} onClick={() => { setProbeBusy(true); setProbeError(null); void onProbeCamera().then(setProbe).catch(reason => setProbeError(reason instanceof Error ? reason.message : "Falha no diagnóstico")).finally(() => setProbeBusy(false)); }}><RefreshCw size={15} />{probeBusy ? "Verificando…" : "Executar diagnóstico"}</button></div>{probe && <dl className="probe-results"><div><dt>Câmera</dt><dd>{probe.opened ? "Aberta" : "Indisponível"}</dd></div><div><dt>Quadros úteis</dt><dd>{probe.usable_frames} de {probe.frames}</dd></div><div><dt>Detecções de rosto</dt><dd>{probe.faces_seen}</dd></div><div><dt>Luminosidade média</dt><dd>{probe.mean_brightness === null ? "Sem leitura" : Math.round(probe.mean_brightness)}</dd></div></dl>}{probeError && <p className="form-error" role="alert">{probeError}</p>}</section></>;
   else content = <section className="settings-list"><InfoCard icon={<Users />} title="Perfis infantis" value={`${snapshot.children.length} configurado${snapshot.children.length === 1 ? "" : "s"}`} text="Cada perfil possui fotos e limite próprios." action={<button className="text-button" onClick={() => setActiveSection("children")}>Gerenciar <ChevronRight size={16} /></button>} /><InfoCard icon={<CalendarClock />} title="Horário compartilhado" value={snapshot.curfew.enabled ? `${snapshot.curfew.start} – ${snapshot.curfew.end}` : "Desativado"} text="Aplicado à conta filhos." action={<button className="text-button" onClick={() => setScheduleOpen(true)}>Editar <ChevronRight size={16} /></button>} /><InfoCard icon={<ShieldCheck />} title="Privacidade" value="Processamento local" text="Fotos e vetores faciais não são enviados para a nuvem." /></section>;
 
   return <div className="admin-shell"><aside className="sidebar">

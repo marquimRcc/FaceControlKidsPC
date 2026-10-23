@@ -129,6 +129,10 @@ app.whenReady().then(() => {
     if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
     await adminRequest({ op: "delete_child", childId });
   });
+  ipcMain.handle("facekids:probe-camera", async () => {
+    const response = await adminRequest({ op: "probe", seconds: 5 });
+    return response.probe;
+  });
   ipcMain.handle("facekids:set-daily-limit", async (
     _event, childId: unknown, minutes: unknown,
   ) => {

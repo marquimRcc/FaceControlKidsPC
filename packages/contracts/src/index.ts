@@ -58,6 +58,15 @@ export const profilePhotoSchema = z.object({
   selected: z.boolean(),
 });
 export type ProfilePhoto = z.infer<typeof profilePhotoSchema>;
+export const cameraProbeSchema = z.object({
+  opened: z.boolean(),
+  frames: z.number().int().nonnegative(),
+  usable_frames: z.number().int().nonnegative(),
+  faces_seen: z.number().int().nonnegative(),
+  elapsed_seconds: z.number().nonnegative(),
+  mean_brightness: z.number().nonnegative().nullable(),
+});
+export type CameraProbe = z.infer<typeof cameraProbeSchema>;
 
 export interface FaceKidsDesktopApi {
   getContext(): Promise<DesktopContext>;
@@ -69,6 +78,7 @@ export interface FaceKidsDesktopApi {
   selectPhoto(childId: number, photoId: number): Promise<void>;
   renameChild(childId: number, name: string): Promise<void>;
   deleteChild(childId: number): Promise<void>;
+  probeCamera(): Promise<CameraProbe>;
   setDailyLimit(childId: number, minutes: number): Promise<void>;
   addBonus(childId: number, minutes: number): Promise<void>;
   setCurfew(input: { enabled: boolean; start: string; end: string }): Promise<void>;

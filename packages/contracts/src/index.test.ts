@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoSnapshot, disconnectedSnapshot, enrollmentStatusSchema, profilePhotoSchema, systemSnapshotSchema } from ".";
+import { cameraProbeSchema, demoSnapshot, disconnectedSnapshot, enrollmentStatusSchema, profilePhotoSchema, systemSnapshotSchema } from ".";
 
 describe("systemSnapshotSchema", () => {
   it("accepts the typed demo state", () => {
@@ -40,5 +40,14 @@ describe("systemSnapshotSchema", () => {
     });
     expect(status.preview).toBeDefined();
     expect(status.feedback).toBe("ok");
+  });
+
+  it("validates non-biometric camera diagnostics", () => {
+    const probe = cameraProbeSchema.parse({
+      opened: true, frames: 50, usable_frames: 49, faces_seen: 2,
+      elapsed_seconds: 5, mean_brightness: 112.5,
+    });
+    expect(probe.usable_frames).toBe(49);
+    expect(() => cameraProbeSchema.parse({ ...probe, frames: -1 })).toThrow();
   });
 });
