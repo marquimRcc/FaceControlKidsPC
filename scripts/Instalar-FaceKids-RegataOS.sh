@@ -71,3 +71,4 @@ echo "Repita para cada número configurado; depois: sudo systemctl enable --now 
 echo "A integração PAM opcional não foi ativada. Teste o serviço antes de habilitá-la."
 echo "Após os testes, habilite com: sudo facekids-enable-pam"
 echo "Na conta do responsável, crie o aplicativo com: scripts/Criar-Atalho-Painel-RegataOS.sh"
+echo "Para instalar a tela infantil: sudo bash scripts/Criar-Tela-Infantil-RegataOS.sh ${CHILD_USER}"

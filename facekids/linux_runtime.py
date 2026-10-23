@@ -142,6 +142,18 @@ def uid_is_admin(uid: int, group_name: str) -> bool:
     return account.pw_gid == group.gr_gid or account.pw_name in group.gr_mem
 
 
+def uid_is_monitored_user(uid: int, user_name: str | None) -> bool:
+    """Autoriza somente root ou a conta infantil configurada."""
+    if uid == 0:
+        return True
+    if pwd is None or not user_name:
+        return False
+    try:
+        return pwd.getpwnam(user_name).pw_uid == uid
+    except KeyError:
+        return False
+
+
 class LinuxFaceQuotaRuntime:
     """Mantém a autoridade de reconhecimento e contabilização num processo.
 
@@ -172,8 +184,12 @@ class LinuxFaceQuotaRuntime:
         self.admin_socket_path = Path(os.environ.get(
             "FACEKIDS_ADMIN_SOCKET", "/run/facekids/admin.sock"
         ))
+        self.child_socket_path = Path(os.environ.get(
+            "FACEKIDS_CHILD_SOCKET", "/run/facekids-child/status.sock"
+        ))
         self._server_thread: threading.Thread | None = None
         self._admin_server_thread: threading.Thread | None = None
+        self._child_server_thread: threading.Thread | None = None
         self._admin_lock = threading.Lock()
         self._enrollment: dict | None = None
         self._current_child_id: int | None = None
@@ -221,6 +237,7 @@ class LinuxFaceQuotaRuntime:
         for thread in (
             getattr(self, "_server_thread", None),
             getattr(self, "_admin_server_thread", None),
+            getattr(self, "_child_server_thread", None),
         ):
             if thread is not None and thread.is_alive():
                 thread.join(timeout=1.0)
@@ -228,6 +245,9 @@ class LinuxFaceQuotaRuntime:
         admin_socket = getattr(self, "admin_socket_path", None)
         if admin_socket is not None:
             admin_socket.unlink(missing_ok=True)
+        child_socket = getattr(self, "child_socket_path", None)
+        if child_socket is not None:
+            child_socket.unlink(missing_ok=True)
         self.store.close()
 
     def _enrollment_snapshot(self) -> dict | None:
@@ -427,6 +447,74 @@ class LinuxFaceQuotaRuntime:
         )
         self._admin_server_thread.start()
 
+    def _child_status(self, store: Storage) -> dict:
+        """Expõe somente a criança atualmente reconhecida, sem controles."""
+        status = self._admin_status(store)
+        current = self._current_child_id
+        status["snapshot"]["children"] = [
+            child for child in status["snapshot"]["children"]
+            if child["id"] == current
+        ]
+        status["enrollment"] = None
+        return status
+
+    def _serve_child_status(self, server: socket.socket) -> None:
+        store = Storage(self.config.database)
+        try:
+            while not self._stopping:
+                try:
+                    connection, _ = server.accept()
+                except TimeoutError:
+                    continue
+                with connection:
+                    connection.settimeout(3.0)
+                    response = {"ok": False, "error": "Pedido recusado"}
+                    try:
+                        credentials = connection.getsockopt(
+                            socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")
+                        )
+                        _pid, uid, _gid = struct.unpack("3i", credentials)
+                        if not uid_is_monitored_user(uid, self.config.monitored_user):
+                            raise PermissionError("Conta sem permissão para a tela infantil")
+                        raw = connection.recv(257)
+                        if len(raw) > 256 or not raw.endswith(b"\n"):
+                            raise ValueError("Pedido de estado inválido")
+                        request = json.loads(raw.decode("utf-8"))
+                        if request != {"op": "status"}:
+                            raise ValueError("Operação infantil desconhecida")
+                        response = self._child_status(store)
+                    except Exception as exc:  # noqa: BLE001 - IPC responde fechado
+                        response = {"ok": False, "error": str(exc) or type(exc).__name__}
+                    connection.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode())
+        finally:
+            store.close()
+            server.close()
+            self.child_socket_path.unlink(missing_ok=True)
+
+    def _start_child_status_server(self) -> None:
+        if pwd is None or not self.config.monitored_user:
+            raise RuntimeError("Conta infantil POSIX indisponível")
+        account = pwd.getpwnam(self.config.monitored_user)
+        self.child_socket_path.parent.mkdir(parents=True, exist_ok=True)
+        os.chown(self.child_socket_path.parent, 0, account.pw_gid)
+        os.chmod(self.child_socket_path.parent, 0o750)
+        self.child_socket_path.unlink(missing_ok=True)
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            server.bind(str(self.child_socket_path))
+            os.chown(self.child_socket_path, 0, account.pw_gid)
+            os.chmod(self.child_socket_path, 0o660)
+            server.listen(4)
+            server.settimeout(0.5)
+        except Exception:
+            server.close()
+            self.child_socket_path.unlink(missing_ok=True)
+            raise
+        self._child_server_thread = threading.Thread(
+            target=self._serve_child_status, args=(server,), daemon=True
+        )
+        self._child_server_thread.start()
+
     def _process_enrollment(self, capture, now: float) -> bool:
         with self._admin_lock:
             enrollment = self._enrollment
@@ -607,6 +695,7 @@ class LinuxFaceQuotaRuntime:
         signal.signal(signal.SIGINT, self.stop)
         self._start_auth_server()
         self._start_admin_server()
+        self._start_child_status_server()
         try:
             while not self._stopping:
                 started = time.monotonic()

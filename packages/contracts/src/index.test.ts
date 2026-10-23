@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoSnapshot, profilePhotoSchema, systemSnapshotSchema } from ".";
+import { demoSnapshot, disconnectedSnapshot, profilePhotoSchema, systemSnapshotSchema } from ".";
 
 describe("systemSnapshotSchema", () => {
   it("accepts the typed demo state", () => {
@@ -19,5 +19,12 @@ describe("systemSnapshotSchema", () => {
     expect(() => profilePhotoSchema.parse({
       id: 1, dataUrl: "https://example.com/child.jpg", selected: false,
     })).toThrow();
+  });
+
+  it("accepts a child snapshot while no face is recognized", () => {
+    const waiting = structuredClone(demoSnapshot);
+    waiting.children = [];
+    expect(systemSnapshotSchema.parse(waiting).children).toHaveLength(0);
+    expect(disconnectedSnapshot.service).toBe("offline");
   });
 });

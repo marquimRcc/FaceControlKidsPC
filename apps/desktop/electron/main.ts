@@ -6,10 +6,11 @@ import net from "node:net";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const role = process.argv.includes("--role=child") ? "child" : "admin";
 const adminSocket = process.env.FACEKIDS_ADMIN_SOCKET ?? "/run/facekids/admin.sock";
+const childSocket = process.env.FACEKIDS_CHILD_SOCKET ?? "/run/facekids-child/status.sock";
 
-function adminRequest(request: Record<string, unknown>): Promise<Record<string, unknown>> {
+function socketRequest(socketPath: string, request: Record<string, unknown>): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    const client = net.createConnection(adminSocket);
+    const client = net.createConnection(socketPath);
     let response = "";
     const fail = (error: Error) => { client.destroy(); reject(error); };
     client.setTimeout(4000, () => fail(new Error("O serviço FaceKids não respondeu")));
@@ -28,6 +29,8 @@ function adminRequest(request: Record<string, unknown>): Promise<Record<string, 
     client.on("error", reject);
   });
 }
+
+const adminRequest = (request: Record<string, unknown>) => socketRequest(adminSocket, request);
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -65,7 +68,9 @@ app.whenReady().then(() => {
     backendConnected: false,
   }));
   ipcMain.handle("facekids:admin-state", async () => {
-    const response = await adminRequest({ op: "status" });
+    const response = await socketRequest(
+      role === "child" ? childSocket : adminSocket, { op: "status" },
+    );
     return { snapshot: response.snapshot, enrollment: response.enrollment ?? null };
   });
   ipcMain.handle("facekids:enroll-child", async (_event, input: unknown) => {

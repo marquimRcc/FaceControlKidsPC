@@ -16,6 +16,7 @@ from facekids.linux_runtime import (
     frame_is_usable,
     protected_data_path,
     uid_is_admin,
+    uid_is_monitored_user,
     warm_up_camera,
 )
 from facekids.locker import unlock_linux_session
@@ -77,6 +78,8 @@ class LinuxSessionTests(unittest.TestCase):
     def test_admin_check_fails_closed_without_posix_modules(self):
         self.assertTrue(uid_is_admin(0, "wheel"))
         self.assertFalse(uid_is_admin(1000, "wheel"))
+        self.assertTrue(uid_is_monitored_user(0, "filhos"))
+        self.assertFalse(uid_is_monitored_user(1000, "filhos"))
 
     def test_black_and_uniform_frames_are_rejected(self):
         self.assertFalse(frame_is_usable(None))
@@ -286,6 +289,26 @@ class LinuxSessionTests(unittest.TestCase):
             self.assertEqual(status["enrollment"]["state"], "capturing")
             runtime._dispatch_admin(store, {"op": "cancel_enrollment"})
             self.assertEqual(store.people(), [])
+            store.close()
+
+    def test_child_status_exposes_only_current_identity_without_controls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            ana = store.add_person("Ana", 90)
+            store.add_person("Bia", 120)
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._enrollment = {
+                "child_id": ana, "vectors": [], "state": "capturing", "error": None,
+            }
+            runtime._current_child_id = ana
+            runtime._session_state = SessionState.ACTIVE
+
+            status = runtime._child_status(store)
+            self.assertEqual([child["name"] for child in status["snapshot"]["children"]], ["Ana"])
+            self.assertIsNone(status["enrollment"])
+            runtime._current_child_id = None
+            self.assertEqual(runtime._child_status(store)["snapshot"]["children"], [])
             store.close()
 
     def test_admin_protocol_rejects_unknown_and_invalid_input(self):

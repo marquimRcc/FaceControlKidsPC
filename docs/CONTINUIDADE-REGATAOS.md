@@ -11,7 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional de código local e remoto: `6637eac`.
+- Último commit funcional de código local e remoto: `f44b015`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -86,10 +86,11 @@ três etapas. O cadastro impede avançar sem nome e sem completar 12 amostras
 simuladas. A tela infantil mostra identidade reconhecida, saldo, horário e
 próximo aviso. Há layout responsivo e alternador de papéis no navegador.
 
-O protótipo usa dados de demonstração e ainda não persiste operações. Isso é
-intencional: a API privilegiada será ligada somente após definir autorização e
-contratos de erro. O Electron foi configurado com `contextIsolation`, sandbox,
-`nodeIntegration: false`, navegação bloqueada, CSP e preload mínimo.
+O navegador sem preload conserva dados de demonstração para revisão visual. O
+Electron usa somente estado real do serviço e começa vazio se o backend estiver
+indisponível, evitando mostrar perfis fictícios. Ele foi configurado com
+`contextIsolation`, sandbox, `nodeIntegration: false`, navegação bloqueada,
+CSP e preload mínimo.
 
 Validações executadas:
 
@@ -104,15 +105,9 @@ Validações executadas:
 - Suite Python completa: 211 testes aprovados, 2 ignorados por dependerem do
   Windows.
 
-Pendências específicas da interface:
-
-1. Definir comandos e respostas reais em `packages/contracts`.
-2. Implementar cliente do socket Unix e autorização de cada operação.
-3. Substituir o snapshot de demonstração por leitura do serviço.
-4. Ligar cadastro, quota, bônus e horários ao backend e tratar indisponibilidade.
-5. Criar empacotamento e inicialização integrada ao instalador do Regata OS.
-6. Validar a janela Electron no monitor real em resolução desktop e na conta
-   `filhos` depois que a integração estiver operacional.
+Pendências específicas da interface: validar presencialmente a janela e o
+reconhecimento na conta `filhos`, e substituir a dependência do workspace por
+um pacote desktop autocontido antes de distribuir para outras máquinas.
 
 O serviço protegido é a autoridade única. A conta infantil não informa sua
 identidade nem escreve quota, vetores ou tickets. A mesma captura que reconhece
@@ -424,3 +419,26 @@ validação real reaplicou o limite atual de 120 minutos e o horário já existe
 sem mudar a política doméstica, e confirmou que bônus inválido é recusado. Os
 três workflows passaram: Unit tests em Ubuntu e Windows, Linux Regata OS checks
 e Windows live WTS diagnostic.
+
+## Tela infantil com estado real — 23/10/2026
+
+Foi implementado um canal Unix separado e somente de leitura em
+`/run/facekids-child/status.sock`. O diretório e o socket pertencem ao grupo
+primário da conta monitorada, usam modos `0750` e `0660`, e cada conexão é
+validada por `SO_PEERCRED`. O protocolo aceita exclusivamente `status` e
+retorna somente a criança reconhecida naquele momento; com identidade ausente,
+a lista é vazia. A conta infantil continua sem acesso ao socket administrativo.
+
+O Electron no papel `child` passou a consultar esse canal a cada segundo. A
+tela mostra um estado neutro de reconhecimento enquanto não há rosto, sem dados
+de demonstração ou informações de outros perfis. Quando o serviço confirma a
+identidade, mostra nome, foto escolhida, saldo e horário reais. O botão
+**Começar agora** fecha a janela. Foram adicionados lançador, aplicativo KDE e
+autostart explícito para a conta `filhos`.
+
+Validação de software antes da instalação: 220 testes Python aprovados com 2
+skips de plataforma, 4 testes TypeScript, typecheck, build, Ruff, sintaxe de
+todos os scripts Regata OS e verificação da unidade systemd aprovados. Depois
+de publicar, atualizar o serviço, instalar o autostart infantil, confirmar as
+permissões reais dos dois sockets e testar uma consulta executada como
+`filhos`. A aparição do perfil reconhecido ainda exige a criança presente.

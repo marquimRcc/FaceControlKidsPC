@@ -18,7 +18,7 @@ export const systemSnapshotSchema = z.object({
   camera: z.enum(["ready", "busy", "offline"]),
   session: z.enum(["active", "locked", "absent"]),
   curfew: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }),
-  children: z.array(childStatusSchema).min(1),
+  children: z.array(childStatusSchema).max(20),
 });
 
 export type ChildStatus = z.infer<typeof childStatusSchema>;
@@ -94,4 +94,13 @@ export const demoSnapshot: SystemSnapshot = systemSnapshotSchema.parse({
       isPresent: false
     }
   ]
+});
+
+export const disconnectedSnapshot: SystemSnapshot = systemSnapshotSchema.parse({
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  service: "offline",
+  camera: "offline",
+  session: "absent",
+  curfew: { enabled: false, start: "08:00", end: "20:00" },
+  children: [],
 });

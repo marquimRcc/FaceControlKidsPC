@@ -7,6 +7,7 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+CHILD_USER=${1:-filhos}
 if [[ -x /usr/local/sbin/facekids-disable-pam ]]; then
   /usr/local/sbin/facekids-disable-pam
 elif [[ -x ${SCRIPT_DIR}/Desativar-PAM-FaceKids-RegataOS.sh ]]; then
@@ -20,6 +21,11 @@ rm -f /usr/local/bin/facekids-linux-probe
 rm -f /usr/local/libexec/facekids-pam-helper
 rm -f /usr/local/sbin/facekids-enable-pam /usr/local/bin/facekids-enable-pam
 rm -f /usr/local/sbin/facekids-disable-pam /usr/local/bin/facekids-disable-pam
+if getent passwd "${CHILD_USER}" >/dev/null 2>&1; then
+  CHILD_HOME=$(getent passwd "${CHILD_USER}" | cut -d: -f6)
+  rm -f "${CHILD_HOME}/.local/share/applications/facekids-child.desktop"
+  rm -f "${CHILD_HOME}/.config/autostart/facekids-child.desktop"
+fi
 systemctl daemon-reload
 rm -rf /usr/lib/facekids /opt/facekids
 

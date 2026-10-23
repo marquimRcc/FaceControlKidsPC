@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AdminDashboard } from "@facekids/admin";
-import { adminStateSchema, demoSnapshot, profilePhotoSchema, type AdminState, type DesktopRole } from "@facekids/contracts";
+import { adminStateSchema, demoSnapshot, disconnectedSnapshot, profilePhotoSchema, type AdminState, type DesktopRole } from "@facekids/contracts";
 import { ChildWelcome } from "./ChildWelcome";
 
 function roleFromUrl(): DesktopRole {
@@ -9,11 +9,14 @@ function roleFromUrl(): DesktopRole {
 
 export function App() {
   const [role, setRole] = useState<DesktopRole>(roleFromUrl());
-  const [adminState, setAdminState] = useState<AdminState>({ snapshot: demoSnapshot, enrollment: null });
+  const [adminState, setAdminState] = useState<AdminState>({
+    snapshot: window.facekids ? disconnectedSnapshot : demoSnapshot,
+    enrollment: null,
+  });
   const [backendError, setBackendError] = useState<string | null>(null);
   useEffect(() => { void window.facekids?.getContext().then(context => setRole(context.role)); }, []);
   useEffect(() => {
-    if (!window.facekids || role !== "admin") return;
+    if (!window.facekids) return;
     let active = true;
     const refresh = async () => {
       try {

@@ -15,6 +15,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("DeviceAllow=/dev/video0 rw", unit)
         self.assertIn("UMask=0077", unit)
         self.assertIn("RuntimeDirectoryMode=0750", unit)
+        self.assertIn("RuntimeDirectory=facekids facekids-child", unit)
         self.assertIn("--admin-group wheel", unit)
         self.assertIn("CapabilityBoundingSet=", unit)
         self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
@@ -63,6 +64,15 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn('id -G "${CHILD_USER}"', script)
         self.assertNotIn("--groups video", script)
         self.assertNotIn("--append --groups video", script)
+
+    def test_child_screen_is_read_only_and_has_explicit_autostart_installer(self):
+        launcher = (ROOT / "scripts/Abrir-Tela-Infantil-RegataOS.sh").read_text()
+        setup = (ROOT / "scripts/Criar-Tela-Infantil-RegataOS.sh").read_text()
+        self.assertIn("--role=child", launcher)
+        self.assertNotIn("--role=admin", launcher)
+        self.assertIn(".config/autostart", setup)
+        self.assertIn("facekids-child.desktop", setup)
+        self.assertIn('chown "${CHILD_USER}:${CHILD_GROUP}"', setup)
 
     def test_uninstaller_restores_pam_before_removing_helper(self):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(

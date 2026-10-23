@@ -57,21 +57,32 @@ validada por `SO_PEERCRED`; somente UID 0 ou uma conta realmente pertencente ao
 grupo configurado pode prosseguir. A conta compartilhada `filhos` é removida de
 grupos suplementares pelo instalador e não consegue atravessar esse limite.
 
+A tela infantil usa outro canal, `/run/facekids-child/status.sock`, também
+validado por `SO_PEERCRED`, pertencente ao grupo primário da conta monitorada.
+Esse canal aceita somente `{"op":"status"}` e devolve apenas o perfil que o
+serviço reconhece naquele momento. Sem identidade atual, a lista vem vazia;
+nenhum nome, retrato ou saldo de outro perfil é exposto. O canal não oferece
+operações de cadastro, bônus, limite ou horário.
+
 O protocolo usa uma mensagem JSON por conexão, limitada a 4096 bytes. O painel
 consulta snapshots reais e pode criar um perfil e iniciar seu cadastro em uma
 única operação. Durante o cadastro, o mesmo processo root que já possui a
-câmera coleta 12 vetores, publica a contagem de progresso e salva até três retratos recortados
+câmera coleta 12 vetores, publica a contagem de progresso e salva até três
+retratos recortados
 junto dos templates, na mesma transação. Quadros e vídeo da câmera nunca
 atravessam o socket; a galeria atravessa somente o socket administrativo.
-Cancelar
-um cadastro novo remove o perfil ainda vazio para não deixar o runtime travado
+Cancelar um cadastro novo remove o perfil ainda vazio para não deixar o runtime travado
 por um cadastro incompleto.
 
-O Electron conecta ao socket apenas no processo principal. O preload oferece
-métodos estreitos para contexto, estado, cadastro e galeria de fotos. As
-respostas são novamente validadas com Zod no renderer.
+O Electron conecta ao socket correspondente ao papel apenas no processo
+principal. O preload oferece métodos estreitos para contexto, estado, cadastro
+e galeria de fotos. As respostas são novamente validadas com Zod no renderer.
 
 O aplicativo do menu KDE é criado por
 `scripts/Criar-Atalho-Painel-RegataOS.sh`. Ele abre o build local usando o
 Electron fixado no workspace. A atualização do serviço instalado, preservando
 o banco, é feita por `scripts/Atualizar-FaceKids-RegataOS.sh`.
+
+`scripts/Criar-Tela-Infantil-RegataOS.sh` instala na conta compartilhada o
+aplicativo **FaceKids — Meu tempo** e sua entrada de inicialização automática.
+O lançador exige que o build e o Electron do workspace continuem disponíveis.

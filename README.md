@@ -36,6 +36,16 @@ webcam. Três retratos recortados são guardados localmente para o painel; o
 responsável pode capturar outros e escolher qual será exibido. Vídeos não são
 persistidos e o reconhecimento continua usando somente os vetores faciais.
 
+Para a conta compartilhada, instale a tela de tempo e boas-vindas:
+
+```bash
+sudo bash scripts/Criar-Tela-Infantil-RegataOS.sh filhos
+```
+
+Ela abre automaticamente na sessão infantil e consulta um socket somente de
+leitura. Enquanto nenhum rosto está confirmado, a tela não revela nomes,
+fotos ou saldos de outros perfis.
+
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
 Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao

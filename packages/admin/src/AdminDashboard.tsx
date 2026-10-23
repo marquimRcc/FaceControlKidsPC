@@ -55,9 +55,9 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
         </header>
 
         <section className="health-strip" aria-label="Estado do sistema">
-          <div><span className="health-icon health-icon--green"><ShieldCheck /></span><div><strong>Proteção ativa</strong><StatusPill tone="ok">Serviço online</StatusPill></div></div>
-          <div><span className="health-icon health-icon--blue"><Camera /></span><div><strong>Câmera pronta</strong><span>USB 2.0 Camera</span></div></div>
-          <div><span className="health-icon health-icon--purple"><Clock3 /></span><div><strong>Horário permitido</strong><span>{snapshot.curfew.start} – {snapshot.curfew.end}</span></div></div>
+          <div><span className="health-icon health-icon--green"><ShieldCheck /></span><div><strong>{snapshot.service === "online" ? "Proteção ativa" : "Proteção indisponível"}</strong><StatusPill tone={snapshot.service === "online" ? "ok" : "warn"}>{snapshot.service === "online" ? "Serviço online" : "Serviço offline"}</StatusPill></div></div>
+          <div><span className="health-icon health-icon--blue"><Camera /></span><div><strong>{snapshot.camera === "ready" ? "Câmera pronta" : snapshot.camera === "busy" ? "Câmera em uso" : "Câmera indisponível"}</strong><span>Reconhecimento local</span></div></div>
+          <div><span className="health-icon health-icon--purple"><Clock3 /></span><div><strong>{snapshot.curfew.enabled ? "Horário permitido" : "Horário livre"}</strong><span>{snapshot.curfew.enabled ? `${snapshot.curfew.start} – ${snapshot.curfew.end}` : "Controle desativado"}</span></div></div>
         </section>
 
         <section className="section-heading"><div><h2>Perfis das crianças</h2><p>{snapshot.children.length} perfis configurados neste computador</p></div><button className="text-button">Ver detalhes <ChevronRight size={16} /></button></section>
