@@ -669,13 +669,14 @@ Vite/Electron; Ruff; `git diff --check`; navegação visual e interação real n
 seções Horários, Histórico, Diagnóstico e Configurações em navegador local. O
 bundle autocontido foi reconstruído após o commit e agora identifica
 `5dd5ad8`; checksum e manifesto foram recriados. A descrição do PR draft #3 foi
-atualizada. O CI desse commit ainda estava iniciando na última consulta.
+atualizada. Os três workflows do commit `5dd5ad8` passaram: Unit tests, Linux
+Regata OS checks e Windows live WTS diagnostic.
 
 ### Estado atual
 
 - **Concluído:** navegação do painel, telas informativas com dados reais,
   histórico de sete dias, testes locais, rebuild do bundle e atualização do PR.
-- **Em andamento:** CI remoto do commit `5dd5ad8`.
+- **Em andamento:** nenhuma etapa autônoma de software conhecida.
 - **Pendente:** instalar o novo bundle em `/opt/facekids/desktop` com `sudo`
   interativo e executar os testes físicos abaixo.
 - **Bloqueado por presença física:** captura biométrica, reconhecimento real,
@@ -686,8 +687,8 @@ atualizada. O CI desse commit ainda estava iniciando na última consulta.
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto e o CI do commit
-> `5dd5ad8`. A navegação completa do painel e o histórico real de sete dias já
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto. Os três workflows
+> do commit `5dd5ad8` já passaram. A navegação completa do painel e o histórico real de sete dias já
 > foram implementados; não repita essa etapa. O bundle local autocontido foi
 > reconstruído nesse commit. Se o CI estiver verde, revise pendências que possam
 > ser concluídas sem presença física. Preserve o banco em `/var/lib/facekids` e
