@@ -411,6 +411,13 @@ class LinuxFaceQuotaRuntime:
             child_id, photo_id = request.get("childId"), request.get("photoId")
             store.select_profile_photo(child_id, photo_id)
             return {"ok": True}
+        if op == "rename_child":
+            child_id, name = request.get("childId"), request.get("name")
+            if (type(child_id) is not int or child_id <= 0
+                    or not isinstance(name, str)):
+                raise ValueError("Criança ou nome inválido")
+            store.update_person_name(child_id, name)
+            return {"ok": True}
         if op == "set_daily_limit":
             child_id, minutes = request.get("childId"), request.get("minutes")
             if (type(child_id) is not int or child_id <= 0

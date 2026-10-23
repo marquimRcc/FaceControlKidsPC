@@ -67,6 +67,7 @@ export interface FaceKidsDesktopApi {
   startEnrollment(childId: number): Promise<void>;
   listPhotos(childId: number): Promise<ProfilePhoto[]>;
   selectPhoto(childId: number, photoId: number): Promise<void>;
+  renameChild(childId: number, name: string): Promise<void>;
   setDailyLimit(childId: number, minutes: number): Promise<void>;
   addBonus(childId: number, minutes: number): Promise<void>;
   setCurfew(input: { enabled: boolean; start: string; end: string }): Promise<void>;

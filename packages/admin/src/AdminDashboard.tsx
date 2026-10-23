@@ -29,11 +29,12 @@ function StatePanel({ snapshot }: { snapshot: SystemSnapshot }) {
   </section>;
 }
 
-export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto, onSetDailyLimit, onAddBonus, onSetCurfew }: {
+export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto, onRenameChild, onSetDailyLimit, onAddBonus, onSetCurfew }: {
   snapshot: SystemSnapshot; enrollment: EnrollmentStatus | null; backendError: string | null;
   onEnrollChild: (name: string, minutes: number) => Promise<number>; onCancelEnrollment: () => Promise<void>;
   onStartEnrollment: (childId: number) => Promise<void>; onListPhotos: (childId: number) => Promise<ProfilePhoto[]>;
-  onSelectPhoto: (childId: number, photoId: number) => Promise<void>; onSetDailyLimit: (childId: number, minutes: number) => Promise<void>;
+  onSelectPhoto: (childId: number, photoId: number) => Promise<void>; onRenameChild: (childId: number, name: string) => Promise<void>;
+  onSetDailyLimit: (childId: number, minutes: number) => Promise<void>;
   onAddBonus: (childId: number, minutes: number) => Promise<void>; onSetCurfew: (input: { enabled: boolean; start: string; end: string }) => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<Section>("overview");
@@ -67,7 +68,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
   </aside><main className="admin-content">
     {backendError && <div className="backend-alert" role="alert"><strong>Serviço não conectado</strong><span>{backendError}</span></div>}
     <header className="page-header"><div><span className="eyebrow">{today}</span><h1>{titles[activeSection][0]}</h1><p>{titles[activeSection][1]}</p></div>{(activeSection === "overview" || activeSection === "children") && <button className="button button--primary" onClick={() => setWizardOpen(true)}><Plus size={18} /> Nova criança</button>}</header>{content}
-  </main>{wizardOpen && <EnrollmentWizard enrollment={enrollment} onEnroll={onEnrollChild} onCancelEnrollment={onCancelEnrollment} onClose={() => setWizardOpen(false)} />}{selected && <ProfilePhotoManager child={selected} enrollment={enrollment} loadPhotos={onListPhotos} selectPhoto={onSelectPhoto} startCapture={onStartEnrollment} cancelCapture={onCancelEnrollment} setDailyLimit={onSetDailyLimit} addBonus={onAddBonus} onClose={() => setSelected(null)} />}{scheduleOpen && <ScheduleEditor current={snapshot.curfew} onSave={onSetCurfew} onClose={() => setScheduleOpen(false)} />}</div>;
+  </main>{wizardOpen && <EnrollmentWizard enrollment={enrollment} onEnroll={onEnrollChild} onCancelEnrollment={onCancelEnrollment} onClose={() => setWizardOpen(false)} />}{selected && <ProfilePhotoManager child={selected} enrollment={enrollment} loadPhotos={onListPhotos} selectPhoto={onSelectPhoto} renameChild={onRenameChild} startCapture={onStartEnrollment} cancelCapture={onCancelEnrollment} setDailyLimit={onSetDailyLimit} addBonus={onAddBonus} onClose={() => setSelected(null)} />}{scheduleOpen && <ScheduleEditor current={snapshot.curfew} onSave={onSetCurfew} onClose={() => setScheduleOpen(false)} />}</div>;
 }
 
 function Schedule({ snapshot }: { snapshot: SystemSnapshot }) { return <div className={`schedule${snapshot.curfew.enabled ? "" : " schedule--disabled"}`}><span>{snapshot.curfew.start}</span><div><i /><b>{snapshot.curfew.enabled ? "Uso permitido" : "Controle desativado"}</b></div><span>{snapshot.curfew.end}</span></div>; }

@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("facekids", {
   listPhotos: (childId: number) => ipcRenderer.invoke("facekids:list-photos", childId),
   selectPhoto: (childId: number, photoId: number) =>
     ipcRenderer.invoke("facekids:select-photo", childId, photoId),
+  renameChild: (childId: number, name: string) =>
+    ipcRenderer.invoke("facekids:rename-child", childId, name),
   setDailyLimit: (childId: number, minutes: number) =>
     ipcRenderer.invoke("facekids:set-daily-limit", childId, minutes),
   addBonus: (childId: number, minutes: number) =>

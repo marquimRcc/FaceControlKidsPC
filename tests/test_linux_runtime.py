@@ -373,6 +373,9 @@ class LinuxSessionTests(unittest.TestCase):
             runtime = object.__new__(LinuxFaceQuotaRuntime)
 
             runtime._dispatch_admin(store, {
+                "op": "rename_child", "childId": child_id, "name": "  Beatriz  ",
+            })
+            runtime._dispatch_admin(store, {
                 "op": "set_daily_limit", "childId": child_id, "minutes": 120,
             })
             runtime._dispatch_admin(store, {
@@ -382,11 +385,13 @@ class LinuxSessionTests(unittest.TestCase):
                 "op": "set_curfew", "enabled": True, "start": "08:30", "end": "20:15",
             })
 
-            self.assertEqual(store.people()[0][2], 7200)
+            self.assertEqual(store.people()[0][1:], ("Beatriz", 7200))
             self.assertEqual(store.bonus(child_id), 1800)
             self.assertEqual(store.get_curfew_config(), (True, "08:30", "20:15"))
             for request in (
                 {"op": "set_daily_limit", "childId": child_id, "minutes": True},
+                {"op": "rename_child", "childId": child_id, "name": "   "},
+                {"op": "rename_child", "childId": True, "name": "Bia"},
                 {"op": "add_bonus", "childId": child_id, "minutes": 0},
                 {"op": "set_curfew", "enabled": "yes", "start": "08:00", "end": "20:00"},
                 {"op": "set_curfew", "enabled": True, "start": "25:00", "end": "20:00"},

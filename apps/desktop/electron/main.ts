@@ -116,6 +116,15 @@ app.whenReady().then(() => {
         !typeOfNumber(photoId) || photoId <= 0) throw new Error("Foto inválida");
     await adminRequest({ op: "select_photo", childId, photoId });
   });
+  ipcMain.handle("facekids:rename-child", async (
+    _event, childId: unknown, name: unknown,
+  ) => {
+    if (!typeOfNumber(childId) || childId <= 0 || typeof name !== "string" ||
+        !name.trim() || name.trim().length > 80) {
+      throw new Error("Criança ou nome inválido");
+    }
+    await adminRequest({ op: "rename_child", childId, name: name.trim() });
+  });
   ipcMain.handle("facekids:set-daily-limit", async (
     _event, childId: unknown, minutes: unknown,
   ) => {
