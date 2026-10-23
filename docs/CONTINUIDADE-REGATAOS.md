@@ -11,14 +11,14 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `deda32a`.
-- Último commit funcional remoto antes deste documento: `af507e361218409c7f48a75669a057aac0430344`.
+- Último commit funcional local antes deste documento: `308f85e`.
+- Último commit funcional remoto antes deste documento: `15895bed37293d58c30b7832340997a124d37d90`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Objetivo do produto no Linux
 
-O FaceKids deve controlar uma conta Linux compartilhada por três crianças. O
-rosto presente determina qual quota individual é debitada. A contagem ocorre
+O FaceKids deve controlar uma conta Linux compartilhada por uma ou mais
+crianças. O rosto presente determina qual quota individual é debitada. A contagem ocorre
 somente enquanto a sessão está ativa e desbloqueada. O sistema bloqueia a
 sessão quando a quota termina, o horário permitido acaba ou a identidade fica
 incerta além da tolerância. Reconhecimento e dados permanecem locais.
@@ -37,7 +37,7 @@ Serviço root facekids-linux.service
   - captura e rejeição de quadros inválidos
   - YuNet: detecção de exatamente um rosto
   - SFace: vetor e comparação local
-  - ChildQuotaEngine: identidade, quota e tempo monotônico
+  - ChildQuotaEngine: uma ou mais identidades, quota e tempo monotônico
   - SQLite protegido em /var/lib/facekids
           |
           +--> systemd-logind: estado Active/State/LockedHint
@@ -118,22 +118,26 @@ instalação e remoção, wrappers e ativação/desativação reversível do PAM
 
 ### Fase 4 — verificação automatizada
 
-Concluída para o estado atual. A suíte local passou com 198 testes, dois
+Concluída para o estado atual. A suíte local passou com 206 testes, dois
 ignorados por dependerem de Windows real. Os workflows `Unit tests` passaram
 em Ubuntu e Windows, e `Linux Regata OS checks` passou. Os scripts passaram em
 `bash -n` e os novos módulos Linux passaram no Ruff.
 
 ### Fase 5 — validação física e experiência sem clique
 
-Pendente. Depende de corrigir a imagem real da webcam, instalar como root,
-cadastrar as três crianças e executar testes controlados de sessão e
-recuperação. O desbloqueio totalmente automático no SDDM/KScreenLocker exige
-uma integração gráfica própria após o fluxo básico estar comprovado.
+Parcial. A webcam real passou no probe depois do aquecimento da autoexposição.
+Ainda depende de instalar como root, cadastrar todas as crianças configuradas
+e executar testes controlados de sessão e recuperação. O serviço já solicita
+desbloqueio direto pelo logind após três confirmações; a validação física no
+KScreenLocker/SDDM permanece pendente.
 
 ## Trabalho realizado
 
 - Criadas as branches de pesquisa e implementação.
-- Implementado runtime Linux para uma conta compartilhada e três perfis.
+- Implementado runtime Linux para uma conta compartilhada e quantidade
+  variável de perfis.
+- O instalador aceita de uma a vinte crianças e usa uma quando a quantidade é
+  omitida; o runtime não contém mais a exigência fixa de três perfis.
 - Implementada descoberta de sessão por logind e bloqueio dirigido por ID.
 - Implementadas quotas individuais, bônus e toque de recolher.
 - Implementado cadastro local sem persistência de fotos.
@@ -141,6 +145,10 @@ uma integração gráfica própria após o fluxo básico estar comprovado.
 - Implementada recusa de quadros pretos ou sem contraste.
 - Implementado broker de aprovação com três confirmações, ticket de uso único
   e revalidação de quota e horário.
+- Implementado desbloqueio direto e limitado por sessão via `loginctl`, com
+  revalidação, intervalo mínimo entre pedidos e fallback PAM preservado.
+- Implementado recarregamento de cadastros durante a execução; alteração ou
+  remoção revoga evidência e tickets anteriores.
 - Implementada ponte PAM opcional, com backup e restauração.
 - Criados instalador, desinstalador, criador da conta infantil e wrappers.
 - Corrigidos caminhos Windows que criavam `C:` acidentalmente no Linux.
@@ -154,33 +162,36 @@ uma integração gráfica própria após o fluxo básico estar comprovado.
   640x480 a 30 fps.
 - `/dev/video1` é um nó de metadados e não serve para captura.
 - A conta atual pertence ao grupo `video`.
-- O probe abriu `/dev/video0`, porém os quadros apresentaram média aproximada
-  de 0,64 e máximo 36, resultando em `QUADROS_PRETOS_OU_UNIFORMES`.
-- Por segurança, cadastro e reconhecimento físico não foram simulados nem
-  forçados com esses quadros.
+- Após descartar 15 quadros para estabilizar a autoexposição, o probe real
+  retornou `CAMERA_UTILIZAVEL`: 31/31 quadros utilizáveis, 6,11 fps e brilho
+  médio aproximado de 90,74. Nenhum rosto estava no quadro durante o teste.
 - A conta `filhos` ainda não existia durante a análise.
 - A instalação do sistema exige `sudo` interativo; a sessão automatizada não
   possui a senha do responsável.
-- O helper PAM atende uma conversa de autenticação já iniciada. Login inicial e
-  desbloqueio totalmente sem clique ainda não existem no Linux.
+- O helper PAM atende uma conversa de autenticação já iniciada. O runtime agora
+  também solicita desbloqueio direto pelo logind, mas o comportamento sem
+  clique ainda precisa ser comprovado fisicamente no KDE desta máquina.
 - O PR aparece como draft e deve continuar assim até a validação física e a
   revisão final de segurança.
 
 ## O que falta fazer
 
-1. Investigar a câmera no host: tampa/obturador, tecla de privacidade, outro
-   aplicativo segurando o dispositivo, exposição, formato V4L2 e driver.
-2. Confirmar imagem utilizável no probe sem reduzir as validações de segurança.
-3. Criar a conta compartilhada `filhos` e confirmar que ela não tem privilégios
+1. Criar a conta compartilhada `filhos` e confirmar que ela não tem privilégios
    administrativos.
-4. Instalar o serviço com `sudo`, validar permissões e revisar o journal.
-5. Cadastrar presencialmente as três crianças com consentimento do responsável.
-6. Testar troca de criança, ausência, múltiplos rostos, quota esgotada, bônus,
+2. Instalar o serviço com `sudo`, informando a quantidade desejada, validar
+   permissões e revisar o journal.
+3. Cadastrar presencialmente todas as crianças configuradas com consentimento
+   do responsável.
+4. Testar troca de criança, ausência, múltiplos rostos, quota esgotada, bônus,
    virada do dia, suspensão e toque de recolher.
-7. Testar bloqueio KDE e recuperação pela conta administrativa e por senha.
-8. Somente depois, testar a ponte PAM opt-in e seu script de recuperação.
-9. Avaliar plugin de KScreenLocker/SDDM para uma experiência realmente sem
-   clique, mantendo o fallback convencional.
+5. Testar bloqueio e desbloqueio KDE, além da recuperação pela conta
+   administrativa e por senha.
+6. Somente depois, testar a ponte PAM opt-in e seu script de recuperação.
+7. Avaliar plugin de KScreenLocker/SDDM se o desbloqueio direto pelo logind não
+   produzir a experiência sem clique desejada.
+8. Avaliar uma verificação de vivacidade adequada; a confirmação temporal
+   atual não impede apresentação de foto ou vídeo.
+9. Avaliar notificações por um canal seguro para o barramento da sessão.
 10. Fazer revisão final do PR, atualizar documentação de operação e decidir a
     estratégia de merge para a branch principal.
 
@@ -195,8 +206,8 @@ uma integração gráfica própria após o fluxo básico estar comprovado.
    SQLite. Criar testes somente para riscos reais descobertos.
 5. Não executar instalação root, alterar PAM ou cadastrar biometria sem a
    presença necessária do responsável e uma imagem válida da câmera.
-6. Se o hardware continuar indisponível, avançar na revisão, documentação,
-   testes de integração simulados e desenho do KScreenLocker/SDDM.
+6. Usar a câmera já aprovada no probe somente com presença e consentimento do
+   responsável para os cadastros e testes físicos.
 7. Manter commits pequenos e atualizar o PR após cada conjunto validado.
 
 ### Comandos de validação local
