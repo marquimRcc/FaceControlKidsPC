@@ -12,6 +12,8 @@ Ao abrir a câmera, o processo descarta 15 quadros para permitir a estabilizaç�
 da autoexposição. Durante o bloqueio, três confirmações consecutivas do mesmo
 rosto, com quota e horário revalidados, solicitam o desbloqueio da sessão pelo
 logind. Esse caminho pode ser desativado com `--no-auto-unlock` para diagnóstico.
+O mesmo ticket permanece disponível por até dez segundos para o helper PAM
+caso o KScreenLocker não aceite o pedido direto; o primeiro consumo o invalida.
 
 O banco e os vetores ficam em `/var/lib/facekids`, pertencem a root e não são
 graváveis pela conta compartilhada. O processo que reconhece também decide e

@@ -113,7 +113,7 @@ class LinuxSessionTests(unittest.TestCase):
 
         self.assertTrue(runtime._maybe_unlock(approval, 3.0, "2026-10-22"))
         unlock.assert_called_once_with("4")
-        runtime.approvals.reset.assert_called_once_with()
+        runtime.approvals.reset.assert_not_called()
         self.assertFalse(runtime._maybe_unlock(approval, 5.0, "2026-10-22"))
         self.assertEqual(unlock.call_count, 1)
 

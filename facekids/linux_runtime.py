@@ -196,7 +196,6 @@ class LinuxFaceQuotaRuntime:
             )
             return False
         self._last_unlock_request = now
-        self.approvals.reset()
         LOG.info(
             "Desbloqueio facial solicitado para sessão %s e criança %s",
             approval.session_id, approval.child_id,
