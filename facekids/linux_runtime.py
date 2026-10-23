@@ -123,6 +123,7 @@ class LinuxFaceQuotaRuntime:
         ))
         self._server_thread: threading.Thread | None = None
         self._last_unlock_request = float("-inf")
+        self._last_lock_request = float("-inf")
 
     @staticmethod
     def _references_signature(references) -> tuple:
@@ -253,6 +254,21 @@ class LinuxFaceQuotaRuntime:
         )
         return True
 
+    def _maybe_lock(self, session_id: str | None, reason: str, now: float) -> bool:
+        """Solicita bloqueio sem derrubar o controlador se o logind falhar."""
+        if now - self._last_lock_request < 10.0:
+            return False
+        try:
+            lock_current_session(session_id)
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+            self._last_lock_request = now
+            LOG.exception("Falha ao bloquear sessão %s: %s", session_id, reason)
+            return False
+        self._last_lock_request = now
+        LOG.warning("Sessão %s bloqueada: %s", session_id, reason)
+        self.engine.policy.pause()
+        return True
+
     def run(self) -> int:
         import cv2
 
@@ -321,9 +337,7 @@ class LinuxFaceQuotaRuntime:
                     )
                     self._last_signal = current_signal
                 if should_lock and state is SessionState.ACTIVE:
-                    LOG.warning("Bloqueando sessão: %s", reason)
-                    lock_current_session(session_id)
-                    self.engine.policy.pause()
+                    self._maybe_lock(session_id, reason, started)
                 elapsed = time.monotonic() - started
                 time.sleep(max(0.0, self.config.interval_seconds - elapsed))
         finally:

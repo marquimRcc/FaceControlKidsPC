@@ -162,6 +162,22 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertFalse(runtime._maybe_unlock(approval, 20.0, "2026-10-22"))
         self.assertEqual(unlock.call_count, 1)
 
+    @patch("facekids.linux_runtime.lock_current_session")
+    def test_lock_failure_is_rate_limited_without_stopping_runtime(self, lock):
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        runtime._last_lock_request = float("-inf")
+        runtime.engine = unittest.mock.Mock()
+        lock.side_effect = RuntimeError("logind indisponível")
+
+        self.assertFalse(runtime._maybe_lock("4", "quota encerrada", 10.0))
+        self.assertFalse(runtime._maybe_lock("4", "quota encerrada", 11.0))
+        lock.assert_called_once_with("4")
+        runtime.engine.policy.pause.assert_not_called()
+
+        lock.side_effect = None
+        self.assertTrue(runtime._maybe_lock("4", "quota encerrada", 20.0))
+        runtime.engine.policy.pause.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()
