@@ -16,6 +16,9 @@ logind. Esse caminho pode ser desativado com `--no-auto-unlock` para diagnóstic
 O banco e os vetores ficam em `/var/lib/facekids`, pertencem a root e não são
 graváveis pela conta compartilhada. O processo que reconhece também decide e
 contabiliza; portanto a criança não envia `child_id` por um IPC modificável.
+A conta compartilhada também não pertence ao grupo `video`; somente o serviço
+root, limitado pela unidade systemd, e os comandos administrativos acessam a
+webcam.
 Existe uma integração opt-in com `pam_exec` para consumir um ticket facial
 fresco e de uso único no desbloqueio KDE. Ela não é habilitada pelo instalador
 e não produz login inicial sem interação no SDDM.

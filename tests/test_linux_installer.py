@@ -46,11 +46,13 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("STAGED_FILES", enable)
         self.assertIn("Só altera PAM depois", enable)
 
-    def test_child_account_script_removes_admin_group(self):
+    def test_child_account_script_removes_privileged_groups(self):
         script = (ROOT / "scripts/Criar-Conta-Filhos-RegataOS.sh").read_text(encoding="utf-8")
         self.assertIn("gpasswd --delete", script)
         self.assertIn("wheel", script)
-        self.assertIn("--groups video", script)
+        self.assertIn("video", script)
+        self.assertNotIn("--groups video", script)
+        self.assertNotIn("--append --groups video", script)
 
     def test_uninstaller_restores_pam_before_removing_helper(self):
         script = (ROOT / "scripts/Desinstalar-FaceKids-RegataOS.sh").read_text(
