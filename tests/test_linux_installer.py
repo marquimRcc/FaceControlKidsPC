@@ -54,9 +54,8 @@ class LinuxInstallerTests(unittest.TestCase):
 
     def test_child_account_script_removes_privileged_groups(self):
         script = (ROOT / "scripts/Criar-Conta-Filhos-RegataOS.sh").read_text(encoding="utf-8")
-        self.assertIn("gpasswd --delete", script)
-        self.assertIn("wheel", script)
-        self.assertIn("video", script)
+        self.assertIn('usermod --groups "" "${CHILD_USER}"', script)
+        self.assertIn('id -G "${CHILD_USER}"', script)
         self.assertNotIn("--groups video", script)
         self.assertNotIn("--append --groups video", script)
 

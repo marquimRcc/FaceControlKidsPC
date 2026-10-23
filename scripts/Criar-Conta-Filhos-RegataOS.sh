@@ -19,10 +19,12 @@ else
   passwd "${CHILD_USER}"
 fi
 
-if id -nG "${CHILD_USER}" | tr ' ' '\n' | grep -qx wheel; then
-  gpasswd --delete "${CHILD_USER}" wheel
+# A conta pode já existir e carregar privilégios indiretos (docker, libvirt,
+# wheel, video etc.). O desktop recebe dispositivos pela sessão do logind e
+# não precisa de grupos suplementares permanentes.
+usermod --groups "" "${CHILD_USER}"
+if [[ $(id -G "${CHILD_USER}" | wc -w) -ne 1 ]]; then
+  echo "Não foi possível remover todos os grupos suplementares de ${CHILD_USER}." >&2
+  exit 1
 fi
-if id -nG "${CHILD_USER}" | tr ' ' '\n' | grep -qx video; then
-  gpasswd --delete "${CHILD_USER}" video
-fi
-echo "Conta ${CHILD_USER} preparada sem grupos administrativos ou acesso direto à webcam."
+echo "Conta ${CHILD_USER} preparada sem grupos suplementares ou acesso direto à webcam."

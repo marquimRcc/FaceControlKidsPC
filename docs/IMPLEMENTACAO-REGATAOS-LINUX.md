@@ -18,9 +18,9 @@ caso o KScreenLocker não aceite o pedido direto; o primeiro consumo o invalida.
 O banco e os vetores ficam em `/var/lib/facekids`, pertencem a root e não são
 graváveis pela conta compartilhada. O processo que reconhece também decide e
 contabiliza; portanto a criança não envia `child_id` por um IPC modificável.
-A conta compartilhada também não pertence ao grupo `video`; somente o serviço
-root, limitado pela unidade systemd, e os comandos administrativos acessam a
-webcam.
+A conta compartilhada não conserva grupos suplementares permanentes (incluindo
+`wheel`, `docker`, `libvirt` ou `video`); somente o serviço root, limitado pela
+unidade systemd, e os comandos administrativos acessam a webcam.
 O runtime não recebe famílias de socket de rede nem capacidades Linux extras;
 a unidade aceita somente `AF_UNIX` e nega tráfego IP.
 Existe uma integração opt-in com `pam_exec` para consumir um ticket facial
