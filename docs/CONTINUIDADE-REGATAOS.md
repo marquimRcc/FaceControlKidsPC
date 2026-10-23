@@ -621,6 +621,13 @@ typecheck e build Vite/Electron aprovados; todos os scripts Bash aprovados em
 `bash -n`; `systemd-analyze verify` aceitou a unidade FaceKids. Os avisos
 restantes pertencem a unidades antigas do Regata OS.
 
+O primeiro CI do commit de correção passou no Ubuntu, nos checks Regata OS e
+no diagnóstico WTS, mas revelou que o teste novo do socket de diagnóstico
+tentava usar `AF_UNIX` no runner Windows, onde essa constante não está
+disponível. O teste estritamente Linux passou a ser ignorado quando a
+plataforma não oferece `AF_UNIX`; o código de produção já era restrito ao
+runtime Linux. Confirmar o novo CI após o commit seguinte.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch

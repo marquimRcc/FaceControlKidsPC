@@ -21,6 +21,9 @@ class LinuxProbeTests(unittest.TestCase):
             "CAMERA_UTILIZAVEL",
         )
 
+    @unittest.skipUnless(
+        hasattr(socket, "AF_UNIX"), "Requer socket Unix disponível na plataforma"
+    )
     def test_probe_via_daemon_handles_socket_communication(self):
         with tempfile.TemporaryDirectory() as td:
             sock_path = Path(td) / "admin.sock"
