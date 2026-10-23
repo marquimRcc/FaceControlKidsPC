@@ -626,7 +626,8 @@ no diagnóstico WTS, mas revelou que o teste novo do socket de diagnóstico
 tentava usar `AF_UNIX` no runner Windows, onde essa constante não está
 disponível. O teste estritamente Linux passou a ser ignorado quando a
 plataforma não oferece `AF_UNIX`; o código de produção já era restrito ao
-runtime Linux. Confirmar o novo CI após o commit seguinte.
+runtime Linux. No commit `8ea860d`, os três workflows passaram: Unit tests em
+Ubuntu e Windows, Linux Regata OS checks e Windows live WTS diagnostic.
 
 ### Prompt de continuidade
 
