@@ -683,14 +683,32 @@ Regata OS checks e Windows live WTS diagnostic.
   débito de quota, bloqueio/desbloqueio da sessão infantil, senha de recuperação
   e eventual PAM opt-in.
 
+## Edição do nome da criança — 23/10/2026 às 20:34
+
+O commit `f2883a4` adicionou a edição do nome em **Gerenciar perfil**. O campo
+aparece acima dos controles de tempo, aceita até 80 caracteres, remove espaços
+nas extremidades e atualiza tanto o painel dos pais quanto a tela de
+boas-vindas infantil. A operação percorre toda a fronteira protegida:
+React → preload isolado → IPC Electron validado → socket administrativo →
+`Storage.update_person_name()`. A API não foi exposta no socket infantil.
+
+A atualização da lista de pessoas pelo daemon também invalida autorizações
+faciais anteriores, como já previsto quando os metadados do perfil mudam. O
+protótipo web deixou de apresentar erro ao abrir um perfil sem backend.
+
+Validação: 229 testes Python aprovados (2 skips de plataforma), 5 testes
+Vitest, typecheck, build de produção, Ruff, `git diff --check` e inspeção visual
+do formulário. Os três workflows do commit passaram. O PR draft #3 foi
+atualizado e o bundle autocontido foi reconstruído com a versão `f2883a4`.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto. Os três workflows
-> do commit `5dd5ad8` já passaram. A navegação completa do painel e o histórico real de sete dias já
-> foram implementados; não repita essa etapa. O bundle local autocontido foi
-> reconstruído nesse commit. Se o CI estiver verde, revise pendências que possam
-> ser concluídas sem presença física. Preserve o banco em `/var/lib/facekids` e
-> não simule captura biométrica, reconhecimento, sessão infantil ou PAM. Antes
-> de pausar, atualize e commite este documento e envie tudo à mesma branch.
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto. A navegação completa,
+> histórico real e edição de nomes já estão implementados; não repita essas
+> etapas. O bundle local mais recente identifica `f2883a4`, e seus três
+> workflows estão verdes. Restam a instalação com `sudo` interativo e os testes
+> físicos de captura, reconhecimento, quota, sessão infantil, recuperação e
+> eventual PAM. Preserve `/var/lib/facekids`, não simule evidência física e,
+> antes de pausar, atualize, commite e envie este documento.
