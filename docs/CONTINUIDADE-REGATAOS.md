@@ -11,8 +11,8 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `308f85e`.
-- Último commit funcional remoto antes deste documento: `15895bed37293d58c30b7832340997a124d37d90`.
+- Último commit funcional local antes deste documento: `cb7450f`.
+- Último commit funcional remoto antes deste documento: `a09347301705fc02887b8201811bf682c73fc56c`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -128,7 +128,7 @@ instalação e remoção, wrappers e ativação/desativação reversível do PAM
 
 ### Fase 4 — verificação automatizada
 
-Concluída para o estado atual. A suíte local passou com 206 testes, dois
+Concluída para o estado atual. A suíte local passou com 207 testes, dois
 ignorados por dependerem de Windows real. Os workflows `Unit tests` passaram
 em Ubuntu e Windows, e `Linux Regata OS checks` passou. Os scripts passaram em
 `bash -n` e os novos módulos Linux passaram no Ruff.
@@ -159,6 +159,8 @@ KScreenLocker/SDDM permanece pendente.
   revalidação, intervalo mínimo entre pedidos e fallback PAM preservado.
 - Implementado recarregamento de cadastros durante a execução; alteração ou
   remoção revoga evidência e tickets anteriores.
+- Falhas transitórias do logind ao bloquear são contidas e limitadas a uma
+  tentativa a cada dez segundos, sem derrubar o controlador nem abrir acesso.
 - Implementada ponte PAM opcional, com backup e restauração.
 - Criados instalador, desinstalador, criador da conta infantil e wrappers.
 - Corrigidos caminhos Windows que criavam `C:` acidentalmente no Linux.
