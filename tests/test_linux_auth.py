@@ -84,7 +84,8 @@ class LinuxAuthTests(unittest.TestCase):
         socket_factory.return_value = client
         client.recv.return_value = b"ALLOW\n"
         self.assertEqual(linux_pam_helper.main(), 0)
-        client.connect.assert_called_once_with("/run/facekids/auth.sock")
+        client.connect.assert_called_once_with(str(linux_pam_helper.AUTH_SOCKET))
+        self.assertNotIn("untrusted", str(linux_pam_helper.AUTH_SOCKET))
         client.sendall.assert_called_once_with(b"AUTH 4\n")
         client.recv.return_value = b"DENY\n"
         self.assertEqual(linux_pam_helper.main(), 1)
