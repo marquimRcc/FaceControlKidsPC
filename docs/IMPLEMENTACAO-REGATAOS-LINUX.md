@@ -8,6 +8,11 @@ sessão KDE ativa e desbloqueada e solicita o bloqueio nativo pelo logind quando
 a quota termina, o horário permitido acaba ou a identidade deixa de ser
 confirmada por 30 segundos.
 
+Ao abrir a câmera, o processo descarta 15 quadros para permitir a estabilização
+da autoexposição. Durante o bloqueio, três confirmações consecutivas do mesmo
+rosto, com quota e horário revalidados, solicitam o desbloqueio da sessão pelo
+logind. Esse caminho pode ser desativado com `--no-auto-unlock` para diagnóstico.
+
 O banco e os vetores ficam em `/var/lib/facekids`, pertencem a root e não são
 graváveis pela conta compartilhada. O processo que reconhece também decide e
 contabiliza; portanto a criança não envia `child_id` por um IPC modificável.
@@ -94,13 +99,13 @@ sudo bash scripts/Desinstalar-FaceKids-RegataOS.sh
 
 ## Limites ainda existentes
 
-O helper PAM pode aceitar um rosto com saldo durante uma conversa de
-autenticação já iniciada. Ele ainda não aciona sozinho a interface gráfica; o
-login inicial e o desbloqueio realmente sem clique exigem integração própria
-com SDDM/KScreenLocker. Uma senha conhecida pela conta compartilhada continua
-podendo abrir a sessão pelo fallback; o serviço voltará a exigir rosto e
-bloquear quando a identidade não for confirmada.
+O desbloqueio sem clique agora é solicitado por `loginctl unlock-session`, mas
+a aceitação efetiva desse pedido ainda precisa ser comprovada no KScreenLocker
+do notebook. O helper PAM continua disponível como integração opcional durante
+uma conversa de autenticação já iniciada. Login inicial no SDDM pode exigir uma
+integração gráfica própria. A senha convencional permanece como fallback.
 
-O teste local de 22/10/2026 confirmou `/dev/video0`, mas recebeu quadros quase
-pretos. O software recusa esses quadros; cadastro e calibração dependem de a
-câmera fornecer imagem utilizável.
+O primeiro teste local de 22/10/2026 recebeu quadros quase pretos. Depois de
+adicionar o aquecimento V4L2, um novo probe recebeu 31 de 31 quadros utilizáveis,
+com brilho médio 90,74 e 6,11 fps. Não havia rosto no quadro; detecção e
+desbloqueio físico ainda precisam ser validados com o responsável presente.

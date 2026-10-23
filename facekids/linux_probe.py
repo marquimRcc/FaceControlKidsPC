@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .linux_runtime import frame_is_usable
+from .linux_runtime import frame_is_usable, warm_up_camera
 from .recognition import Recognizer
 
 
@@ -45,6 +45,7 @@ def run_probe(camera_index: int, models: Path, seconds: float) -> ProbeResult:
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     capture.set(cv2.CAP_PROP_FPS, 10)
+    warm_up_camera(capture)
     started = time.monotonic()
     deadline = started + seconds
     frames = usable = faces_seen = 0

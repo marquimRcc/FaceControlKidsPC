@@ -11,11 +11,11 @@ Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
 [documento de continuidade](docs/CONTINUIDADE-REGATAOS.md), que deve ser
 atualizado e commitado antes de cada pausa planejada.
 
-O controlador Linux já contabiliza e bloqueia a sessão KDE. Uma integração PAM
-opcional consome tickets faciais de uso único, mas permanece desativada até o
-responsável testar câmera, recuperação e fallback por senha. O login inicial e
-o desbloqueio sem qualquer interação ainda exigem integração gráfica específica
-com SDDM/KScreenLocker.
+O controlador Linux já contabiliza e bloqueia a sessão KDE. Após três
+confirmações faciais na tela bloqueada, ele revalida as regras e solicita o
+desbloqueio pelo logind. A integração PAM opcional permanece desativada até o
+responsável testar reconhecimento, recuperação e fallback por senha. O login
+inicial pelo SDDM ainda pode exigir integração gráfica específica.
 
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).

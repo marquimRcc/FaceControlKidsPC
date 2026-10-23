@@ -7,6 +7,7 @@ import os
 import signal
 import socket
 import struct
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ import numpy as np
 
 from .child_quota_pilot import ChildQuotaEngine, PilotEvent
 from .linux_auth import FaceApprovalBroker, approval_still_allowed
-from .locker import lock_current_session
+from .locker import lock_current_session, unlock_linux_session
 from .recognition import Recognizer
 from .session import SessionState, current_linux_session_state, linux_display_session
 from .storage import Storage
@@ -39,6 +40,18 @@ def frame_is_usable(frame) -> bool:
     )
 
 
+def warm_up_camera(capture, frames: int = 15) -> int:
+    """Descarta quadros iniciais enquanto exposição e buffers se estabilizam."""
+    if type(frames) is not int or not 0 <= frames <= 120:
+        raise ValueError("Quantidade de quadros de aquecimento inválida")
+    successful = 0
+    for _ in range(frames):
+        ok, frame = capture.read()
+        if ok and frame is not None:
+            successful += 1
+    return successful
+
+
 @dataclass(frozen=True)
 class LinuxRuntimeConfig:
     database: Path
@@ -48,6 +61,7 @@ class LinuxRuntimeConfig:
     monitored_user: str | None = None
     interval_seconds: float = 1.0
     lock_on_uncertain: bool = True
+    auto_unlock: bool = True
 
     def validate(self) -> None:
         if not 0 <= self.camera <= 32:
@@ -89,6 +103,7 @@ class LinuxFaceQuotaRuntime:
             "FACEKIDS_AUTH_SOCKET", "/run/facekids/auth.sock"
         ))
         self._server_thread: threading.Thread | None = None
+        self._last_unlock_request = float("-inf")
 
     def stop(self, *_args) -> None:
         self._stopping = True
@@ -164,6 +179,30 @@ class LinuxFaceQuotaRuntime:
         child_id, _score = self.recognizer.identify(vector, self.references)
         return child_id
 
+    def _maybe_unlock(
+        self, approval, now: float, day: str
+    ) -> bool:
+        """Revalida e solicita desbloqueio, limitando repetição do comando."""
+        if (not self.config.auto_unlock or approval is None
+                or now - self._last_unlock_request < 10.0
+                or not approval_still_allowed(self.store, approval, day)):
+            return False
+        try:
+            unlock_linux_session(approval.session_id)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            LOG.exception(
+                "Falha ao solicitar desbloqueio da sessão %s",
+                approval.session_id,
+            )
+            return False
+        self._last_unlock_request = now
+        self.approvals.reset()
+        LOG.info(
+            "Desbloqueio facial solicitado para sessão %s e criança %s",
+            approval.session_id, approval.child_id,
+        )
+        return True
+
     def run(self) -> int:
         import cv2
 
@@ -177,6 +216,8 @@ class LinuxFaceQuotaRuntime:
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         capture.set(cv2.CAP_PROP_FPS, 10)
+        warmed = warm_up_camera(capture)
+        LOG.info("Aquecimento da câmera: %s/15 quadros recebidos", warmed)
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
         self._start_auth_server()
@@ -201,11 +242,12 @@ class LinuxFaceQuotaRuntime:
                     candidate in self.engine.people
                     and self.store.remaining(candidate, today) > 0
                 )
-                self.approvals.observe(
+                approval = self.approvals.observe(
                     now=started, session_id=session_id, state=state,
                     child_id=candidate, quota_available=quota_available,
                     curfew_clear=not curfew,
                 )
+                self._maybe_unlock(approval, started, today)
                 should_lock = reading.event is PilotEvent.QUOTA_EXHAUSTED or curfew
                 if (reading.event is PilotEvent.UNCERTAIN
                         and self.config.lock_on_uncertain):
@@ -247,6 +289,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-uncertain", action="store_true",
         help="Pausa a contagem sem bloquear quando o rosto some",
     )
+    parser.add_argument(
+        "--no-auto-unlock", action="store_true",
+        help="Desativa o pedido de desbloqueio facial pelo logind",
+    )
     return parser
 
 
@@ -264,6 +310,7 @@ def main(argv=None) -> int:
         monitored_user=args.monitored_user,
         interval_seconds=args.interval,
         lock_on_uncertain=not args.allow_uncertain,
+        auto_unlock=not args.no_auto_unlock,
     ))
     try:
         return runtime.run()

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .child_quota_pilot import provision_three_children
-from .linux_runtime import protected_data_path
+from .linux_runtime import protected_data_path, warm_up_camera
 from .parent_face_pilot import (
     REQUIRED_SAMPLES,
     _open_camera,
@@ -29,6 +29,7 @@ def enroll_child(store: Storage, child: int, models: Path, camera_index: int) ->
     child_id = ordered[child - 1]
     recognizer = Recognizer(models)
     camera = _open_camera(camera_index)
+    warm_up_camera(camera)
     vectors = []
     next_sample = time.monotonic()
     print(f"Cadastro da criança {child}: {REQUIRED_SAMPLES} amostras locais.")

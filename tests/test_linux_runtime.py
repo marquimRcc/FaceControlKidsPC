@@ -6,11 +6,15 @@ from unittest.mock import patch
 
 import numpy as np
 
+from facekids.linux_auth import FaceApproval
 from facekids.linux_runtime import (
+    LinuxFaceQuotaRuntime,
     LinuxRuntimeConfig,
     frame_is_usable,
     protected_data_path,
+    warm_up_camera,
 )
+from facekids.locker import unlock_linux_session
 from facekids.session import (
     SessionState,
     current_linux_session_state,
@@ -70,6 +74,53 @@ class LinuxSessionTests(unittest.TestCase):
         varied = np.zeros((20, 20, 3), dtype=np.uint8)
         varied[::2] = 100
         self.assertTrue(frame_is_usable(varied))
+
+    def test_camera_warmup_discards_configured_frames(self):
+        class Capture:
+            def __init__(self):
+                self.reads = 0
+
+            def read(self):
+                self.reads += 1
+                return self.reads % 2 == 1, object()
+
+        capture = Capture()
+        self.assertEqual(warm_up_camera(capture, 5), 3)
+        self.assertEqual(capture.reads, 5)
+        for invalid in (-1, 121, 1.5, True):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                warm_up_camera(capture, invalid)
+
+    @patch("facekids.locker.os.name", "posix")
+    @patch("facekids.locker.subprocess.run")
+    def test_linux_unlock_is_session_bound(self, run):
+        unlock_linux_session("session_4")
+        run.assert_called_once_with(
+            ["loginctl", "unlock-session", "session_4"], check=True, timeout=8
+        )
+        with self.assertRaises(ValueError):
+            unlock_linux_session("4;shutdown")
+
+    @patch("facekids.linux_runtime.approval_still_allowed", return_value=True)
+    @patch("facekids.linux_runtime.unlock_linux_session")
+    def test_auto_unlock_rechecks_policy_and_rate_limits(self, unlock, allowed):
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        runtime.config = LinuxRuntimeConfig(Path("db"), Path("models"))
+        runtime.store = object()
+        runtime.approvals = unittest.mock.Mock()
+        runtime._last_unlock_request = float("-inf")
+        approval = FaceApproval("4", 2, 1.0)
+
+        self.assertTrue(runtime._maybe_unlock(approval, 3.0, "2026-10-22"))
+        unlock.assert_called_once_with("4")
+        runtime.approvals.reset.assert_called_once_with()
+        self.assertFalse(runtime._maybe_unlock(approval, 5.0, "2026-10-22"))
+        self.assertEqual(unlock.call_count, 1)
+
+        runtime._last_unlock_request = float("-inf")
+        allowed.return_value = False
+        self.assertFalse(runtime._maybe_unlock(approval, 20.0, "2026-10-22"))
+        self.assertEqual(unlock.call_count, 1)
 
 
 if __name__ == "__main__":
