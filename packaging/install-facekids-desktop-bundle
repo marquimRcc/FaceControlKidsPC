@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "Execute como root: sudo ./install.sh" >&2
+  exit 1
+fi
+BUNDLE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ ! -f ${BUNDLE_DIR}/SHA256SUMS || ! -x ${BUNDLE_DIR}/electron/electron ]]; then
+  echo "Bundle FaceKids incompleto." >&2
+  exit 1
+fi
+(
+  cd "${BUNDLE_DIR}"
+  sha256sum --check --strict SHA256SUMS
+)
+
+TARGET=/opt/facekids/desktop
+STAGING="${TARGET}.new.$$"
+BACKUP="${TARGET}.old.$$"
+cleanup() { rm -rf "${STAGING}"; }
+trap cleanup EXIT
+install -d -m 0755 "${STAGING}"
+cp -a "${BUNDLE_DIR}/app/." "${STAGING}/"
+cp -a "${BUNDLE_DIR}/electron" "${STAGING}/electron"
+cp -a "${BUNDLE_DIR}/assets" "${STAGING}/assets"
+chown -R root:root "${STAGING}"
+chmod 0755 "${STAGING}/electron/electron" \
+  "${STAGING}/electron/chrome_crashpad_handler"
+
+if [[ -e ${TARGET} ]]; then mv "${TARGET}" "${BACKUP}"; fi
+if ! mv "${STAGING}" "${TARGET}"; then
+  [[ ! -e ${TARGET} && -e ${BACKUP} ]] && mv "${BACKUP}" "${TARGET}"
+  exit 1
+fi
+rm -rf "${BACKUP}"
+
+install -m 0755 "${BUNDLE_DIR}/facekids-admin-gui" /usr/local/bin/facekids-admin-gui
+install -m 0755 "${BUNDLE_DIR}/facekids-child-gui" /usr/local/bin/facekids-child-gui
+install -d -m 0755 /usr/share/icons/hicolor/scalable/apps /usr/share/pixmaps
+install -m 0644 "${BUNDLE_DIR}/assets/facekids.svg" \
+  /usr/share/icons/hicolor/scalable/apps/facekids.svg
+install -m 0644 "${BUNDLE_DIR}/assets/facekids-256.png" \
+  /usr/share/pixmaps/facekids.png
+command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+  gtk-update-icon-cache -q /usr/share/icons/hicolor || true
+echo "FaceKids Desktop instalado em ${TARGET}."

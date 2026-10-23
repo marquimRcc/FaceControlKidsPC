@@ -139,6 +139,21 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("/usr/local/bin/facekids-child-gui", child_desktop)
         self.assertIn("Icon=${ICON}", child_desktop)
 
+    def test_self_contained_desktop_bundle_has_integrity_and_atomic_install(self):
+        builder = (ROOT / "scripts/Empacotar-FaceKids-Desktop-Linux.sh").read_text(
+            encoding="utf-8"
+        )
+        bundle_installer = (
+            ROOT / "packaging/install-facekids-desktop-bundle"
+        ).read_text(encoding="utf-8")
+        self.assertIn("apps/desktop/node_modules/electron/dist", builder)
+        self.assertIn("SHA256SUMS", builder)
+        self.assertIn("--sort=name", builder)
+        self.assertIn("sha256sum --check --strict", bundle_installer)
+        self.assertIn("/opt/facekids/desktop", bundle_installer)
+        self.assertIn('mv "${STAGING}" "${TARGET}"', bundle_installer)
+        self.assertNotIn("/home/marcos", bundle_installer)
+
 
 if __name__ == "__main__":
     unittest.main()

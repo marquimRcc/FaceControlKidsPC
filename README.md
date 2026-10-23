@@ -46,6 +46,30 @@ Ela abre automaticamente na sessão infantil e consulta um socket somente de
 leitura. Enquanto nenhum rosto está confirmado, a tela não revela nomes,
 fotos ou saldos de outros perfis.
 
+### Bundle desktop autocontido
+
+Para distribuir a interface sem `pnpm`, código-fonte ou dependências do
+workspace na máquina de destino, gere o bundle Linux x86-64:
+
+```bash
+./scripts/Empacotar-FaceKids-Desktop-Linux.sh
+```
+
+O comando cria `artifacts/facekids-desktop-linux-x64.tar.gz` e seu arquivo
+SHA-256. No computador de destino, confira o checksum, extraia e instale:
+
+```bash
+sha256sum --check facekids-desktop-linux-x64.tar.gz.sha256
+tar -xzf facekids-desktop-linux-x64.tar.gz
+cd facekids-desktop-linux-x64
+sudo ./install.sh
+```
+
+O instalador valida todos os arquivos internos, troca a versão anterior de
+forma atômica e instala o Electron, frontend, ícones e lançadores em
+`/opt/facekids/desktop` e `/usr/local/bin`. O serviço Python e o banco
+biométrico não são alterados por esse instalador de interface.
+
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
 Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao

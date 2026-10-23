@@ -28,9 +28,11 @@ jobs:
           set -euo pipefail
           for script in \
             scripts/*RegataOS.sh \
+            scripts/Empacotar-FaceKids-Desktop-Linux.sh \
             packaging/facekids-admin \
             packaging/facekids-admin-gui \
             packaging/facekids-child-gui \
+            packaging/install-facekids-desktop-bundle \
             packaging/facekids-linux-probe \
             packaging/facekids-pam-helper
           do
