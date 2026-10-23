@@ -19,7 +19,8 @@
 
 Este trabalho deve continuar sem aguardar novas mensagens como `continue` ou
 `avance`. A automação `continuar-facekids-regata-os` permanece ativa neste
-chat. A cota da janela de cinco horas deve ser consultada durante o trabalho.
+chat e dispara a cada dez minutos enquanto houver cota. A cota da janela de
+cinco horas deve ser consultada durante o trabalho.
 Quando restarem 8% ou menos, atualizar e commitar este documento, enviar os
 commits à branch e pausar. A retomada deve ocorrer automaticamente três minutos
 depois do horário exato de renovação da cota. Atualizações rotineiras ficam em
