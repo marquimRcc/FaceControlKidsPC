@@ -8,8 +8,13 @@ fi
 
 SOURCE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 CHILD_USER=${1:-filhos}
+CHILD_COUNT=${2:-1}
 if [[ ! ${CHILD_USER} =~ ^[a-z_][a-z0-9_.-]*$ ]]; then
   echo "Nome de usuário inválido: ${CHILD_USER}" >&2
+  exit 1
+fi
+if [[ ! ${CHILD_COUNT} =~ ^[1-9][0-9]*$ ]] || (( CHILD_COUNT > 20 )); then
+  echo "Quantidade de crianças deve estar entre 1 e 20" >&2
   exit 1
 fi
 if ! getent passwd "${CHILD_USER}" >/dev/null; then
@@ -33,7 +38,7 @@ python3 -m venv /opt/facekids/venv
 PYTHONPATH=/usr/lib/facekids /opt/facekids/venv/bin/python -m facekids.cli \
   --models /usr/lib/facekids/models download-models
 PYTHONPATH=/usr/lib/facekids /opt/facekids/venv/bin/python -m facekids.linux_admin \
-  --database /var/lib/facekids/criancas.sqlite3 setup
+  --database /var/lib/facekids/criancas.sqlite3 setup --children "${CHILD_COUNT}"
 
 install -m 0644 "${SOURCE_DIR}/packaging/facekids-linux.service" /etc/systemd/system/facekids-linux.service
 sed -i "s/--user filhos/--user ${CHILD_USER}/" /etc/systemd/system/facekids-linux.service
@@ -43,8 +48,8 @@ chmod 0700 /var/lib/facekids
 chmod 0600 /var/lib/facekids/criancas.sqlite3
 systemctl daemon-reload
 
-echo "Instalação preparada. Cadastre os três rostos antes de iniciar o serviço:"
+echo "Instalação preparada para ${CHILD_COUNT} criança(s). Cadastre todos os rostos antes de iniciar o serviço:"
 echo "Primeiro valide a webcam: facekids-linux-probe --camera 0 --seconds 5"
 echo "sudo -E facekids-admin enroll 1"
-echo "Repita para 2 e 3; depois: sudo systemctl enable --now facekids-linux"
+echo "Repita para cada número configurado; depois: sudo systemctl enable --now facekids-linux"
 echo "A integração PAM opcional não foi ativada. Teste o serviço antes de habilitá-la."

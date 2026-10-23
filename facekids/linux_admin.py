@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .child_quota_pilot import provision_three_children
+from .child_quota_pilot import LIMIT_MINUTES
 from .linux_runtime import protected_data_path, warm_up_camera
 from .parent_face_pilot import (
     REQUIRED_SAMPLES,
@@ -24,8 +24,10 @@ def enroll_child(store: Storage, child: int, models: Path, camera_index: int) ->
     """Cadastra vetores na memória; não grava fotografia ou vídeo."""
     import cv2
 
-    people = provision_three_children(store)
+    people = {pid: name for pid, name, _limit in store.people()}
     ordered = sorted(people)
+    if not 1 <= child <= len(ordered):
+        raise ValueError(f"Criança deve estar entre 1 e {len(ordered)}")
     child_id = ordered[child - 1]
     recognizer = Recognizer(models)
     camera = _open_camera(camera_index)
@@ -68,28 +70,44 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--models", type=Path, default=Path("/usr/lib/facekids/models"))
     parser.add_argument("--camera", type=int, default=0)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("setup")
+    setup = commands.add_parser("setup")
+    setup.add_argument("--children", type=int, default=1)
     enrollment = commands.add_parser("enroll")
-    enrollment.add_argument("child", type=int, choices=(1, 2, 3))
+    enrollment.add_argument("child", type=int)
     commands.add_parser("status")
     limit = commands.add_parser("set-limit")
-    limit.add_argument("child", type=int, choices=(1, 2, 3))
+    limit.add_argument("child", type=int)
     limit.add_argument("minutes", type=int)
     bonus = commands.add_parser("bonus")
-    bonus.add_argument("child", type=int, choices=(1, 2, 3))
+    bonus.add_argument("child", type=int)
     bonus.add_argument("minutes", type=int)
     curfew = commands.add_parser("curfew")
     curfew.add_argument("start")
     curfew.add_argument("end")
     commands.add_parser("disable-curfew")
     erase = commands.add_parser("erase-face")
-    erase.add_argument("child", type=int, choices=(1, 2, 3))
+    erase.add_argument("child", type=int)
     return parser
 
 
 def _person_id(store: Storage, child: int) -> int:
-    people = provision_three_children(store)
-    return sorted(people)[child - 1]
+    people = store.people()
+    if not 1 <= child <= len(people):
+        raise ValueError(f"Criança deve estar entre 1 e {len(people)}")
+    return people[child - 1][0]
+
+
+def _setup_children(store: Storage, count: int) -> None:
+    if not 1 <= count <= 20:
+        raise ValueError("Quantidade de crianças deve estar entre 1 e 20")
+    existing = store.people()
+    if existing and len(existing) != count:
+        raise ValueError(
+            f"O banco já possui {len(existing)} criança(s); não é seguro alterar "
+            "a quantidade com setup"
+        )
+    for index in range(len(existing) + 1, count + 1):
+        store.add_person(f"Crianca {index}", LIMIT_MINUTES)
 
 
 def main(argv=None) -> int:
@@ -98,8 +116,8 @@ def main(argv=None) -> int:
         raise SystemExit("Câmera deve estar entre 0 e 32")
     store = Storage(args.database)
     try:
-        provision_three_children(store)
         if args.command == "setup":
+            _setup_children(store, args.children)
             print(f"Banco inicializado: {args.database}")
         elif args.command == "enroll":
             if not enroll_child(store, args.child, args.models, args.camera):

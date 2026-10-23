@@ -55,11 +55,11 @@ def warm_up_camera(capture, frames: int = 15) -> int:
 def enrollments_complete(
     references: list[tuple[int, np.ndarray]], people, minimum_samples: int = 3
 ) -> bool:
-    """Exige evidência facial mínima para cada um dos três perfis."""
+    """Exige evidência facial mínima para cada perfil configurado."""
     if type(minimum_samples) is not int or minimum_samples < 1:
         raise ValueError("Mínimo de amostras inválido")
     expected = set(people)
-    if len(expected) != 3:
+    if not expected:
         return False
     counts = {person_id: 0 for person_id in expected}
     for person_id, _vector in references:
@@ -105,13 +105,16 @@ class LinuxFaceQuotaRuntime:
         config.validate()
         self.config = config
         self.store = Storage(config.database)
-        self.engine = ChildQuotaEngine(self.store)
+        people = {pid: name for pid, name, _limit in self.store.people()}
+        self.engine = ChildQuotaEngine(self.store, people=people)
         self.recognizer = Recognizer(config.models)
         self.references = [
             (person_id, vector)
             for person_id, vector in self.store.embeddings()
             if person_id in self.engine.people
         ]
+        self._reference_signature = self._references_signature(self.references)
+        self._last_reference_refresh = float("-inf")
         self._stopping = False
         self._last_signal = None
         self.approvals = FaceApprovalBroker()
@@ -120,6 +123,38 @@ class LinuxFaceQuotaRuntime:
         ))
         self._server_thread: threading.Thread | None = None
         self._last_unlock_request = float("-inf")
+
+    @staticmethod
+    def _references_signature(references) -> tuple:
+        return tuple(
+            sorted((person_id, np.asarray(vector).tobytes())
+                   for person_id, vector in references)
+        )
+
+    def _refresh_references(self, now: float, force: bool = False) -> bool:
+        """Aplica alterações administrativas e revoga evidência facial antiga."""
+        if not force and now - self._last_reference_refresh < 2.0:
+            return enrollments_complete(self.references, self.engine.people)
+        fresh_people = {pid: name for pid, name, _limit in self.store.people()}
+        if fresh_people != self.engine.people:
+            self.engine.people = fresh_people
+            self.approvals.reset()
+            self.engine.policy.pause()
+            LOG.info("Lista de crianças recarregada; autorizações anteriores revogadas")
+        fresh = [
+            (person_id, vector)
+            for person_id, vector in self.store.embeddings()
+            if person_id in fresh_people
+        ]
+        signature = self._references_signature(fresh)
+        if signature != self._reference_signature:
+            self.references = fresh
+            self._reference_signature = signature
+            self.approvals.reset()
+            self.engine.policy.pause()
+            LOG.info("Cadastros faciais recarregados; autorizações anteriores revogadas")
+        self._last_reference_refresh = now
+        return enrollments_complete(self.references, self.engine.people)
 
     def stop(self, *_args) -> None:
         self._stopping = True
@@ -223,7 +258,7 @@ class LinuxFaceQuotaRuntime:
 
         if not enrollments_complete(self.references, self.engine.people):
             raise RuntimeError(
-                "Os três perfis infantis precisam de ao menos três amostras faciais"
+                "Cada perfil infantil configurado precisa de ao menos três amostras faciais"
             )
         capture = cv2.VideoCapture(self.config.camera, cv2.CAP_V4L2)
         if not capture.isOpened():
@@ -241,12 +276,13 @@ class LinuxFaceQuotaRuntime:
         try:
             while not self._stopping:
                 started = time.monotonic()
+                enrollments_ready = self._refresh_references(started)
                 session_id = self.config.session_id or linux_display_session(
                     self.config.monitored_user
                 )
                 state = current_linux_session_state(session_id) if session_id else SessionState.UNKNOWN
                 try:
-                    candidate = self._candidate(capture) if state in {
+                    candidate = self._candidate(capture) if enrollments_ready and state in {
                         SessionState.ACTIVE, SessionState.LOCKED
                     } else None
                 except RuntimeError as exc:
@@ -265,7 +301,13 @@ class LinuxFaceQuotaRuntime:
                     curfew_clear=not curfew,
                 )
                 self._maybe_unlock(approval, started, today)
-                should_lock = reading.event is PilotEvent.QUOTA_EXHAUSTED or curfew
+                should_lock = (
+                    reading.event is PilotEvent.QUOTA_EXHAUSTED
+                    or curfew
+                    or not enrollments_ready
+                )
+                if not enrollments_ready:
+                    reason = "cadastro facial incompleto ou revogado"
                 if (reading.event is PilotEvent.UNCERTAIN
                         and self.config.lock_on_uncertain):
                     should_lock = True

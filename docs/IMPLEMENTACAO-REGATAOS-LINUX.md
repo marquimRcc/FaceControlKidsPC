@@ -3,7 +3,7 @@
 ## Estado
 
 A branch implementa a base Linux testável sem alterar PAM. O serviço protegido
-abre a webcam, identifica uma das três crianças, contabiliza somente durante uma
+abre a webcam, identifica uma das crianças configuradas, contabiliza somente durante uma
 sessão KDE ativa e desbloqueada e solicita o bloqueio nativo pelo logind quando
 a quota termina, o horário permitido acaba ou a identidade deixa de ser
 confirmada por 30 segundos.
@@ -32,7 +32,7 @@ e não produz login inicial sem interação no SDDM.
 - `facekids/linux_runtime.py`: captura V4L2, reconhecimento e aplicação de quota.
 - `facekids/session.py`: leitura conservadora de `Active`, `State` e
   `LockedHint` do systemd-logind.
-- `facekids/linux_admin.py`: cadastro dos três perfis, limites, bônus, horário
+- `facekids/linux_admin.py`: cadastro de um ou mais perfis, limites, bônus, horário
   e apagamento de biometria.
 - `packaging/facekids-linux.service`: isolamento do serviço e acesso restrito a
   `/dev/video0` e `/var/lib/facekids`.
@@ -50,8 +50,11 @@ Na raiz do repositório, com a conta compartilhada Linux já criada como
 
 ```bash
 sudo bash scripts/Criar-Conta-Filhos-RegataOS.sh filhos
-sudo bash scripts/Instalar-FaceKids-RegataOS.sh filhos
+sudo bash scripts/Instalar-FaceKids-RegataOS.sh filhos 1
 ```
+
+O segundo argumento é a quantidade de crianças (de 1 a 20). Use, por exemplo,
+`filhos 4` para quatro perfis. Quando omitido, o instalador cria um perfil.
 
 O instalador copia e prepara o serviço, mas não o habilita nem inicia sem
 perfis. Com cada criança presente e consentimento do responsável:
@@ -59,14 +62,16 @@ perfis. Com cada criança presente e consentimento do responsável:
 ```bash
 facekids-linux-probe --camera 0 --seconds 5
 sudo -E facekids-admin enroll 1
-sudo -E facekids-admin enroll 2
-sudo -E facekids-admin enroll 3
+# repita com 2, 3... até o total configurado
 sudo facekids-admin status
 sudo systemctl enable --now facekids-linux
 ```
 
-O runtime também recusa iniciar se qualquer um dos três perfis tiver menos de
+O runtime também recusa iniciar se qualquer perfil configurado tiver menos de
 três amostras válidas, evitando operar silenciosamente com cadastro parcial.
+Durante a execução, alterações nos vetores são recarregadas em até dois
+segundos. Apagar um cadastro revoga tickets e evidência em memória e força o
+bloqueio até que todos os perfis configurados voltem a estar completos.
 
 Depois de comprovar o reconhecimento, o bloqueio, a conta administrativa e a
 recuperação por senha, a autenticação facial no desbloqueio KDE pode ser

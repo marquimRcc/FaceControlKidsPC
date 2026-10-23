@@ -25,9 +25,10 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertFalse(any("systemctl start facekids-linux" in line for line in commands))
         self.assertFalse(any("systemctl enable --now" in line for line in commands))
         self.assertIn(
-            'echo "Repita para 2 e 3; depois: sudo systemctl enable --now facekids-linux"',
+            'echo "Repita para cada número configurado; depois: sudo systemctl enable --now facekids-linux"',
             script,
         )
+        self.assertIn('setup --children "${CHILD_COUNT}"', script)
         runtime = (ROOT / "facekids/linux_runtime.py").read_text(encoding="utf-8")
         self.assertIn("enrollments_complete(self.references, self.engine.people)", runtime)
         self.assertIn("chmod 0600 /var/lib/facekids/criancas.sqlite3", script)

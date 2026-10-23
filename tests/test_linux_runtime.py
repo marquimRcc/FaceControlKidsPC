@@ -92,7 +92,7 @@ class LinuxSessionTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 warm_up_camera(capture, invalid)
 
-    def test_runtime_requires_samples_for_all_three_children(self):
+    def test_runtime_requires_samples_for_every_configured_child(self):
         vector = np.ones(128, dtype=np.float32)
         people = {1: "A", 2: "B", 3: "C"}
         complete = [
@@ -102,9 +102,34 @@ class LinuxSessionTests(unittest.TestCase):
         ]
         self.assertTrue(enrollments_complete(complete, people))
         self.assertFalse(enrollments_complete(complete[:-1], people))
-        self.assertFalse(enrollments_complete(complete, {1: "A", 2: "B"}))
+        self.assertTrue(enrollments_complete(complete[:3], {1: "A"}))
+        self.assertFalse(enrollments_complete([], {}))
         with self.assertRaises(ValueError):
             enrollments_complete(complete, people, 0)
+
+    def test_runtime_reloads_embeddings_and_revokes_old_approval(self):
+        vector = np.ones(128, dtype=np.float32)
+        initial = [(person_id, vector.copy()) for person_id in (1, 2, 3) for _ in range(3)]
+        revoked = initial[:-3]
+        runtime = object.__new__(LinuxFaceQuotaRuntime)
+        runtime.references = initial
+        runtime._reference_signature = runtime._references_signature(initial)
+        runtime._last_reference_refresh = float("-inf")
+        runtime.store = unittest.mock.Mock()
+        runtime.store.people.return_value = [
+            (1, "A", 7200), (2, "B", 7200), (3, "C", 7200)
+        ]
+        runtime.store.embeddings.side_effect = [initial, revoked]
+        runtime.engine = unittest.mock.Mock()
+        runtime.engine.people = {1: "A", 2: "B", 3: "C"}
+        runtime.approvals = unittest.mock.Mock()
+
+        self.assertTrue(runtime._refresh_references(1.0))
+        runtime.approvals.reset.assert_not_called()
+        self.assertFalse(runtime._refresh_references(4.0))
+        runtime.approvals.reset.assert_called_once_with()
+        runtime.engine.policy.pause.assert_called_once_with()
+        self.assertEqual(runtime.references, revoked)
 
     @patch("facekids.locker.os.name", "posix")
     @patch("facekids.locker.subprocess.run")
