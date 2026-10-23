@@ -11,7 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional de código local e remoto: `f44b015`.
+- Último commit funcional de código local e remoto: `ed66f11`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -83,8 +83,9 @@ O commit `17365bb` adicionou o primeiro protótipo navegável do painel dos pais
 e da tela de boas-vindas infantil. O painel lista quantidade variável de
 perfis, saldo, limite, amostras e bônus; inclui rotina, atividade e cadastro em
 três etapas. O cadastro impede avançar sem nome e sem completar 12 amostras
-simuladas. A tela infantil mostra identidade reconhecida, saldo, horário e
-próximo aviso. Há layout responsivo e alternador de papéis no navegador.
+simuladas. A tela infantil mostra identidade reconhecida, saldo e horário com
+atualização em tempo real. Há layout responsivo e alternador de papéis somente
+no protótipo aberto pelo navegador.
 
 O navegador sem preload conserva dados de demonstração para revisão visual. O
 Electron usa somente estado real do serviço e começa vazio se o backend estiver
@@ -105,9 +106,10 @@ Validações executadas:
 - Suite Python completa: 211 testes aprovados, 2 ignorados por dependerem do
   Windows.
 
-Pendências específicas da interface: validar presencialmente a janela e o
-reconhecimento na conta `filhos`, e substituir a dependência do workspace por
-um pacote desktop autocontido antes de distribuir para outras máquinas.
+Pendências específicas da interface: validar com a criança presente a troca da
+foto e a transição da tela infantil após o reconhecimento, e substituir a
+dependência do workspace por um pacote desktop autocontido antes de distribuir
+para outras máquinas.
 
 O serviço protegido é a autoridade única. A conta infantil não informa sua
 identidade nem escreve quota, vetores ou tickets. A mesma captura que reconhece
@@ -436,9 +438,92 @@ identidade, mostra nome, foto escolhida, saldo e horário reais. O botão
 **Começar agora** fecha a janela. Foram adicionados lançador, aplicativo KDE e
 autostart explícito para a conta `filhos`.
 
-Validação de software antes da instalação: 220 testes Python aprovados com 2
-skips de plataforma, 4 testes TypeScript, typecheck, build, Ruff, sintaxe de
-todos os scripts Regata OS e verificação da unidade systemd aprovados. Depois
-de publicar, atualizar o serviço, instalar o autostart infantil, confirmar as
-permissões reais dos dois sockets e testar uma consulta executada como
-`filhos`. A aparição do perfil reconhecido ainda exige a criança presente.
+Validação inicial: 220 testes Python aprovados com 2 skips de plataforma, 4
+testes TypeScript, typecheck, build, Ruff, sintaxe dos scripts Regata OS e
+verificação da unidade systemd aprovados. Na primeira instalação real, o
+serviço reiniciou porque o confinamento removia `CAP_CHOWN`, necessária para
+entregar o diretório e o socket infantil ao grupo primário de `filhos`. O
+commit `3c2184b` concedeu somente essa capacidade; `ProtectSystem=strict`,
+ausência de rede IP e as demais restrições continuam ativas.
+
+Depois da correção, a unidade ficou ativa sem reinícios. Foram confirmados
+`/run/facekids-child` `0750 root:filhos` e `status.sock` `0660 root:filhos`.
+Uma consulta executada realmente como UID `filhos` recebeu `ok=true`, lista
+vazia sem rosto reconhecido e nenhum estado de cadastro. Operação diferente de
+`status` foi recusada; `filhos` não conseguiu conectar ao socket administrativo
+e `marcos` não conseguiu conectar ao socket infantil. O aplicativo e o
+autostart KDE foram instalados no home de `filhos`, ambos `0644 filhos:filhos`.
+
+## Checkpoint atual — 23/10/2026 às 18:35
+
+### Concluído
+
+- O preload Electron foi convertido de ESM para CommonJS (`preload.cts` /
+  `preload.cjs`). O preload ESM não carregava sob o sandbox e fazia as janelas
+  exibirem silenciosamente o protótipo. O build agora limpa `dist-electron`
+  antes de compilar, impedindo artefatos antigos.
+- O painel Electron foi aberto no KDE com o preload corrigido e exibiu o estado
+  real: um perfil `Crianca 1`, 12 amostras, 120 minutos, horário desativado e
+  sessão ausente. O alternador do protótipo não apareceu.
+- A tela infantil foi executada como o UID real `filhos`, conectou ao socket
+  exclusivo e mostrou o estado neutro **Olhe para a câmera**, sem nomes ou
+  dados de outros perfis. A revisão visual confirmou que a janela cabe em
+  680×720 e corrigiu o selo de estado que estava comprimido.
+- Se o IPC falhar, o renderer agora apaga o snapshot anterior e entra em estado
+  desconectado. A tela infantil não conserva nome, foto ou saldo antigos. As
+  mutações administrativas também são recusadas no processo Electron quando o
+  papel é `child`, além da proteção do socket pelo sistema operacional.
+- O daemon passou a informar câmera `offline` quando a leitura falha e `busy`
+  durante cadastro. O serviço instalado foi atualizado, preservou o banco e
+  está ativo com `NRestarts=0`; os sockets permanecem com as permissões acima.
+- Validação local atual: 222 testes Python aprovados, 2 skips de plataforma; 4
+  testes TypeScript; typecheck dos quatro pacotes; build Vite/Electron; Ruff
+  dos módulos alterados; sintaxe shell; `systemd-analyze verify`; e
+  `git diff --check`. Os avisos do `systemd-analyze` pertencem a unidades
+  antigas do Regata OS, não à unidade FaceKids.
+- Os três workflows dos commits `3c2184b` e `ed66f11` passaram: Unit tests,
+  Linux Regata OS checks e Windows live WTS diagnostic.
+
+### Em andamento
+
+- PR draft #3 permanece aberto e limpo contra sua base
+  `research/regataos-linux-20261022`. Título e descrição já foram atualizados
+  com o socket infantil, `CAP_CHOWN`, preload CommonJS, 222 testes e validação
+  real no Regata OS.
+
+### Pendente
+
+1. Com a criança presente, abrir **Gerenciar perfil**, repetir a captura,
+   escolher uma das fotos e confirmar a transição da tela infantil para nome,
+   foto, saldo e horário corretos.
+2. Entrar na sessão gráfica normal de `filhos` e validar o autostart no login,
+   débito de quota, bloqueio por ausência/tempo/horário e desbloqueio por rosto.
+3. Validar a senha de recuperação e somente depois avaliar a ponte PAM opt-in.
+4. Empacotar Electron e os recursos do frontend fora deste workspace antes de
+   instalar em outro computador.
+5. Após a validação física e a revisão final de segurança, decidir se o PR pode
+   deixar de ser draft e ser integrado.
+
+### Bloqueado por presença física
+
+- Captura de retratos reais, seleção da foto, reconhecimento da criança e
+  comportamento completo da sessão `filhos`. A automação não deve simular
+  essas evidências biométricas.
+
+### Próxima retomada
+
+1. Manter a árvore limpa e concentrar a próxima etapa no
+   empacotamento autocontido ou aguardar os testes físicos listados acima.
+
+### Prompt de continuidade
+
+> Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
+> `feature/regataos-linux-implementation-20261022`, lendo primeiro
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados e
+> confira o CI do commit `ed66f11` e o texto do PR draft #3.
+> Não repita os testes já concluídos sem mudança relevante. O serviço e os dois
+> sockets estão instalados e validados; preserve o banco em
+> `/var/lib/facekids`. Avance no empacotamento Electron autocontido quando isso
+> puder ser feito sem presença física. Captura de foto, reconhecimento real,
+> sessão infantil e PAM exigem presença e devem permanecer pendentes. Antes de
+> pausar, atualize, commite e envie este documento novamente.
