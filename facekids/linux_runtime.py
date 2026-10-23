@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import grp
 import json
 import logging
@@ -22,7 +23,7 @@ import numpy as np
 from .child_quota_pilot import ChildQuotaEngine, PilotEvent
 from .linux_auth import FaceApprovalBroker, approval_still_allowed
 from .locker import lock_current_session, unlock_linux_session
-from .parent_face_pilot import REQUIRED_SAMPLES, _valid_features, replace_templates
+from .parent_face_pilot import REQUIRED_SAMPLES, _valid_features
 from .recognition import Recognizer
 from .session import SessionState, current_linux_session_state, linux_display_session
 from .storage import Storage
@@ -240,6 +241,7 @@ class LinuxFaceQuotaRuntime:
         current = self._current_child_id
         children = []
         for person_id, name, limit_seconds in store.people():
+            photo = store.selected_profile_photo(person_id)
             children.append({
                 "id": person_id,
                 "name": name,
@@ -249,6 +251,10 @@ class LinuxFaceQuotaRuntime:
                 "bonusSeconds": int(store.bonus(person_id, today)),
                 "enrollmentSamples": store.enrollment_count(person_id),
                 "isPresent": person_id == current,
+                "avatarPhoto": (
+                    "data:image/jpeg;base64," + base64.b64encode(photo).decode("ascii")
+                    if photo else None
+                ),
             })
         return {
             "ok": True,
@@ -286,7 +292,8 @@ class LinuxFaceQuotaRuntime:
                 with self._admin_lock:
                     self._enrollment = {
                         "child_id": person_id, "vectors": [], "state": "capturing",
-                        "last_at": float("-inf"), "error": None, "new_profile": True,
+                        "photos": [], "last_at": float("-inf"), "error": None,
+                        "new_profile": True,
                     }
             return {"ok": True, "childId": person_id, "childIndex": index}
         if op == "start_enrollment":
@@ -300,8 +307,27 @@ class LinuxFaceQuotaRuntime:
                     raise RuntimeError("Já existe um cadastro facial em andamento")
                 self._enrollment = {
                     "child_id": child_id, "vectors": [], "state": "capturing",
-                    "last_at": float("-inf"), "error": None, "new_profile": False,
+                    "photos": [], "last_at": float("-inf"), "error": None,
+                    "new_profile": False,
                 }
+            return {"ok": True}
+        if op == "list_photos":
+            child_id = request.get("childId")
+            if type(child_id) is not int or child_id <= 0:
+                raise ValueError("Identificador de criança inválido")
+            if child_id not in {row[0] for row in store.people()}:
+                raise KeyError(child_id)
+            return {"ok": True, "photos": [
+                {
+                    "id": photo_id,
+                    "dataUrl": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"),
+                    "selected": selected,
+                }
+                for photo_id, jpeg, selected in store.profile_photos(child_id)
+            ]}
+        if op == "select_photo":
+            child_id, photo_id = request.get("childId"), request.get("photoId")
+            store.select_profile_photo(child_id, photo_id)
             return {"ok": True}
         if op == "cancel_enrollment":
             with self._admin_lock:
@@ -388,16 +414,43 @@ class LinuxFaceQuotaRuntime:
             if self._enrollment is not enrollment or now - enrollment["last_at"] < 0.55:
                 return True
             enrollment["vectors"].append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
+            sample_number = len(enrollment["vectors"])
+            if sample_number in {1, 6, REQUIRED_SAMPLES}:
+                photo = self._encode_profile_photo(frame, faces[0])
+                if photo is not None:
+                    enrollment["photos"].append(photo)
             enrollment["last_at"] = now
-            if len(enrollment["vectors"]) >= REQUIRED_SAMPLES:
+            if sample_number >= REQUIRED_SAMPLES:
                 try:
-                    replace_templates(self.store, enrollment["child_id"], enrollment["vectors"])
+                    self.store.replace_embeddings_and_add_photos(
+                        enrollment["child_id"], enrollment["vectors"], enrollment["photos"]
+                    )
                     enrollment["state"] = "complete"
                     self._refresh_references(now, force=True)
                 except Exception as exc:  # noqa: BLE001 - mantém serviço vivo e expõe erro
                     enrollment["state"] = "error"
                     enrollment["error"] = str(exc)
         return True
+
+    @staticmethod
+    def _encode_profile_photo(frame, face) -> bytes | None:
+        """Recorta um retrato JPEG local; não participa do reconhecimento."""
+        import cv2
+
+        height, width = frame.shape[:2]
+        x, y, face_width, face_height = (int(value) for value in face[:4])
+        margin_x, margin_y = int(face_width * 0.35), int(face_height * 0.25)
+        left, top = max(0, x - margin_x), max(0, y - margin_y)
+        right = min(width, x + face_width + margin_x)
+        bottom = min(height, y + face_height + margin_y)
+        if right - left < 48 or bottom - top < 48:
+            return None
+        crop = cv2.resize(frame[top:bottom, left:right], (256, 256))
+        ok, encoded = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 86])
+        if not ok:
+            return None
+        payload = encoded.tobytes()
+        return payload if 100 <= len(payload) <= 100000 else None
 
     def _serve_auth(self, server: socket.socket) -> None:
         verifier = Storage(self.config.database)

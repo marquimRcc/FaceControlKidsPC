@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { ChildStatus, EnrollmentStatus, SystemSnapshot } from "@facekids/contracts";
+import type { ChildStatus, EnrollmentStatus, ProfilePhoto, SystemSnapshot } from "@facekids/contracts";
 import { ChildStatusCard, StatusPill } from "@facekids/ui";
 import {
   Activity, CalendarClock, Camera, ChevronRight, CircleHelp, Clock3,
   LayoutDashboard, Plus, Settings, ShieldCheck, Sparkles, Users
 } from "lucide-react";
 import { EnrollmentWizard } from "./EnrollmentWizard";
+import { ProfilePhotoManager } from "./ProfilePhotoManager";
 
 const nav = [
   [LayoutDashboard, "Visão geral"],
@@ -16,12 +17,15 @@ const nav = [
   [Settings, "Configurações"],
 ] as const;
 
-export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment }: {
+export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChild, onCancelEnrollment, onStartEnrollment, onListPhotos, onSelectPhoto }: {
   snapshot: SystemSnapshot;
   enrollment: EnrollmentStatus | null;
   backendError: string | null;
   onEnrollChild: (name: string, minutes: number) => Promise<number>;
   onCancelEnrollment: () => Promise<void>;
+  onStartEnrollment: (childId: number) => Promise<void>;
+  onListPhotos: (childId: number) => Promise<ProfilePhoto[]>;
+  onSelectPhoto: (childId: number, photoId: number) => Promise<void>;
 }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selected, setSelected] = useState<ChildStatus | null>(null);
@@ -60,7 +64,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
         </section>
       </main>
       {wizardOpen && <EnrollmentWizard enrollment={enrollment} onEnroll={onEnrollChild} onCancelEnrollment={onCancelEnrollment} onClose={() => setWizardOpen(false)} />}
-      {selected && <div className="toast" role="status">Perfil de {selected.name} selecionado para a próxima etapa.<button onClick={() => setSelected(null)}>Fechar</button></div>}
+      {selected && <ProfilePhotoManager child={selected} enrollment={enrollment} loadPhotos={onListPhotos} selectPhoto={onSelectPhoto} startCapture={onStartEnrollment} cancelCapture={onCancelEnrollment} onClose={() => setSelected(null)} />}
     </div>
   );
 }

@@ -298,6 +298,41 @@ class LinuxSessionTests(unittest.TestCase):
                     runtime._dispatch_admin(store, request)
             store.close()
 
+    def test_admin_protocol_lists_and_selects_profile_photos(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            child_id = store.add_person("Ana", 90)
+            vectors = [np.full(128, index, dtype=np.float32) for index in range(12)]
+            photos = [b"\xff\xd8" + bytes([index]) * 200 + b"\xff\xd9"
+                      for index in range(2)]
+            store.replace_embeddings_and_add_photos(child_id, vectors, photos)
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+
+            listed = runtime._dispatch_admin(
+                store, {"op": "list_photos", "childId": child_id}
+            )["photos"]
+            self.assertEqual(len(listed), 2)
+            self.assertTrue(listed[0]["dataUrl"].startswith("data:image/jpeg;base64,"))
+            runtime._dispatch_admin(store, {
+                "op": "select_photo", "childId": child_id, "photoId": listed[1]["id"],
+            })
+            selected = runtime._dispatch_admin(
+                store, {"op": "list_photos", "childId": child_id}
+            )["photos"]
+            chosen = next(photo for photo in selected if photo["id"] == listed[1]["id"])
+            self.assertTrue(chosen["selected"])
+            store.close()
+
+    def test_profile_photo_encoder_crops_a_bounded_jpeg(self):
+        frame = np.zeros((240, 320, 3), dtype=np.uint8)
+        frame[40:200, 80:240] = (40, 120, 220)
+        payload = LinuxFaceQuotaRuntime._encode_profile_photo(
+            frame, (100, 60, 100, 120)
+        )
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload.startswith(b"\xff\xd8"))
+        self.assertLessEqual(len(payload), 100000)
+
 
 if __name__ == "__main__":
     unittest.main()

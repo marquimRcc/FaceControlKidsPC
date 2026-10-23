@@ -37,25 +37,17 @@ ligar essa API a um cliente local autenticado:
 
 O frontend nunca decide se deve desbloquear uma sessão nem altera quotas por
 conta própria. Ele envia pedidos tipados e exibe o estado validado pelo serviço.
-Dados faciais brutos não atravessam a interface: a câmera e a produção dos
-vetores permanecem no componente local responsável pelo cadastro.
+Frames e vídeo da câmera não atravessam a interface: a câmera e a produção dos
+vetores permanecem no componente local responsável pelo cadastro. Somente os
+retratos JPEG recortados e guardados para o perfil são entregues ao painel
+administrativo pelo socket protegido.
 
 ## Estado desta etapa
 
-Esta entrega é um protótipo navegável com dados de demonstração. Ela valida a
-estrutura, o layout responsivo, o painel, o cadastro em três etapas e a tela de
-boas-vindas. O botão de captura simula amostras e o botão final ainda não grava
-no serviço. A conexão com o backend será adicionada depois da definição dos
-contratos de autorização e persistência.
-
-## Próxima integração
-
-1. Definir operações e erros do serviço no pacote `contracts`.
-2. Implementar adaptadores IPC separados para Linux e Windows.
-3. Substituir o snapshot de demonstração por leitura do estado real.
-4. Ligar cadastro, ajustes de quota, bônus e horários ao serviço.
-5. Testar permissões, reconexão, indisponibilidade do serviço e validação no
-   hardware antes de tornar a interface operacional.
+O painel Linux lê o estado real e executa o cadastro pela câmera do serviço.
+Cada cadastro produz 12 vetores para o reconhecimento e até três retratos
+locais para a galeria. O responsável pode repetir a captura, manter até seis
+retratos e escolher a imagem exibida no painel e na tela infantil.
 
 ## Integração operacional no Linux
 
@@ -68,14 +60,16 @@ grupos suplementares pelo instalador e não consegue atravessar esse limite.
 O protocolo usa uma mensagem JSON por conexão, limitada a 4096 bytes. O painel
 consulta snapshots reais e pode criar um perfil e iniciar seu cadastro em uma
 única operação. Durante o cadastro, o mesmo processo root que já possui a
-câmera coleta 12 vetores, publica apenas a contagem de progresso e substitui os
-templates atomicamente. Quadros de câmera nunca atravessam o socket. Cancelar
+câmera coleta 12 vetores, publica a contagem de progresso e salva até três retratos recortados
+junto dos templates, na mesma transação. Quadros e vídeo da câmera nunca
+atravessam o socket; a galeria atravessa somente o socket administrativo.
+Cancelar
 um cadastro novo remove o perfil ainda vazio para não deixar o runtime travado
 por um cadastro incompleto.
 
 O Electron conecta ao socket apenas no processo principal. O preload oferece
-quatro métodos estreitos ao renderer: contexto, estado, novo cadastro e
-cancelamento. As respostas são novamente validadas com Zod no renderer.
+métodos estreitos para contexto, estado, cadastro e galeria de fotos. As
+respostas são novamente validadas com Zod no renderer.
 
 O aplicativo do menu KDE é criado por
 `scripts/Criar-Atalho-Painel-RegataOS.sh`. Ele abre o build local usando o

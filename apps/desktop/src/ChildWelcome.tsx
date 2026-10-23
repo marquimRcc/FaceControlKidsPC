@@ -8,7 +8,7 @@ export function ChildWelcome({ snapshot }: { snapshot: SystemSnapshot }) {
     <div className="welcome-orb welcome-orb--one" /><div className="welcome-orb welcome-orb--two" />
     <section className="welcome-card">
       <header className="welcome-card__brand"><span><Sparkles /></span><strong>FaceKids</strong><StatusPill tone="ok">Proteção ativa</StatusPill></header>
-      <div className="welcome-avatar">{child.initials}<i /></div>
+      <div className={`welcome-avatar${child.avatarPhoto ? " welcome-avatar--photo" : ""}`}>{child.avatarPhoto ? <img src={child.avatarPhoto} alt={`Foto de ${child.name}`} /> : child.initials}<i /></div>
       <span className="eyebrow">ROSTO RECONHECIDO</span>
       <h1>Olá, {child.name}! <span>👋</span></h1>
       <p className="welcome-lead">Tudo pronto para você aproveitar seu tempo hoje.</p>

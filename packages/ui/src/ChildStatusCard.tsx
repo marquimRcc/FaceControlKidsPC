@@ -12,7 +12,7 @@ export function ChildStatusCard({ child, onOpen, compact = false }: ChildStatusC
   return (
     <article className={`child-card${compact ? " child-card--compact" : ""}`}>
       <header className="child-card__header">
-        <div className="avatar" aria-hidden="true">{child.initials}</div>
+        <div className={`avatar${child.avatarPhoto ? " avatar--photo" : ""}`} aria-hidden="true">{child.avatarPhoto ? <img src={child.avatarPhoto} alt="" /> : child.initials}</div>
         <div>
           <span className="eyebrow">Perfil {child.id}</span>
           <h3>{child.name}</h3>

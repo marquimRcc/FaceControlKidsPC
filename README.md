@@ -5,7 +5,7 @@
 O trabalho Linux está na branch `feature/regataos-linux-implementation-20261022`.
 Ela inclui um controlador protegido por `systemd`, reconhecimento local
 YuNet/SFace, quotas individuais para uma ou mais crianças na mesma conta, observação
-de bloqueio via `systemd-logind`, cadastro sem salvar imagens e instalador para
+de bloqueio via `systemd-logind`, retratos locais opcionais de perfil e instalador para
 Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
 Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
 [documento de continuidade](docs/CONTINUIDADE-REGATAOS.md), que deve ser
@@ -32,7 +32,9 @@ Depois de instalar ou atualizar o serviço, crie o aplicativo no menu KDE:
 
 Abra **FaceKids — Painel dos pais** no menu de aplicativos. O botão **Nova
 criança** cria o perfil no serviço e inicia a captura real de 12 amostras pela
-webcam. Fotos e vídeos não são persistidos.
+webcam. Três retratos recortados são guardados localmente para o painel; o
+responsável pode capturar outros e escolher qual será exibido. Vídeos não são
+persistidos e o reconhecimento continua usando somente os vetores faciais.
 
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).

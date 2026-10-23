@@ -144,8 +144,9 @@ pela sessão compartilhada.
    autorização. O socket usa modo `0600` e valida `SO_PEERCRED` com UID zero.
 3. **Decisão no servidor.** Identidade, quota, horário e sessão são verificados
    pelo processo protegido, inclusive novamente no consumo do ticket.
-4. **Biometria local e mínima.** O cadastro persiste vetores, sem guardar fotos
-   ou transmitir imagens.
+4. **Biometria local e mínima.** O cadastro persiste vetores e até seis
+   retratos recortados para o perfil. As imagens ficam no banco protegido,
+   nunca são usadas no reconhecimento e não são transmitidas pela rede.
 5. **Tempo monotônico.** O débito de uso não depende de alterações no relógio
    civil; a data civil é usada apenas para a quota diária.
 6. **Recuperação antes de integração.** O instalador não inicia o serviço sem
@@ -210,7 +211,8 @@ monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
   omitida; o runtime não contém mais a exigência fixa de três perfis.
 - Implementada descoberta de sessão por logind e bloqueio dirigido por ID.
 - Implementadas quotas individuais, bônus e toque de recolher.
-- Implementado cadastro local sem persistência de fotos.
+- Implementado cadastro local com vetores faciais e uma galeria protegida de
+  retratos destinada somente à identificação visual no painel.
 - Implementado download atômico dos modelos oficiais YuNet/SFace com hashes.
 - Implementada recusa de quadros pretos ou sem contraste.
 - Implementado broker de aprovação com três confirmações, ticket de uso único
@@ -338,8 +340,10 @@ limitado. A conta `filhos` não pertence ao grupo `wheel`.
 
 O painel agora lê perfis, quotas, bônus, horário, sessão e progresso reais. O
 fluxo **Nova criança** cria o perfil e inicia no serviço a captura real de 12
-amostras. O serviço mantém a câmera, não envia imagens à interface e grava os
-vetores atomicamente. Cancelar remove o perfil novo ainda vazio. O runtime pode
+amostras. O serviço mantém a câmera e grava vetores e três retratos de perfil
+recortados na mesma transação. Apenas os retratos locais escolhidos para o
+painel atravessam o socket administrativo; frames e vídeo não saem do serviço.
+Cancelar remove o perfil novo ainda vazio. O runtime pode
 permanecer ativo com cadastro incompleto para permitir a recuperação pelo
 painel, mas mantém a sessão bloqueada até todos os perfis terem amostras.
 
@@ -366,3 +370,25 @@ Para reaplicar esta versão após alterações futuras, use:
 ```bash
 sudo bash scripts/Atualizar-FaceKids-RegataOS.sh filhos wheel
 ```
+
+## Galeria de fotos de perfil — 23/10/2026
+
+O cadastro feito pelo painel agora salva até três retratos JPEG recortados em
+cada captura, separados dos 12 vetores usados pelo reconhecimento. O banco
+mantém no máximo seis retratos por criança, preserva a foto escolhida e limita
+cada arquivo a 100 kB. A galeria permite repetir a captura e selecionar a foto
+exibida nos cartões do painel e na tela infantil. A troca da foto não altera os
+vetores faciais nem a quota.
+
+A implementação adicionou a tabela `profile_photos`, persistência transacional
+de vetores e retratos, operações administrativas `list_photos` e
+`select_photo`, contratos IPC/Zod e a janela **Foto exibida no painel**. Frames
+e vídeo permanecem dentro do serviço; somente retratos recortados atravessam o
+socket Unix administrativo, acessível ao grupo `wheel`.
+
+Validação local: 216 testes Python aprovados, com 2 skips exclusivos de
+plataforma; Ruff aprovado nos módulos e testes alterados; 3 testes TypeScript,
+typecheck de todos os pacotes e build Vite/Electron aprovados. Falta somente a
+validação física desta função: atualizar o serviço instalado, abrir o painel,
+capturar o rosto da criança e escolher um dos retratos. Essa captura presencial
+não deve ser simulada pela automação.

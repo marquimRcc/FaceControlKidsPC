@@ -9,6 +9,7 @@ export const childStatusSchema = z.object({
   bonusSeconds: z.number().int().nonnegative(),
   enrollmentSamples: z.number().int().nonnegative(),
   isPresent: z.boolean(),
+  avatarPhoto: z.string().startsWith("data:image/jpeg;base64,").max(140_000).nullable().optional(),
 });
 
 export const systemSnapshotSchema = z.object({
@@ -45,12 +46,21 @@ export const adminStateSchema = z.object({
 
 export type EnrollmentStatus = z.infer<typeof enrollmentStatusSchema>;
 export type AdminState = z.infer<typeof adminStateSchema>;
+export const profilePhotoSchema = z.object({
+  id: z.number().int().positive(),
+  dataUrl: z.string().startsWith("data:image/jpeg;base64,").max(140_000),
+  selected: z.boolean(),
+});
+export type ProfilePhoto = z.infer<typeof profilePhotoSchema>;
 
 export interface FaceKidsDesktopApi {
   getContext(): Promise<DesktopContext>;
   getAdminState(): Promise<AdminState>;
   enrollChild(input: { name: string; minutes: number }): Promise<{ childId: number }>;
   cancelEnrollment(): Promise<void>;
+  startEnrollment(childId: number): Promise<void>;
+  listPhotos(childId: number): Promise<ProfilePhoto[]>;
+  selectPhoto(childId: number, photoId: number): Promise<void>;
 }
 
 export const demoSnapshot: SystemSnapshot = systemSnapshotSchema.parse({

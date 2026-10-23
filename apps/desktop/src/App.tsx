@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AdminDashboard } from "@facekids/admin";
-import { adminStateSchema, demoSnapshot, type AdminState, type DesktopRole } from "@facekids/contracts";
+import { adminStateSchema, demoSnapshot, profilePhotoSchema, type AdminState, type DesktopRole } from "@facekids/contracts";
 import { ChildWelcome } from "./ChildWelcome";
 
 function roleFromUrl(): DesktopRole {
@@ -35,7 +35,7 @@ export function App() {
   };
 
   return <div className="app-root">
-    {role === "child" ? <ChildWelcome snapshot={adminState.snapshot} /> : <AdminDashboard snapshot={adminState.snapshot} enrollment={adminState.enrollment} backendError={backendError} onEnrollChild={enrollChild} onCancelEnrollment={async () => { await window.facekids?.cancelEnrollment(); }} />}
+    {role === "child" ? <ChildWelcome snapshot={adminState.snapshot} /> : <AdminDashboard snapshot={adminState.snapshot} enrollment={adminState.enrollment} backendError={backendError} onEnrollChild={enrollChild} onCancelEnrollment={async () => { await window.facekids?.cancelEnrollment(); }} onStartEnrollment={async childId => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.startEnrollment(childId); }} onListPhotos={async childId => profilePhotoSchema.array().parse(await window.facekids?.listPhotos(childId))} onSelectPhoto={async (childId, photoId) => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.selectPhoto(childId, photoId); }} />}
     {!window.facekids && <div className="prototype-switch" aria-label="Alternar protótipo"><button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>Painel</button><button className={role === "child" ? "active" : ""} onClick={() => setRole("child")}>Criança</button></div>}
   </div>;
 }

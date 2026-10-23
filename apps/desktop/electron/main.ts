@@ -16,7 +16,7 @@ function adminRequest(request: Record<string, unknown>): Promise<Record<string, 
     client.on("connect", () => client.write(`${JSON.stringify(request)}\n`));
     client.on("data", chunk => {
       response += chunk.toString("utf8");
-      if (response.length > 1_000_000) fail(new Error("Resposta do serviço excedeu o limite"));
+      if (response.length > 3_000_000) fail(new Error("Resposta do serviço excedeu o limite"));
       if (!response.includes("\n")) return;
       client.end();
       try {
@@ -82,6 +82,22 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("facekids:cancel-enrollment", async () => {
     await adminRequest({ op: "cancel_enrollment" });
+  });
+  ipcMain.handle("facekids:start-enrollment", async (_event, childId: unknown) => {
+    if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
+    await adminRequest({ op: "start_enrollment", childId });
+  });
+  ipcMain.handle("facekids:list-photos", async (_event, childId: unknown) => {
+    if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
+    const response = await adminRequest({ op: "list_photos", childId });
+    return response.photos;
+  });
+  ipcMain.handle("facekids:select-photo", async (
+    _event, childId: unknown, photoId: unknown,
+  ) => {
+    if (!typeOfNumber(childId) || childId <= 0 ||
+        !typeOfNumber(photoId) || photoId <= 0) throw new Error("Foto inválida");
+    await adminRequest({ op: "select_photo", childId, photoId });
   });
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

@@ -7,4 +7,8 @@ contextBridge.exposeInMainWorld("facekids", {
   enrollChild: (input: { name: string; minutes: number }) =>
     ipcRenderer.invoke("facekids:enroll-child", input),
   cancelEnrollment: () => ipcRenderer.invoke("facekids:cancel-enrollment"),
+  startEnrollment: (childId: number) => ipcRenderer.invoke("facekids:start-enrollment", childId),
+  listPhotos: (childId: number) => ipcRenderer.invoke("facekids:list-photos", childId),
+  selectPhoto: (childId: number, photoId: number) =>
+    ipcRenderer.invoke("facekids:select-photo", childId, photoId),
 });

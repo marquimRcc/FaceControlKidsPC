@@ -1,10 +1,34 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
 import numpy as np
+
 from facekids.storage import Storage
 
+
 class StorageTest(unittest.TestCase):
+    def test_profile_photos_are_local_selectable_and_separate_from_embeddings(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "photos.sqlite3")
+            child = db.add_person("Ana", 90)
+            vectors = [np.ones(128, dtype=np.float32) * (index + 1)
+                       for index in range(12)]
+            photos = [b"\xff\xd8" + bytes([index]) * 200 + b"\xff\xd9"
+                      for index in range(3)]
+            db.replace_embeddings_and_add_photos(child, vectors, photos)
+            gallery = db.profile_photos(child)
+            self.assertEqual(len(gallery), 3)
+            self.assertEqual(db.enrollment_count(child), 12)
+            self.assertEqual(sum(selected for _id, _jpeg, selected in gallery), 1)
+            chosen = gallery[1][0]
+            db.select_profile_photo(child, chosen)
+            self.assertEqual(db.selected_profile_photo(child), gallery[1][1])
+            self.assertEqual(db.enrollment_count(child), 12)
+            with self.assertRaises(KeyError):
+                db.select_profile_photo(child, 9999)
+            db.close()
+
     def test_user_independent_usage_and_daily_reset(self):
         with TemporaryDirectory() as d:
             db=Storage(Path(d)/"test.sqlite3")
