@@ -19,6 +19,8 @@ contabiliza; portanto a criança não envia `child_id` por um IPC modificável.
 A conta compartilhada também não pertence ao grupo `video`; somente o serviço
 root, limitado pela unidade systemd, e os comandos administrativos acessam a
 webcam.
+O runtime não recebe famílias de socket de rede nem capacidades Linux extras;
+a unidade aceita somente `AF_UNIX` e nega tráfego IP.
 Existe uma integração opt-in com `pam_exec` para consumir um ticket facial
 fresco e de uso único no desbloqueio KDE. Ela não é habilitada pelo instalador
 e não produz login inicial sem interação no SDDM.

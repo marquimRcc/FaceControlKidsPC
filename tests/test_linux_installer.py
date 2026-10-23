@@ -14,6 +14,9 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("DeviceAllow=/dev/video0 rw", unit)
         self.assertIn("UMask=0077", unit)
         self.assertIn("RuntimeDirectoryMode=0700", unit)
+        self.assertIn("CapabilityBoundingSet=", unit)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
+        self.assertIn("IPAddressDeny=any", unit)
 
     def test_installer_does_not_start_before_enrollment(self):
         script = (ROOT / "scripts/Instalar-FaceKids-RegataOS.sh").read_text(encoding="utf-8")
