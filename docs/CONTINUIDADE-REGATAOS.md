@@ -11,9 +11,7 @@
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
 - Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
-- Último commit funcional local antes deste documento: `60a5b24`.
-- Último commit funcional remoto antes deste documento: `e504a22` (o push da
-  interface e deste registro ainda será feito ao encerrar esta etapa).
+- Último commit funcional local e remoto: `17365bb`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
@@ -81,7 +79,7 @@ Serviço root facekids-linux.service
 
 ## Interface implementada em 23/10/2026
 
-O commit `60a5b24` adicionou o primeiro protótipo navegável do painel dos pais
+O commit `17365bb` adicionou o primeiro protótipo navegável do painel dos pais
 e da tela de boas-vindas infantil. O painel lista quantidade variável de
 perfis, saldo, limite, amostras e bônus; inclui rotina, atividade e cadastro em
 três etapas. O cadastro impede avançar sem nome e sem completar 12 amostras
