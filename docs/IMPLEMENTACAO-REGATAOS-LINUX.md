@@ -65,6 +65,9 @@ sudo facekids-admin status
 sudo systemctl enable --now facekids-linux
 ```
 
+O runtime também recusa iniciar se qualquer um dos três perfis tiver menos de
+três amostras válidas, evitando operar silenciosamente com cadastro parcial.
+
 Depois de comprovar o reconhecimento, o bloqueio, a conta administrativa e a
 recuperação por senha, a autenticação facial no desbloqueio KDE pode ser
 habilitada explicitamente:

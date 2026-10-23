@@ -28,6 +28,8 @@ class LinuxInstallerTests(unittest.TestCase):
             'echo "Repita para 2 e 3; depois: sudo systemctl enable --now facekids-linux"',
             script,
         )
+        runtime = (ROOT / "facekids/linux_runtime.py").read_text(encoding="utf-8")
+        self.assertIn("enrollments_complete(self.references, self.engine.people)", runtime)
         self.assertIn("chmod 0600 /var/lib/facekids/criancas.sqlite3", script)
 
     def test_uninstaller_preserves_database(self):

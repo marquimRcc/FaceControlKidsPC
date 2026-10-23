@@ -52,6 +52,22 @@ def warm_up_camera(capture, frames: int = 15) -> int:
     return successful
 
 
+def enrollments_complete(
+    references: list[tuple[int, np.ndarray]], people, minimum_samples: int = 3
+) -> bool:
+    """Exige evidência facial mínima para cada um dos três perfis."""
+    if type(minimum_samples) is not int or minimum_samples < 1:
+        raise ValueError("Mínimo de amostras inválido")
+    expected = set(people)
+    if len(expected) != 3:
+        return False
+    counts = {person_id: 0 for person_id in expected}
+    for person_id, _vector in references:
+        if person_id in counts:
+            counts[person_id] += 1
+    return all(count >= minimum_samples for count in counts.values())
+
+
 @dataclass(frozen=True)
 class LinuxRuntimeConfig:
     database: Path
@@ -205,8 +221,10 @@ class LinuxFaceQuotaRuntime:
     def run(self) -> int:
         import cv2
 
-        if not self.references:
-            raise RuntimeError("Nenhum perfil facial infantil cadastrado")
+        if not enrollments_complete(self.references, self.engine.people):
+            raise RuntimeError(
+                "Os três perfis infantis precisam de ao menos três amostras faciais"
+            )
         capture = cv2.VideoCapture(self.config.camera, cv2.CAP_V4L2)
         if not capture.isOpened():
             capture.release()

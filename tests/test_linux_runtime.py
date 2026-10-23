@@ -10,6 +10,7 @@ from facekids.linux_auth import FaceApproval
 from facekids.linux_runtime import (
     LinuxFaceQuotaRuntime,
     LinuxRuntimeConfig,
+    enrollments_complete,
     frame_is_usable,
     protected_data_path,
     warm_up_camera,
@@ -90,6 +91,20 @@ class LinuxSessionTests(unittest.TestCase):
         for invalid in (-1, 121, 1.5, True):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 warm_up_camera(capture, invalid)
+
+    def test_runtime_requires_samples_for_all_three_children(self):
+        vector = np.ones(128, dtype=np.float32)
+        people = {1: "A", 2: "B", 3: "C"}
+        complete = [
+            (person_id, vector)
+            for person_id in people
+            for _ in range(3)
+        ]
+        self.assertTrue(enrollments_complete(complete, people))
+        self.assertFalse(enrollments_complete(complete[:-1], people))
+        self.assertFalse(enrollments_complete(complete, {1: "A", 2: "B"}))
+        with self.assertRaises(ValueError):
+            enrollments_complete(complete, people, 0)
 
     @patch("facekids.locker.os.name", "posix")
     @patch("facekids.locker.subprocess.run")
