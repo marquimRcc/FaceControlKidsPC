@@ -649,14 +649,47 @@ bundle `2372c39`; tamanho final de 110 MB. Os 12 testes do instalador Linux,
 Ruff, `bash -n` e `git diff --check` passaram. A instalação em `/opt` continua
 pendente apenas porque requer `sudo` interativo nesta máquina.
 
+## Navegação funcional do painel — 23/10/2026 às 20:30
+
+O commit `5dd5ad8` tornou funcionais todas as seis opções da barra lateral do
+painel administrativo. A visão geral foi preservada; Crianças agora concentra
+o gerenciamento de perfis; Horários abre a regra compartilhada e seu editor;
+Histórico exibe o consumo real dos últimos sete dias; Diagnóstico reúne serviço,
+câmera, sessão e armazenamento; Configurações oferece atalhos para as regras já
+implementadas. O bloco de ajuda também conduz ao diagnóstico.
+
+O contrato `ChildStatus` recebeu `usageHistory`, com validação de data e
+segundos não negativos e valor padrão vazio para manter compatibilidade durante
+atualizações graduais. O daemon preenche a série diretamente por
+`Storage.get_history()`. Nenhum evento ou consumo é inventado pela interface.
+
+Validações concluídas: 229 testes Python aprovados, com 2 skips específicos de
+plataforma; 5 testes Vitest; typecheck dos quatro pacotes; build de produção
+Vite/Electron; Ruff; `git diff --check`; navegação visual e interação real nas
+seções Horários, Histórico, Diagnóstico e Configurações em navegador local. O
+bundle autocontido foi reconstruído após o commit e agora identifica
+`5dd5ad8`; checksum e manifesto foram recriados. A descrição do PR draft #3 foi
+atualizada. O CI desse commit ainda estava iniciando na última consulta.
+
+### Estado atual
+
+- **Concluído:** navegação do painel, telas informativas com dados reais,
+  histórico de sete dias, testes locais, rebuild do bundle e atualização do PR.
+- **Em andamento:** CI remoto do commit `5dd5ad8`.
+- **Pendente:** instalar o novo bundle em `/opt/facekids/desktop` com `sudo`
+  interativo e executar os testes físicos abaixo.
+- **Bloqueado por presença física:** captura biométrica, reconhecimento real,
+  débito de quota, bloqueio/desbloqueio da sessão infantil, senha de recuperação
+  e eventual PAM opt-in.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Confirme que HEAD e remoto estão alinhados.
-> Os seis pontos de refinamento foram implementados. Preserve as correções da
-> revisão posterior: diretórios de runtime pertencem exclusivamente ao
-> `tmpfiles`, o ícone possui caminhos distintos para pacote e workspace e o
-> polling invalida ciclos assíncronos antigos.
-> O bundle desktop autocontido está concluído no commit `2372c39`; não repita
-> essa etapa. Prossiga pelos testes físicos de sessão quando houver presença.
+> `docs/CONTINUIDADE-REGATAOS.md`. Confirme HEAD/remoto e o CI do commit
+> `5dd5ad8`. A navegação completa do painel e o histórico real de sete dias já
+> foram implementados; não repita essa etapa. O bundle local autocontido foi
+> reconstruído nesse commit. Se o CI estiver verde, revise pendências que possam
+> ser concluídas sem presença física. Preserve o banco em `/var/lib/facekids` e
+> não simule captura biométrica, reconhecimento, sessão infantil ou PAM. Antes
+> de pausar, atualize e commite este documento e envie tudo à mesma branch.
