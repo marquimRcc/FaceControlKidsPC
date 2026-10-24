@@ -175,3 +175,33 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
    ou a integridade do banco SQLite gravado por Filhos.
 4. O teste Win+L real e a recuperacao de login permanecem bloqueados
    por aceitacao supervisionada. Nao registrar o CP no PC familiar.
+
+
+## Continuacao de seguranca: politica SID opt-in (24/10/2026)
+
+- `5c89b908`, `848752e4`, `03425fa2`, `038a25ec`:
+  `FaceKidsPipeClient` consulta `FaceKidsPipePeerIdentity::AuthorizeIfConfigured`
+  apos abrir o Named Pipe, ANTES de transmitir `AUTH_QUERY`.
+  A politica opcional e lida de `HKLM\\SOFTWARE\\FaceControlKidsPC\\CredentialProvider`:
+  `EnforceAuthServiceSid` (DWORD=1) exige `AuthServiceSid` (REG_SZ).
+  Valores malformados ou SID divergente falham fechados quando a politica
+  estiver ativada. Sem valor de enforcement, mantem a baseline legada.
+- `7de90613`: auditoria de identidade somente leitura informa se
+  enforcement esta ativado e se o SID esperado esta configurado.
+- Nenhum valor novo foi gravado no registro Windows do usuario, nem
+  registrado Credential Provider em maquina real. Nenhum instalador foi
+  executado.
+- A verificacao compara o SID de usuario de um processo do pipe, nao
+  prova assinatura de binario nem imune um processo comprometido
+  executando sob o mesmo SID. **Nao declarar servidor autentico** so
+  com comparacao de SID sem outros controles.
+- A politica permanece desligada no uso domestico ate confirmar
+  SID correto do auth-service na sessao interativa, conta Filhos e
+  usuario administrador com testes de impostor em VM restauravel.
+- O banco de quota `criancas.sqlite3` permanece gravavel pelo agente:
+  arquitetura de ledger com broker privilegiado e migracao de ACLs sao
+  BLOQUEIOS, nao entregas concluidas.
+- Na consulta mais recente a `Unit tests` run `40143659975` tinha Ubuntu
+  aprovado e Windows em progresso; `Credential Provider` run
+  `40143659977` tinha compile-and-host aprovado e build-real em progresso.
+  Consultar as execucoes finais antes de declarar esta rodada aprovada.
