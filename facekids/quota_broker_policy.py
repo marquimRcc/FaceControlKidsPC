@@ -102,11 +102,9 @@ class ServiceOwnedQuotaBroker:
         if blocked:
             self._lease = None
             return BrokerTick(lease.child_id, 0.0, self._store.remaining(lease.child_id, day), True, "curfew")
-        remaining_before = self._store.remaining(lease.child_id, day)
-        # Never debit beyond the available balance (no negative quotas).
-        charged = min(delta, remaining_before)
-        if charged > 0:
-            self._store.charge(lease.child_id, charged, day)
+        # A single BEGIN IMMEDIATE transaction caps debit even if another
+        # broker process is writing. The legacy Filhos agent is unchanged.
+        charged = self._store.charge_up_to_available(lease.child_id, delta, day) if delta > 0 else 0.0
         remaining = self._store.remaining(lease.child_id, day)
         locked = remaining <= 0
         if locked:
