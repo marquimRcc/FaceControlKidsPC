@@ -228,3 +228,24 @@ Commits adicionais (branch somente, PR #4 permanece draft):
 3. Deixar de considerar `last_unlock.json` fonte autorizativa de ID sem corroboracao independente do pipe/servico confiavel.
 4. Testes em VM/snapshot de reboot, Win+L, troca de usuario, rollback e ausencia de camera.
 5. Liveness anti-foto/anti-video e confiabilidade do reconhecimento: so hardware fisico supervisionado.
+
+
+## 24/10/2026 — reforco de nomes e prototipo de relogio do broker
+
+- `1f3fdc18`: a identificacao `ALLOW` no agente tambem resolve o nome exibido
+  da crianca pelo SQLite, nao pela resposta do pipe. Isso nao prova a
+  autenticidade do servidor do pipe nem impede um ID de perfil valido falsificado.
+- `3c3be6ef` e `64705cc4`: modulo **isolado e nao integrado**
+  `facekids/quota_broker_clock.py`, com contrato de tempo monotônico medido
+  pelo servidor, vinculado ao ID de crianca e sessao WTS, e testes negativos de
+  clock NaN/Inf, saltos de tempo, troca de sessao e independencia de perfis.
+  O argumento `observed_wts_active` DEVE vir de WTS consultado por processo
+  privilegiado, nunca de payloads enviados pela conta Filhos. Ainda nao ha
+  transporte seguro, validacao SID do cliente nem gravacao de quota por broker.
+
+### Seguranca efetiva ainda pendente
+- O agente atual continua escrevendo no banco SQLite compartilhado.
+- `last_unlock.json` ainda pode selecionar ID de perfil existente se
+  adulterado; novos controles apenas tornam nome e formatos consistentes.
+- A identidade do servidor ligado ao pipe ainda nao e imposta no CP real.
+- Nao instalar esta branch no PC familiar ate VM/snapshot e aceite fisico.
