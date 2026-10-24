@@ -50,4 +50,24 @@ describe("systemSnapshotSchema", () => {
     expect(probe.usable_frames).toBe(49);
     expect(() => cameraProbeSchema.parse({ ...probe, frames: -1 })).toThrow();
   });
+
+  it("validates child usage history records", () => {
+    const valid = structuredClone(demoSnapshot);
+    valid.children[0]!.usageHistory = [
+      { date: "2026-10-23", usedSeconds: 3600 },
+    ];
+    expect(systemSnapshotSchema.parse(valid).children[0]!.usageHistory).toHaveLength(1);
+
+    const invalidDate = structuredClone(demoSnapshot);
+    invalidDate.children[0]!.usageHistory = [
+      { date: "23-10-2026", usedSeconds: 3600 },
+    ];
+    expect(() => systemSnapshotSchema.parse(invalidDate)).toThrow();
+
+    const negativeSeconds = structuredClone(demoSnapshot);
+    negativeSeconds.children[0]!.usageHistory = [
+      { date: "2026-10-23", usedSeconds: -10 },
+    ];
+    expect(() => systemSnapshotSchema.parse(negativeSeconds)).toThrow();
+  });
 });

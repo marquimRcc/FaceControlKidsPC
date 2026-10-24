@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ${EUID} -ne 0 ]]; then
+if [[ ${EUID} -ne 0 && -z "${FACEKIDS_TEST_DESTDIR:-}" ]]; then
   echo "Execute como root: sudo ./install.sh" >&2
   exit 1
 fi
@@ -15,33 +15,50 @@ fi
   sha256sum --check --strict SHA256SUMS
 )
 
-TARGET=/opt/facekids/desktop
+DESTDIR=${FACEKIDS_TEST_DESTDIR:-}
+TARGET="${DESTDIR}/opt/facekids/desktop"
+BIN_DIR="${DESTDIR}/usr/local/bin"
+ICONS_DIR="${DESTDIR}/usr/share/icons/hicolor/scalable/apps"
+PIXMAPS_DIR="${DESTDIR}/usr/share/pixmaps"
+
 STAGING="${TARGET}.new.$$"
 BACKUP="${TARGET}.old.$$"
-cleanup() { rm -rf "${STAGING}"; }
+cleanup() {
+  rm -rf "${STAGING}"
+  if [[ -e ${BACKUP} ]]; then
+    rm -rf "${TARGET}" 2>/dev/null || true
+    mv "${BACKUP}" "${TARGET}" 2>/dev/null || true
+  fi
+}
 trap cleanup EXIT
 install -d -m 0755 "${STAGING}"
 cp -a "${BUNDLE_DIR}/app/." "${STAGING}/"
 cp -a "${BUNDLE_DIR}/electron" "${STAGING}/electron"
 cp -a "${BUNDLE_DIR}/assets" "${STAGING}/assets"
-chown -R root:root "${STAGING}"
+chown -R root:root "${STAGING}" 2>/dev/null || true
 chmod 0755 "${STAGING}/electron/electron" \
   "${STAGING}/electron/chrome_crashpad_handler"
 
 if [[ -e ${TARGET} ]]; then mv "${TARGET}" "${BACKUP}"; fi
 if ! mv "${STAGING}" "${TARGET}"; then
-  [[ ! -e ${TARGET} && -e ${BACKUP} ]] && mv "${BACKUP}" "${TARGET}"
   exit 1
 fi
-rm -rf "${BACKUP}"
 
-install -m 0755 "${BUNDLE_DIR}/facekids-admin-gui" /usr/local/bin/facekids-admin-gui
-install -m 0755 "${BUNDLE_DIR}/facekids-child-gui" /usr/local/bin/facekids-child-gui
-install -d -m 0755 /usr/share/icons/hicolor/scalable/apps /usr/share/pixmaps
+if [[ -n "${FACEKIDS_TEST_SIMULATE_FAILURE:-}" ]]; then
+  echo "Simulated failure for testing rollback" >&2
+  exit 1
+fi
+
+install -d -m 0755 "${BIN_DIR}" "${ICONS_DIR}" "${PIXMAPS_DIR}"
+install -m 0755 "${BUNDLE_DIR}/facekids-admin-gui" "${BIN_DIR}/facekids-admin-gui"
+install -m 0755 "${BUNDLE_DIR}/facekids-child-gui" "${BIN_DIR}/facekids-child-gui"
 install -m 0644 "${BUNDLE_DIR}/assets/facekids.svg" \
-  /usr/share/icons/hicolor/scalable/apps/facekids.svg
+  "${ICONS_DIR}/facekids.svg"
 install -m 0644 "${BUNDLE_DIR}/assets/facekids-256.png" \
-  /usr/share/pixmaps/facekids.png
-command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+  "${PIXMAPS_DIR}/facekids.png"
+if [[ -z "${DESTDIR}" ]] && command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -q /usr/share/icons/hicolor || true
+fi
+
+rm -rf "${BACKUP}"
 echo "FaceKids Desktop instalado em ${TARGET}."

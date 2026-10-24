@@ -41,7 +41,7 @@ git -C "${ROOT_DIR}" describe --always --dirty > "${BUNDLE}/VERSION"
 
 (
   cd "${BUNDLE}"
-  find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+  find . \( -type f -o -type l \) ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 )
 mkdir -p "$(dirname -- "${OUTPUT}")"
 tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \

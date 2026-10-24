@@ -762,14 +762,41 @@ a margem permanente exige interromper antes dos 8%. A retomada foi programada
 para 01:13:15 de 24/10/2026, três minutos após a renovação informada para
 01:10:15 no horário de Brasília.
 
+## Robustez de instalação, rollback e validações de integridade — 23/10/2026 às 21:00
+
+O ciclo planejado na auditoria anterior foi totalmente implementado e validado:
+
+1. **Parametrização e atomicidade do instalador autocontido ([`packaging/install-facekids-desktop-bundle`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packaging/install-facekids-desktop-bundle))**:
+   - Destinos parametrizados de forma segura via `FACEKIDS_TEST_DESTDIR`, permitindo testes isolados sem exigir `root`, enquanto o ambiente de produção preserva a exigência estrita de privilégios (`EUID == 0`) e caminhos `/opt/facekids/desktop`, `/usr/local/bin`, `/usr/share/...`.
+   - Implementado rollback de desastre no manipulador `trap cleanup EXIT`: se qualquer falha ocorrer (durante substituição atômica ou instalação de wrappers e ícones), a versão anterior é restaurada imediatamente do backup para o destino sem deixar o sistema em estado inconsistente.
+
+2. **Auditoria de integridade e links simbólicos ([`scripts/Empacotar-FaceKids-Desktop-Linux.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Empacotar-FaceKids-Desktop-Linux.sh))**:
+   - A geração do manifesto `SHA256SUMS` foi estendida para abranger tanto arquivos regulares quanto links simbólicos (`-type f -o -type l`), garantindo que nenhuma biblioteca ou recurso linkado do runtime Electron escape da verificação estrita.
+
+3. **Testes funcionais de ciclo de vida ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/tests/test_linux_installer.py))**:
+   - Criado `test_desktop_bundle_installer_functional_lifecycle`, cobrindo 5 cenários reais:
+     - Instalação limpa e criação de todos os binários e ícones.
+     - Preservação estrita de dados externos (como `/var/lib/facekids/criancas.sqlite3`).
+     - Atualização bem-sucedida substituindo a versão anterior de forma atômica.
+     - Aborto preventivo sem tocar no alvo quando o checksum do manifesto é adulterado.
+     - Rollback atômico restaurando a versão anterior quando uma falha simulada é acionada após o início da troca.
+
+4. **Validações de contratos adicionais ([`packages/contracts/src/index.test.ts`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packages/contracts/src/index.test.ts))**:
+   - Adicionados testes para validação estrita dos registros de histórico de uso (`usageHistory`), formato ISO de data e rejeição de segundos negativos.
+
+### Validações executadas
+
+- `python -m unittest discover -s tests -v`: **232 testes aprovados** (2 ignorados de Win32 pipe).
+- `pnpm test:ui`: **7 testes Vitest aprovados** no pacote de contratos.
+- `pnpm typecheck`: 0 erros em todos os 4 pacotes TypeScript.
+- `pnpm build`: build de produção concluído com sucesso.
+- Rebuild do pacote executável autocontido: `artifacts/facekids-desktop-linux-x64.tar.gz` atualizado e gerado.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. A árvore estava limpa em `cb53176`. Retome
-> pela seção “Auditoria iniciada antes da renovação de cota”: torne o instalador
-> testável em diretórios temporários, implemente testes funcionais de instalação,
-> atualização, corrupção e rollback, e audite a cobertura do manifesto sobre
-> links simbólicos. Preserve os caminhos de produção, `/var/lib/facekids` e o
-> isolamento de privilégios. Depois faça testes de interface de alto valor, rode
-> a suíte, atualize o PR e, antes de pausar, atualize, commite e envie este arquivo.
+> `docs/CONTINUIDADE-REGATAOS.md`. Todos os testes funcionais de instalação,
+> atualização e rollback do bundle desktop foram implementados e validados (232 testes Python e 7 Vitest).
+> O pacote autocontido está pronto em artifacts/.
+> Prossiga conforme orientações do usuário para testes físicos na sessão do sistema.

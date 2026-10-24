@@ -148,11 +148,138 @@ class LinuxInstallerTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("apps/desktop/node_modules/electron/dist", builder)
         self.assertIn("SHA256SUMS", builder)
+        self.assertIn("-type l", builder)
         self.assertIn("--sort=name", builder)
         self.assertIn("sha256sum --check --strict", bundle_installer)
         self.assertIn("/opt/facekids/desktop", bundle_installer)
         self.assertIn('mv "${STAGING}" "${TARGET}"', bundle_installer)
         self.assertNotIn("/home/marcos", bundle_installer)
+
+    def test_desktop_bundle_installer_functional_lifecycle(self):
+        import hashlib
+        import os
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            bundle = base / "bundle"
+            destdir = base / "destdir"
+            app_dir = bundle / "app"
+            electron_dir = bundle / "electron"
+            assets_dir = bundle / "assets"
+            app_dir.mkdir(parents=True)
+            electron_dir.mkdir(parents=True)
+            assets_dir.mkdir(parents=True)
+            destdir.mkdir(parents=True)
+
+            (app_dir / "index.html").write_text("v1", encoding="utf-8")
+            (app_dir / "package.json").write_text("{}", encoding="utf-8")
+            (assets_dir / "facekids.svg").write_text("<svg/>", encoding="utf-8")
+            (assets_dir / "facekids-256.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+            electron_bin = electron_dir / "electron"
+            electron_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            electron_bin.chmod(0o755)
+
+            crashpad = electron_dir / "chrome_crashpad_handler"
+            crashpad.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            crashpad.chmod(0o755)
+
+            admin_gui = bundle / "facekids-admin-gui"
+            admin_gui.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            admin_gui.chmod(0o755)
+
+            child_gui = bundle / "facekids-child-gui"
+            child_gui.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            child_gui.chmod(0o755)
+
+            install_script = bundle / "install.sh"
+            install_script.write_text(
+                (ROOT / "packaging/install-facekids-desktop-bundle").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            install_script.chmod(0o755)
+
+            def regenerate_sums():
+                sums = []
+                for root, _, files in os.walk(bundle):
+                    for file in sorted(files):
+                        if file == "SHA256SUMS":
+                            continue
+                        p = Path(root) / file
+                        rel = p.relative_to(bundle)
+                        h = hashlib.sha256(p.read_bytes()).hexdigest()
+                        sums.append(f"{h}  ./{rel}\n")
+                (bundle / "SHA256SUMS").write_text("".join(sorted(sums)), encoding="utf-8")
+
+            # 1. Clean installation
+            regenerate_sums()
+            env = os.environ.copy()
+            env["FACEKIDS_TEST_DESTDIR"] = str(destdir)
+            proc = subprocess.run(
+                ["bash", str(install_script)],
+                cwd=str(bundle),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            target = destdir / "opt/facekids/desktop"
+            self.assertTrue(target.is_dir())
+            self.assertEqual((target / "index.html").read_text(encoding="utf-8"), "v1")
+            self.assertTrue((destdir / "usr/local/bin/facekids-admin-gui").is_file())
+            self.assertTrue((destdir / "usr/share/pixmaps/facekids.png").is_file())
+
+            # 2. External data preservation
+            external_dir = destdir / "var/lib/facekids"
+            external_dir.mkdir(parents=True)
+            external_file = external_dir / "criancas.sqlite3"
+            external_file.write_text("unmodified", encoding="utf-8")
+
+            # 3. Update existing installation
+            (app_dir / "index.html").write_text("v2", encoding="utf-8")
+            regenerate_sums()
+            proc = subprocess.run(
+                ["bash", str(install_script)],
+                cwd=str(bundle),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual((target / "index.html").read_text(encoding="utf-8"), "v2")
+            self.assertEqual(external_file.read_text(encoding="utf-8"), "unmodified")
+
+            # 4. Checksum corruption must abort and preserve existing target
+            (app_dir / "index.html").write_text("corrupted", encoding="utf-8")
+            # intentionally DO NOT regenerate SHA256SUMS
+            proc = subprocess.run(
+                ["bash", str(install_script)],
+                cwd=str(bundle),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual((target / "index.html").read_text(encoding="utf-8"), "v2")
+            self.assertEqual(external_file.read_text(encoding="utf-8"), "unmodified")
+
+            # 5. Failure during final install steps must trigger rollback to previous target
+            (app_dir / "index.html").write_text("v3-attempt", encoding="utf-8")
+            regenerate_sums()
+            fail_env = env.copy()
+            fail_env["FACEKIDS_TEST_SIMULATE_FAILURE"] = "1"
+            proc = subprocess.run(
+                ["bash", str(install_script)],
+                cwd=str(bundle),
+                env=fail_env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual((target / "index.html").read_text(encoding="utf-8"), "v2")
+            self.assertEqual(external_file.read_text(encoding="utf-8"), "unmodified")
 
 
 if __name__ == "__main__":
