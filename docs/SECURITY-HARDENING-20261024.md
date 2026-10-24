@@ -52,3 +52,29 @@
 2. Validar o fluxo autorizado e o fluxo de negacao do IPC no Windows virtualizado antes de integrar qualquer mudanca na instalacao funcional do PC familiar.
 3. Auditoria e ensaios em VM para ACL do Named Pipe e NTFS ProgramData: nao endurecer cegamente antes de medir a identidade do cliente LogonUI e os acessos necessarios do agente.
 4. Liveness, camera no Secure Desktop e resistencia anti-spoof nao sao comprovadas por estes testes sinteticos.
+
+
+## Ciclo de continuação imediato — 24/10/2026
+
+- `1ac3a414d4cdfbf86024ac61bb0efdde75497b3f`: valida chaves JSON simples e registra as posições exatas de campos de primeiro nível; nomes escapados deixam de poder representar aliases de autorização.
+- `a82ac94d3153cd91a092e3994f8234fddb344910`: elimina busca por substring no parser C++ para valores de autorização, usando apenas os campos estruturais retornados pelo guard.
+- `e270da3bc327202be88185838d831976c09a6848`: cria testes isolados portáteis para JSON válido, duplicatas, alias Unicode e campos aninhados.
+- `b09cacb02a4f608a6093fcb887cddc6782c7c82e`: adiciona ao `tests.yml` a compilação e execução dos testes portáteis em Ubuntu.
+- `4b792701e9119fe9579eadf9e02cb58c653ba744`: amplia testes nativos do pipe contra campos falsos em mensagens e valores aninhados.
+- `0b6477c99ab7aed5036452899b0c7da6af40a00e`: adiciona diagnóstico PowerShell SOMENTE LEITURA de permissões ACL de arquivos e diretórios sensíveis.
+- `faee6b139702c1727c687cdec82f1e90c1a8c514`: inclui parser e smoke test da auditoria de ACLs no runner Windows, sem instalação.
+
+### Evidências desta rodada
+
+- Execução local `g++ -std=c++17 -Wall -Wextra -Werror -pedantic` de harness isolado contra o guard C++ atual: **13/13 casos aprovados** (sem Windows, sem webcam).
+- No PR em rascunho #4 para a branch handoff (NAO main), `Unit tests` run **40141186830**: Windows e Ubuntu concluídos com sucesso; `Credential Provider compile and host checks` run **40141186686**: ambos os jobs concluídos com sucesso. **Estes runs verificaram o HEAD anterior `b09cacb`**, nao garantem os commits seguintes.
+- Verificação dos commits posteriores, sobretudo parser TestPipeClient e PowerShell ACL: **pendente** ate confirmar execuções atualizadas. Não afirmar CI verde para `faee6b1` antecipadamente.
+- Arquitetura de login do PC doméstico preservada: nao foram executados instaladores, registro COM, Winlogon, alteração de permissões ou acesso a fotos.
+- Handoff e main não foram modificadas; somente esta branch foi escrita. O PR está em rascunho e não foi mesclado.
+
+### Próxima fila segura
+
+1. Conferir jobs CI do HEAD atual; consertar qualquer falha no script de ACL ou nos testes C++.
+2. Auditar permissões reais apenas por inspeção voluntária ou VM, sem aplicar icacls automaticamente.
+3. Considerar autenticação de identidade do servidor Named Pipe e endurecimento das ACLs somente depois de validar Win+L e a conta Filhos numa VM/snapshot.
+4. Corrigir bugs demonstrados nos limites de sessão/quota sem interferir nas credenciais reais da família.
