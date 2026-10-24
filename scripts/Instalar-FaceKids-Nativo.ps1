@@ -9,7 +9,9 @@
   5. Inicia os servicos em segundo plano.
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$PreflightOnly
+)
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -18,6 +20,14 @@ $programDataDir = 'C:\ProgramData\FaceKids'
 $dllTarget = Join-Path $programDataDir 'FaceKidsCredentialProvider.dll'
 $pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
 $requiredProtocolMarker = 'FACEKIDS_IPC_V1'
+
+# Modo voluntario de auditoria: nunca executa instalacao, permissao, COM,
+# tarefas, remocao de arquivos ou inicializacao de processos.
+if ($PreflightOnly) {
+    $auditScript = Join-Path $PSScriptRoot 'Auditar-Permissoes-FaceKids.ps1'
+    & $auditScript -Root $programDataDir
+    return
+}
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "     FaceControlKidsPC - Instalador de Desbloqueio Facial" -ForegroundColor Cyan
