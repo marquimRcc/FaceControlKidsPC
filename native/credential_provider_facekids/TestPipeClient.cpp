@@ -165,7 +165,33 @@ static int RunParsingUnitTests() {
     std::wcout << L"  [PASS] 14. ALLOW exige quota positiva e child_id canonico.\n";
 
 
-    std::wcout << L"[OK] Todos os 14 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+    // A valid response must remain valid, including repeated names at DIFFERENT
+    // nesting levels (the server sends data.child_id and top-level child_id).
+    std::string nestedValid = allowJson.substr(0, allowJson.size() - 1) +
+        ",\"data\":{\"child_id\":2,\"remaining\":7200}}";
+    if (!FaceKidsPipeClient::ParseResponse(nestedValid).success) {
+        std::wcerr << L"[FALHA] JSON valido com dados aninhados foi rejeitado.\n";
+        return 20;
+    }
+    const std::string withoutEnd = allowJson.substr(0, allowJson.size() - 1);
+    const std::string duplicateStatus = withoutEnd + ",\"status\":\"DENY_UNKNOWN\"}";
+    const std::string duplicateUser = withoutEnd + ",\"user\":\"Administrator\"}";
+    const std::string duplicateId = withoutEnd + ",\"child_id\":3}";
+    const std::string duplicateQuota = withoutEnd + ",\"remaining\":0}";
+    const std::string duplicateNested = withoutEnd + ",\"data\":{\"value\":1,\"value\":2}}";
+    for (const auto& malformed : {
+        duplicateStatus, duplicateUser, duplicateId, duplicateQuota,
+        duplicateNested, withoutEnd, allowJson + "garbage", allowJson + "{}",
+        std::string("garbage") + allowJson
+    }) {
+        if (FaceKidsPipeClient::ParseResponse(malformed).success) {
+            std::wcerr << L"[FALHA] Envelope JSON ambiguo ou corrompido foi aceito.\n";
+            return 21;
+        }
+    }
+    std::wcout << L"  [PASS] 15. Envelope estrito rejeita duplicatas e lixo externo.\n";
+
+    std::wcout << L"[OK] Todos os 15 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
