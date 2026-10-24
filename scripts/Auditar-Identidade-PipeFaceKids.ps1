@@ -16,7 +16,7 @@ function Resolve-PrincipalSid {
     if ([string]::IsNullOrWhiteSpace($Principal)) { return $null }
     if ($Principal -match '^S-\d+(-\d+)+$') { return $Principal }
     try {
-        $account = New-Object Security.Principal.NTAccount($Principal)
+        $account = [Security.Principal.NTAccount]::new($Principal)
         return $account.Translate([Security.Principal.SecurityIdentifier]).Value
     } catch {
         return $null
