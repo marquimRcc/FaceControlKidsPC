@@ -51,6 +51,18 @@ jobs:
           if (Test-Path -LiteralPath $root) { throw 'Preflight must not install any files' }
           $existingTask = Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue
           if ($existingTask) { throw 'Preflight registered a task unexpectedly' }
+      - name: Recovery audit is read-only on disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $report = & ./scripts/Desinstalar-FaceKids-Nativo.ps1 -AuditOnly | ConvertFrom-Json
+          if ($null -eq $report -or $report.HardwareRollbackVerified -ne $false) {
+            throw 'Recovery audit cannot claim hardware rollback validation'
+          }
+          if ($report.ProviderDllPresent -or $report.ProviderRegistered -or $report.ChildTaskPresent) {
+            throw 'Recovery audit unexpectedly found an installed provider on CI runner'
+          }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
