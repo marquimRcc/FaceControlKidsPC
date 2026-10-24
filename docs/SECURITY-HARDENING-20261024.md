@@ -249,3 +249,42 @@ Commits adicionais (branch somente, PR #4 permanece draft):
   adulterado; novos controles apenas tornam nome e formatos consistentes.
 - A identidade do servidor ligado ao pipe ainda nao e imposta no CP real.
 - Nao instalar esta branch no PC familiar ate VM/snapshot e aceite fisico.
+
+
+## 24/10/2026 — broker transacional e idempotencia (prototipo)
+
+- `98c7a3ad`: novo `ServiceOwnedQuotaBroker` (somente Python isolado),
+  baseado em `ServerObservedQuotaClock` e estado WTS que deve ser obtido
+  independentemente por um futuro servico confiavel. Nao possui listener IPC.
+- `3a269a41`: testes de duas criancas, Win+L/pausa, troca de sessao,
+  monotonicidade, quota esgotada e curfew, sem acionar o Windows.
+- `da347c7f`, `d5237d1b`, `4fae4014`: `Storage.charge_up_to_available`
+  usa `BEGIN IMMEDIATE` para limitar debito ao saldo disponivel;
+  o motor de prototipo usa essa operacao. Testes verificam duas conexoes
+  SQLite cooperativas e invalidacao de dados.
+- `f589eded`, `9bb588fe`: `charge_capped_once` registra recibo duravel
+  por ID de evento emitido pelo futuro servico, na MESMA transacao do
+  debito. Reenvios identicos debitam zero, reutilizacao do ID com outros
+  dados e rejeitada. Essa API nao esta ligada ao agente existente.
+- Plano: `docs/QUOTA-BROKER-ISOLATION-PLAN.md` descreve requisitos de
+  WTS, binarios protegidos, ACLs do ledger, idempotencia, backup SQLite/WAL,
+  rollout sombra, snapshot em VM e rollback. Nao modifica instalacao.
+
+### Resultados e limites de confianca
+
+- `Unit tests` no commit `4fae4014`:
+  `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40144458857`
+  — Windows e Ubuntu SUCCESS.
+- Para a API de recibos de replay (`9bb588fe`), consultar o novo CI antes
+  de considerar a implementacao validada.
+- **Nao existe servico Windows privilegiado ativo nesta branch.** O
+  `filhos_agent.py` ainda debita o banco legado gravavel pela conta Filhos.
+  O broker novo NAO e uma fronteira de seguranca enquanto WTS/identidade
+  confiaveis, autorizacao de IPC, exclusao mutua de servico e ACLs nao
+  estiverem implementados e testados em VM.
+- Recibos em SQLite impedem replay com o mesmo ID, mas dois processos
+  maliciosos que inventem IDs novos ainda podem tentar debitos. Nao
+  confiar em IDs fornecidos pelo agente Filhos.
+- Nenhuma operacao de instalacao/registro COM, migracao de SQLite,
+  icacls, Win+L ou webcam foi executada no computador familiar.
+- PR #4 permanece draft e nao mesclado.
