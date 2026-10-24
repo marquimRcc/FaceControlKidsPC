@@ -438,7 +438,35 @@ class QuotaTracker:
         return False
 
 
+
+def is_active_console_user_filhos() -> bool:
+    """Verifica se a sessao de console fisica ativa pertence de fato a conta 'Filhos'."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        wts = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+        active_sid = kernel32.WTSGetActiveConsoleSessionId()
+        buf = ctypes.c_void_p()
+        bytes_read = wintypes.DWORD()
+        # WTSUserName = 5
+        ok = wts.WTSQuerySessionInformationW(0, active_sid, 5, ctypes.byref(buf), ctypes.byref(bytes_read))
+        if not ok or not buf.value:
+            return False
+        username = ctypes.wstring_at(buf.value).strip().lower()
+        wts.WTSFreeMemory(buf)
+        return username == "filhos"
+    except Exception:
+        return os.environ.get("USERNAME", "").lower() == "filhos"
+
 def run_agent():
+    # Garante que o agente so roda se a sessao ativa for a conta Filhos
+    if not is_active_console_user_filhos():
+        logger.info("FilhosAgent: Sessao de console ativa nao pertence a 'Filhos' (usuario: %s). Encerrando imediatamente.", os.environ.get("USERNAME"))
+        return
+
     # Evita multiplas instancias concorrentes na mesma sessao
     kernel32 = ctypes.windll.kernel32
     h_mutex = kernel32.CreateMutexW(None, False, "Local\\FaceKidsFilhosAgentMutex")
@@ -482,6 +510,11 @@ def run_agent():
     # 2. Loop continuo de monitoramento (a cada 2 segundos)
     while True:
         try:
+            if not is_active_console_user_filhos():
+                # Administrador no console ativo (ex: troca rapida de usuario)
+                time.sleep(2.0)
+                continue
+
             now_day = date.today().isoformat()
             if now_day != today:
                 today = now_day

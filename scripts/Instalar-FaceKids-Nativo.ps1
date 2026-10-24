@@ -177,12 +177,7 @@ Start-Sleep -Milliseconds 500
 Start-Process -FilePath $pythonw -ArgumentList "-m facekids.auth_service" -WorkingDirectory $root
 Start-Sleep -Seconds 1
 
-# Disparar o agente na conta Filhos
-try {
-    $secPass = ConvertTo-SecureString "1" -AsPlainText -Force
-    $cred = New-Object System.Management.Automation.PSCredential("Filhos", $secPass)
-    Start-Process -Credential $cred -FilePath "cmd.exe" -ArgumentList "/c `"$agentBat`"" -WorkingDirectory "C:\ProgramData\FaceKids" -ErrorAction SilentlyContinue
-} catch {}
+# Nota: FaceKidsFilhosAgent iniciara automaticamente quando a conta Filhos fizer logon (/sc onlogon).
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
