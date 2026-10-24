@@ -38,3 +38,17 @@ def validated_unlock_event(payload: Any, *, now: float | None = None) -> tuple[i
     if not isinstance(name, str) or not name.strip() or len(name) > 80:
         return None
     return child_id, name, ts
+
+
+def enrolled_display_name(store: Any, child_id: int) -> str | None:
+    """Resolve the display name from SQLite, never from writable event JSON.
+
+    This verifies only that the profile exists. It does NOT authenticate the
+    face event's origin or prevent a forged event selecting another valid ID.
+    """
+    if type(child_id) is not int or child_id <= 0:
+        return None
+    for person_id, name, _ in store.people():
+        if person_id == child_id:
+            return str(name)
+    return None
