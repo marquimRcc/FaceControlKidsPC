@@ -205,3 +205,26 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
   aprovado e Windows em progresso; `Credential Provider` run
   `40143659977` tinha compile-and-host aprovado e build-real em progresso.
   Consultar as execucoes finais antes de declarar esta rodada aprovada.
+
+
+## 24/10/2026 — continuidade de identidade, eventos e limite de rede
+
+Commits adicionais (branch somente, PR #4 permanece draft):
+- `31c8723f` / `e1c7ea82`: relatorio SOMENTE LEITURA de SID do principal da tarefa e de SID do proprietario do processo de autenticacao; usa conversao explicita NTAccount para SID. Correspondencia de SID entre processos visiveis e tarefa **nao identifica necessariamente o servidor do pipe conectado**.
+- `c416b4d8`: CI Windows exige campos diagnosticos SID sem afirmar que o pipe e confiavel.
+- `e65ffff3`, `22cb651f`, `fe1d5e93`: o nome exibido da crianca vem do cadastro SQLite, nao do JSON `last_unlock.json`. IDs de cadastro inexistentes sao negados; arquivo continua **NAO AUTENTICADO** (um ID existente ainda pode ser falsificado se a conta Filhos tiver escrita).
+- `002c70e3`, `c8e7485f`: `CreateNamedPipeW` passa a usar `PIPE_REJECT_REMOTE_CLIENTS=0x00000008` e ha teste cobrindo flags de mensagem e acesso local. Isso reduz a superficie de rede, **nao prova quem e o cliente ou o servidor local**.
+
+### CI da ultima alteracao funcional/teste
+- Commit `c8e7485f2c1bf2ce7e3cafc69378c68de2feed5e`:
+  - Unit tests Windows/Ubuntu: `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40143973936` — 2 jobs SUCCESS.
+  - Credential Provider compile and host checks: `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40143973929` — 2 jobs SUCCESS.
+- O checkpoint em si cria novo commit, portanto o status do HEAD novo deve ser consultado separadamente.
+- Nao houve instalacao, alteracao de ACLs ou teste fisico no computador familiar.
+
+### Portoes ainda bloqueados
+1. Cliente CP verificar o SID/token do **servidor conectado** via `GetNamedPipeServerProcessId` com SID esperado protegido por administrador; validar em VM antes de ativar, para nao bloquear LogonUI.
+2. Separar codigo/DLL/script de arquivos que Filhos pode editar; implementar broker privilegiado para gravação de quota antes de restringir acesso ao SQLite.
+3. Deixar de considerar `last_unlock.json` fonte autorizativa de ID sem corroboracao independente do pipe/servico confiavel.
+4. Testes em VM/snapshot de reboot, Win+L, troca de usuario, rollback e ausencia de camera.
+5. Liveness anti-foto/anti-video e confiabilidade do reconhecimento: so hardware fisico supervisionado.
