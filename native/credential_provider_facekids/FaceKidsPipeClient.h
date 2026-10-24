@@ -21,64 +21,7 @@ public:
     static constexpr DWORD kTotalRequestTimeoutMs = 7000;
 
     static std::string ExtractJsonValue(const std::string& json, const std::string& key) {
-        size_t firstBrace = json.find('{');
-        size_t lastBrace = json.rfind('}');
-        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
-            return "";
-        }
-
-        std::string pattern = "\"" + key + "\"";
-        size_t searchPos = firstBrace;
-        while (searchPos < lastBrace) {
-            size_t pos = json.find(pattern, searchPos);
-            if (pos == std::string::npos || pos >= lastBrace) {
-                return "";
-            }
-
-            // Garante que a chave esta no primeiro nivel hierarquico (depth == 1)
-            int depth = 0;
-            bool insideQuote = false;
-            for (size_t i = firstBrace; i < pos; ++i) {
-                if (json[i] == '\\' && insideQuote && i + 1 < pos) {
-                    i++;
-                    continue;
-                }
-                if (json[i] == '"') insideQuote = !insideQuote;
-                if (!insideQuote) {
-                    if (json[i] == '{') depth++;
-                    else if (json[i] == '}') depth--;
-                }
-            }
-
-            pos += pattern.length();
-            while (pos < lastBrace && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
-                pos++;
-            }
-            if (pos >= lastBrace) {
-                searchPos = pos;
-                continue;
-            }
-
-            if (depth == 1) {
-                if (json[pos] == '"') {
-                    // Valor textual entre aspas
-                    pos++; // pula aspa de abertura
-                    size_t endPos = json.find('"', pos);
-                    if (endPos == std::string::npos || endPos > lastBrace) return "";
-                    return json.substr(pos, endPos - pos);
-                } else {
-                    // Valor numerico ou literal
-                    size_t endPos = pos;
-                    while (endPos < lastBrace && json[endPos] != ',' && json[endPos] != '}' && 
-                           json[endPos] != ' ' && json[endPos] != '\r' && json[endPos] != '\n') {
-                        endPos++;
-                    }
-                    return json.substr(pos, endPos - pos);
-                }
-            }
-            searchPos = pos + 1;
-        }
-        return "";
+        return FaceKidsJsonEnvelopeGuard::TopLevelValue(json, key);
     }
 
     static std::string ExtractJsonString(const std::string& json, const std::string& key) {
