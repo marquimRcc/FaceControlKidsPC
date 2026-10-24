@@ -1,5 +1,75 @@
 # FaceControlKidsPC — Desbloqueio Facial Automático e Controle de Quotas
 
+## Regata OS / Linux
+
+O trabalho Linux está na branch `feature/regataos-linux-implementation-20261022`.
+Ela inclui um controlador protegido por `systemd`, reconhecimento local
+YuNet/SFace, quotas individuais para uma ou mais crianças na mesma conta, observação
+de bloqueio via `systemd-logind`, retratos locais opcionais de perfil e instalador para
+Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
+Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
+[documento de continuidade](docs/CONTINUIDADE-REGATAOS.md), que deve ser
+atualizado e commitado antes de cada pausa planejada.
+
+O controlador Linux já contabiliza e bloqueia a sessão KDE. Após três
+confirmações faciais na tela bloqueada, ele revalida as regras e solicita o
+desbloqueio pelo logind. A integração PAM opcional permanece desativada até o
+responsável testar reconhecimento, recuperação e fallback por senha. O login
+inicial pelo SDDM ainda pode exigir integração gráfica específica.
+
+### Painel dos pais no Regata OS
+
+O painel Electron comunica-se com o serviço protegido pelo socket Unix
+`/run/facekids/admin.sock`. Somente `root` e membros do grupo administrativo
+configurado (por padrão `wheel`) conseguem consultar ou alterar cadastros. A
+interface não abre o banco SQLite diretamente.
+
+Depois de instalar ou atualizar o serviço, crie o aplicativo no menu KDE:
+
+```bash
+./scripts/Criar-Atalho-Painel-RegataOS.sh
+```
+
+Abra **FaceKids — Painel dos pais** no menu de aplicativos. O botão **Nova
+criança** cria o perfil no serviço e inicia a captura real de 12 amostras pela
+webcam. Três retratos recortados são guardados localmente para o painel; o
+responsável pode capturar outros e escolher qual será exibido. Vídeos não são
+persistidos e o reconhecimento continua usando somente os vetores faciais.
+
+Para a conta compartilhada, instale a tela de tempo e boas-vindas:
+
+```bash
+sudo bash scripts/Criar-Tela-Infantil-RegataOS.sh filhos
+```
+
+Ela abre automaticamente na sessão infantil e consulta um socket somente de
+leitura. Enquanto nenhum rosto está confirmado, a tela não revela nomes,
+fotos ou saldos de outros perfis.
+
+### Bundle desktop autocontido
+
+Para distribuir a interface sem `pnpm`, código-fonte ou dependências do
+workspace na máquina de destino, gere o bundle Linux x86-64:
+
+```bash
+./scripts/Empacotar-FaceKids-Desktop-Linux.sh
+```
+
+O comando cria `artifacts/facekids-desktop-linux-x64.tar.gz` e seu arquivo
+SHA-256. No computador de destino, confira o checksum, extraia e instale:
+
+```bash
+sha256sum --check facekids-desktop-linux-x64.tar.gz.sha256
+tar -xzf facekids-desktop-linux-x64.tar.gz
+cd facekids-desktop-linux-x64
+sudo ./install.sh
+```
+
+O instalador valida todos os arquivos internos, troca a versão anterior de
+forma atômica e instala o Electron, frontend, ícones e lançadores em
+`/opt/facekids/desktop` e `/usr/local/bin`. O serviço Python e o banco
+biométrico não são alterados por esse instalador de interface.
+
 Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
 [Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
 Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao
@@ -47,7 +117,7 @@ O sistema integra três componentes principais:
 
 ## 2. Decisões Operacionais e Diretrizes
 
-1. **Conta Filhos e Senha Fixa "1":** Decisão consciente do proprietário para o computador doméstico compartilhado pelas três crianças.
+1. **Conta Filhos e Senha Fixa "1":** Decisão consciente do proprietário para o computador doméstico compartilhado pelas crianças cadastradas; a quantidade de perfis não é fixa.
 2. **Conta Administradora Intacta:** O Credential Provider do FaceKids filtra estritamente pelo SID da conta `Filhos`. A conta administrativa nunca é alvo de autologon ou bloqueios do agente.
 3. **Quotas Independentes:** Cada criança possui sua quota configurável (padrão de 120 minutos/dia), bônus diários acumuláveis e horários permitidos gerenciados no Painel dos Pais.
 4. **Login Manual por PIN:** Caso a entrada seja realizada manualmente por PIN ou senha convencional, o sistema entra em modo *UNIDENTIFIED*, sem atribuir tempo arbitrário a nenhuma das crianças até haver identificação facial válida.

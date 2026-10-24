@@ -8,8 +8,10 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from .platform_paths import application_data_dir
+
 logger = logging.getLogger("FaceKidsAvatar")
-AVATAR_DIR = Path("C:/ProgramData/FaceKids/fotos")
+AVATAR_DIR = application_data_dir() / "fotos"
 
 
 def ensure_avatar_dir() -> Path:

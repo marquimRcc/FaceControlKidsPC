@@ -6,10 +6,10 @@ replacement. Use only with the responsible adult's permission.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
-import math
 
 from .policy import Action, SessionAwarePolicy
 from .session import SessionState
@@ -59,9 +59,13 @@ class ChildQuotaEngine:
     A recognition candidate does not authenticate Windows. Unknown faces
     pause accounting; only confirmed quota exhaustion can nominate a lock.
     """
-    def __init__(self, store):
+    def __init__(self, store, people: dict[int, str] | None = None):
         self.store = store
-        self.people = provision_three_children(store)
+        # The Windows pilot keeps its original three-profile provisioning.
+        # Linux passes the profiles configured by the responsible adult.
+        self.people = provision_three_children(store) if people is None else dict(people)
+        if not self.people:
+            raise ValueError("Cadastre ao menos uma criança.")
         self.policy = SessionAwarePolicy(confirm_frames=3, uncertain_grace_sec=30)
         self.last_day: str | None = None
 

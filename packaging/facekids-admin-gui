@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ELECTRON_BIN="/opt/facekids/desktop/electron/electron"
+APP_DIR="/opt/facekids/desktop"
+if [[ ! -x "${ELECTRON_BIN}" || ! -f "${APP_DIR}/dist/index.html" ]]; then
+  echo "FaceKids Desktop UI não está instalada em ${APP_DIR}." >&2
+  exit 1
+fi
+exec "${ELECTRON_BIN}" "${APP_DIR}" --role=admin "$@"

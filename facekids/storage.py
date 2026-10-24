@@ -46,6 +46,12 @@ class Storage:
           PRIMARY KEY(person_id, day),
           FOREIGN KEY(person_id) REFERENCES people(id));
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS profile_photos (
+          id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL,
+          jpeg BLOB NOT NULL CHECK(length(jpeg) BETWEEN 100 AND 100000),
+          selected INTEGER NOT NULL DEFAULT 0 CHECK(selected IN (0, 1)),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE CASCADE);
         """)
         self.db.commit()
 
@@ -60,6 +66,41 @@ class Storage:
                 "INSERT INTO people(name, daily_limit_seconds) VALUES (?,?)",
                 (name.strip(), int(limit_minutes * 60)))
         return int(cur.lastrowid)
+
+    def remove_unenrolled_person(self, person_id: int) -> bool:
+        """Remove somente perfil novo sem biometria, uso ou bônus."""
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador de criança inválido.")
+        with self.db:
+            counts = self.db.execute("""
+                SELECT
+                  (SELECT COUNT(*) FROM embeddings WHERE person_id=?),
+                  (SELECT COUNT(*) FROM daily_usage WHERE person_id=?),
+                  (SELECT COUNT(*) FROM daily_bonus WHERE person_id=?)
+            """, (person_id, person_id, person_id)).fetchone()
+            if counts is None or any(counts):
+                return False
+            removed = self.db.execute(
+                "DELETE FROM people WHERE id=?", (person_id,)
+            ).rowcount
+        return removed == 1
+
+    def delete_person(self, person_id: int) -> None:
+        """Remove um perfil e todos os dados locais associados em uma transação."""
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador de criança inválido.")
+        with self.db:
+            if self.db.execute(
+                "SELECT 1 FROM people WHERE id=?", (person_id,)
+            ).fetchone() is None:
+                raise KeyError(person_id)
+            for table in ("profile_photos", "embeddings", "daily_usage", "daily_bonus"):
+                self.db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))
+            removed = self.db.execute(
+                "DELETE FROM people WHERE id=?", (person_id,)
+            ).rowcount
+            if removed != 1:
+                raise KeyError(person_id)
 
     def set_daily_limit(self, person_id: int, minutes: int):
         if not 1 <= minutes <= 1440:
@@ -117,6 +158,79 @@ class Storage:
     def enrollment_count(self, person_id: int) -> int:
         row=self.db.execute("SELECT COUNT(*) FROM embeddings WHERE person_id=?", (person_id,)).fetchone()
         return int(row[0])
+
+    def replace_embeddings_and_add_photos(
+        self, person_id: int, vectors: list[np.ndarray], photos: list[bytes]
+    ) -> None:
+        """Substitui biometria e acrescenta fotos de perfil na mesma transação."""
+        payload = []
+        for vector in vectors:
+            value = np.asarray(vector, dtype=np.float32).reshape(-1)
+            if value.size != 128 or not np.all(np.isfinite(value)):
+                raise ValueError("Embedding facial inválido")
+            payload.append((person_id, value.tobytes()))
+        if len(payload) != 12 or not 1 <= len(photos) <= 3:
+            raise ValueError("Cadastro facial ou fotos incompletos")
+        if any(not isinstance(photo, bytes) or not 100 <= len(photo) <= 100000
+               for photo in photos):
+            raise ValueError("Foto de perfil inválida")
+        with self.db:
+            if self.db.execute(
+                "SELECT 1 FROM people WHERE id=?", (person_id,)
+            ).fetchone() is None:
+                raise KeyError(person_id)
+            already_selected = self.db.execute(
+                "SELECT 1 FROM profile_photos WHERE person_id=? AND selected=1",
+                (person_id,),
+            ).fetchone() is not None
+            self.db.execute("DELETE FROM embeddings WHERE person_id=?", (person_id,))
+            self.db.executemany(
+                "INSERT INTO embeddings(person_id,vector) VALUES (?,?)", payload
+            )
+            for index, photo in enumerate(photos):
+                self.db.execute(
+                    "INSERT INTO profile_photos(person_id,jpeg,selected) VALUES (?,?,?)",
+                    (person_id, photo, int(not already_selected and index == 0)),
+                )
+            self.db.execute("""
+                DELETE FROM profile_photos
+                WHERE person_id=? AND selected=0 AND id IN (
+                  SELECT id FROM profile_photos WHERE person_id=? AND selected=0
+                  ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET 5)
+            """, (person_id, person_id))
+
+    def profile_photos(self, person_id: int) -> list[tuple[int, bytes, bool]]:
+        rows = self.db.execute(
+            "SELECT id,jpeg,selected FROM profile_photos WHERE person_id=? "
+            "ORDER BY created_at DESC,id DESC LIMIT 6", (person_id,)
+        ).fetchall()
+        return [(int(photo_id), bytes(jpeg), bool(selected))
+                for photo_id, jpeg, selected in rows]
+
+    def selected_profile_photo(self, person_id: int) -> bytes | None:
+        row = self.db.execute(
+            "SELECT jpeg FROM profile_photos WHERE person_id=? AND selected=1 "
+            "ORDER BY id DESC LIMIT 1", (person_id,)
+        ).fetchone()
+        return bytes(row[0]) if row else None
+
+    def select_profile_photo(self, person_id: int, photo_id: int) -> None:
+        if type(person_id) is not int or type(photo_id) is not int:
+            raise ValueError("Foto ou criança inválida")
+        with self.db:
+            exists = self.db.execute(
+                "SELECT 1 FROM profile_photos WHERE id=? AND person_id=?",
+                (photo_id, person_id),
+            ).fetchone()
+            if exists is None:
+                raise KeyError(photo_id)
+            self.db.execute(
+                "UPDATE profile_photos SET selected=0 WHERE person_id=?", (person_id,)
+            )
+            self.db.execute(
+                "UPDATE profile_photos SET selected=1 WHERE id=? AND person_id=?",
+                (photo_id, person_id),
+            )
 
     def get_person(self, name: str):
         return self.db.execute("SELECT id,name,daily_limit_seconds FROM people WHERE name=?", (name,)).fetchone()
@@ -188,9 +302,14 @@ class Storage:
 
     def set_curfew_config(self, enabled: bool, start: str, end: str):
         """Salva a configuracao de horario permitido."""
+        from datetime import datetime
+        start = start.strip()
+        end = end.strip()
+        datetime.strptime(start, "%H:%M")
+        datetime.strptime(end, "%H:%M")
         self.set_setting("curfew_enabled", "true" if enabled else "false")
-        self.set_setting("curfew_start", start.strip())
-        self.set_setting("curfew_end", end.strip())
+        self.set_setting("curfew_start", start)
+        self.set_setting("curfew_end", end)
 
     def is_curfew_active(self, current_time_str: Optional[str] = None) -> tuple[bool, str]:
         """Verifica se o momento atual esta fora do horario permitido.

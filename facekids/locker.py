@@ -3,7 +3,15 @@ import os
 import subprocess
 
 
-def lock_current_session():
+def _validated_session_id(session_id: str | None) -> str | None:
+    if session_id is None:
+        return None
+    if not session_id or not all(ch.isalnum() or ch in "_-" for ch in session_id):
+        raise ValueError("Identificador de sessão inválido")
+    return session_id
+
+
+def lock_current_session(session_id: str | None = None):
     if os.name=="nt":
         import ctypes
         result = ctypes.windll.user32.LockWorkStation()
@@ -11,8 +19,20 @@ def lock_current_session():
             raise RuntimeError("Falha ao solicitar bloqueio ao Windows")
         return
     if os.name=="posix":
-        # Requer systemd/logind e sessão ativa; a compatibilidade no Regata OS
-        # ainda precisa ser testada na máquina real.
-        subprocess.run(["loginctl","lock-session"],check=True,timeout=8)
+        command = ["loginctl", "lock-session"]
+        session_id = _validated_session_id(session_id)
+        if session_id is not None:
+            command.append(session_id)
+        subprocess.run(command, check=True, timeout=8)
         return
     raise NotImplementedError("Plataforma sem adaptador de bloqueio")
+
+
+def unlock_linux_session(session_id: str) -> None:
+    """Solicita ao logind o desbloqueio de uma sessão Linux já autenticada."""
+    if os.name != "posix":
+        raise NotImplementedError("Desbloqueio por logind existe apenas no Linux")
+    validated = _validated_session_id(session_id)
+    subprocess.run(
+        ["loginctl", "unlock-session", validated], check=True, timeout=8
+    )

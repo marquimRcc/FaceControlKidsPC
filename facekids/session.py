@@ -5,6 +5,7 @@ Não debita tempo com sessão bloqueada, desconectada ou de estado desconhecido.
 from __future__ import annotations
 
 import os
+import subprocess
 from enum import Enum
 
 
@@ -26,9 +27,11 @@ def state_from_wts_flags(connect_state: int, session_flags: int) -> SessionState
 
 
 def current_session_state(session_id: int | None = None) -> SessionState:
-    """Windows: consulta WTS; Linux: ACTIVE apenas em simulação experimental."""
+    """Consulta o bloqueio da sessão atual; falhas são sempre ``UNKNOWN``."""
     if os.name != "nt":
-        return SessionState.ACTIVE  # Linux: CLI impede --lock até validar KDE
+        return current_linux_session_state(
+            None if session_id is None else str(session_id)
+        )
     import ctypes
     from ctypes import wintypes
 
@@ -85,3 +88,63 @@ def current_session_state(session_id: int | None = None) -> SessionState:
     finally:
         if buffer.value:
             release(buffer)
+
+
+def parse_loginctl_properties(output: str) -> SessionState:
+    """Converte ``loginctl show-session`` sem presumir que a sessão está ativa.
+
+    ``LockedHint`` é a indicação publicada pelo gerenciador gráfico. A ausência
+    da propriedade ou qualquer valor desconhecido falha de forma fechada.
+    """
+    properties = {}
+    for raw_line in output.splitlines():
+        key, separator, value = raw_line.partition("=")
+        if separator:
+            properties[key.strip().casefold()] = value.strip().casefold()
+    if properties.get("active") != "yes":
+        return SessionState.LOCKED if properties.get("active") == "no" else SessionState.UNKNOWN
+    if properties.get("state") not in {"active", "online"}:
+        return SessionState.UNKNOWN
+    locked = properties.get("lockedhint")
+    if locked == "yes":
+        return SessionState.LOCKED
+    if locked == "no":
+        return SessionState.ACTIVE
+    return SessionState.UNKNOWN
+
+
+def linux_display_session(user: str | int | None = None) -> str | None:
+    """Retorna a sessão gráfica principal publicada pelo logind."""
+    explicit = os.environ.get("XDG_SESSION_ID", "").strip()
+    if user is None and explicit and all(ch.isalnum() or ch in "_-" for ch in explicit):
+        return explicit
+    target_user = str(os.getuid()) if user is None else str(user).strip()
+    if not target_user or not all(ch.isalnum() or ch in "_-" for ch in target_user):
+        return None
+    try:
+        result = subprocess.run(
+            ["loginctl", "show-user", target_user, "--property=Display", "--value"],
+            check=True, capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    candidate = result.stdout.strip()
+    if candidate and all(ch.isalnum() or ch in "_-" for ch in candidate):
+        return candidate
+    return None
+
+
+def current_linux_session_state(session_id: str | None = None) -> SessionState:
+    """Obtém Active/State/LockedHint do logind para KDE/SDDM."""
+    target = session_id or linux_display_session()
+    if not target:
+        return SessionState.UNKNOWN
+    try:
+        result = subprocess.run(
+            ["loginctl", "show-session", target,
+             "--property=Active", "--property=State", "--property=LockedHint"],
+            check=True, capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return SessionState.UNKNOWN
+    return parse_loginctl_properties(result.stdout)

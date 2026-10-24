@@ -14,16 +14,16 @@ Funcoes principais:
 from __future__ import annotations
 
 import ctypes
-from datetime import date
 import json
 import logging
 import os
-from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
+from datetime import date
+from pathlib import Path
 from typing import Optional, Tuple
 
 if sys.platform == "win32":
@@ -33,11 +33,12 @@ else:
 
 from .children_pilot import child_pilot_database
 from .locker import lock_current_session
+from .platform_paths import application_data_dir
 from .session import SessionState, current_session_state
 from .storage import Storage
 from .windows_pipe_api import configure_kernel32
 
-log_dir = Path("C:/ProgramData/FaceKids")
+log_dir = application_data_dir()
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "filhos_agent.log"
 
@@ -56,7 +57,7 @@ except Exception:
     )
 logger = logging.getLogger("FilhosAgent")
 
-LAST_UNLOCK_FILE = Path("C:/ProgramData/FaceKids/last_unlock.json")
+LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 
 
 def show_toast(

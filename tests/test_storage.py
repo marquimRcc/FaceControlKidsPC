@@ -1,10 +1,34 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
 import numpy as np
+
 from facekids.storage import Storage
 
+
 class StorageTest(unittest.TestCase):
+    def test_profile_photos_are_local_selectable_and_separate_from_embeddings(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "photos.sqlite3")
+            child = db.add_person("Ana", 90)
+            vectors = [np.ones(128, dtype=np.float32) * (index + 1)
+                       for index in range(12)]
+            photos = [b"\xff\xd8" + bytes([index]) * 200 + b"\xff\xd9"
+                      for index in range(3)]
+            db.replace_embeddings_and_add_photos(child, vectors, photos)
+            gallery = db.profile_photos(child)
+            self.assertEqual(len(gallery), 3)
+            self.assertEqual(db.enrollment_count(child), 12)
+            self.assertEqual(sum(selected for _id, _jpeg, selected in gallery), 1)
+            chosen = gallery[1][0]
+            db.select_profile_photo(child, chosen)
+            self.assertEqual(db.selected_profile_photo(child), gallery[1][1])
+            self.assertEqual(db.enrollment_count(child), 12)
+            with self.assertRaises(KeyError):
+                db.select_profile_photo(child, 9999)
+            db.close()
+
     def test_user_independent_usage_and_daily_reset(self):
         with TemporaryDirectory() as d:
             db=Storage(Path(d)/"test.sqlite3")
@@ -76,6 +100,35 @@ class StorageTest(unittest.TestCase):
                 db.update_person_name(cid, "   ")
             with self.assertRaises(KeyError):
                 db.update_person_name(9999, "Novo")
+            db.close()
+
+    def test_delete_person_removes_profile_and_all_associated_data(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            child = db.add_person("Lucas", 120)
+            other = db.add_person("Bia", 90)
+            db.add_embedding(child, np.ones(128, dtype=np.float32))
+            db.charge(child, 90, "2026-10-20")
+            db.add_bonus(child, 30, "2026-10-20")
+            photo = b"\xff\xd8" + b"x" * 200 + b"\xff\xd9"
+            db.db.execute(
+                "INSERT INTO profile_photos(person_id,jpeg,selected) VALUES (?,?,1)",
+                (child, photo),
+            )
+            db.db.commit()
+
+            db.delete_person(child)
+
+            self.assertEqual([row[0] for row in db.people()], [other])
+            for table in ("embeddings", "daily_usage", "daily_bonus", "profile_photos"):
+                count = db.db.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE person_id=?", (child,)
+                ).fetchone()[0]
+                self.assertEqual(count, 0, table)
+            with self.assertRaises(KeyError):
+                db.delete_person(child)
+            with self.assertRaises(ValueError):
+                db.delete_person(True)
             db.close()
 
     def test_get_history(self):
