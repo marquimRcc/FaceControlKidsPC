@@ -53,9 +53,12 @@ class TestInstallerScripts(unittest.TestCase):
 
     def test_installer_script_binding_and_privileges(self):
         inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
-        # Verifica vinculacao a conta Filhos com modo interativo /it
-        self.assertIn('/ru "Filhos"', inst)
-        self.assertIn("/it", inst)
+        # A tarefa Filhos deve usar o token interativo sem senha no comando.
+        self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $childAccount.Name", inst)
+        self.assertIn("New-ScheduledTaskPrincipal -UserId $childAccount.SID.Value", inst)
+        self.assertIn("-LogonType Interactive -RunLevel Limited", inst)
+        self.assertNotIn('schtasks.exe /create', inst)
+        self.assertNotIn('/rp "', inst)
         # Verifica execucao com privilegios elevados
         self.assertIn("New-ScheduledTaskPrincipal", inst)
         self.assertIn("-LogonType Interactive", inst)
