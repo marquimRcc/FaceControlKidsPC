@@ -78,3 +78,53 @@
 2. Auditar permissões reais apenas por inspeção voluntária ou VM, sem aplicar icacls automaticamente.
 3. Considerar autenticação de identidade do servidor Named Pipe e endurecimento das ACLs somente depois de validar Win+L e a conta Filhos numa VM/snapshot.
 4. Corrigir bugs demonstrados nos limites de sessão/quota sem interferir nas credenciais reais da família.
+
+
+## Ciclo de implementacao e CI — 24/10/2026 (quatro jobs confirmados)
+
+### Sessao / quota
+- `2d8d8856`, `007318e1`, `43150abf`: validacao de evento local
+  `last_unlock.json` com tempo finito, data de hoje, limite de idade,
+  rejeicao de futuro e ID de crianca invalido; recusa de perfil inexistente.
+- `b235a6c5`, `398b9762`: quota SQLite ignora nao: **rejeita**
+  tempo negativo, NaN, Inf, tipos invalidos e datas invalidas ANTES do write.
+- `0a23cb8f`, `ecf48ba4`, `72994764`: ALLOW do pipe in-session
+  exige usuario Filhos, protocolo, timestamp e saldo; reavalia
+  quota/curfew; DENY nao bloqueia sem respaldo no banco.
+  **O marcador de protocolo e publico e nao autentica o servidor.**
+
+### Instalador, recuperacao e auditorias
+- `730fd727`, `6f187b87`: agente Filhos agendado com token
+  interativo, sem passar senha por `schtasks /rp`; contrato com testes.
+  **Funcionamento da nova tarefa no PC domestico depende de VM/aceite.**
+- `84bab31d`, `16538663`: `-PreflightOnly` do instalador retorna
+  relatorio e sai ANTES de qualquer copia, registro ou tarefa.
+- `4ba2333d`, `813692e6`: ACL read-only inclui SQLite, WAL/SHM,
+  fotos, DLL, scripts, logs e SID independente do idioma; erro de
+  sintaxe detectado em CI e corrigido.
+- `1fde299a`, `49ba36ac`: `-AuditOnly` do desinstalador informa
+  presencia de DLL, COM, tarefas e DB sem modificar nada.
+- `06ce789b`, `8fcc3c8e`: auditoria passiva da tarefa e PID/sessao
+  do auth-service; **nao prova identidade de servidor Named Pipe**.
+- `c30b4140`, `9f82ccd5`, `f314954d`: CI Windows cobre os
+  tres diagnosticos somente leitura, corrigindo a suposicao de que
+  ProgramData/FaceKids estaria ausente no runner (testes Python criam logs).
+
+### CI verificado
+No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
+- **Unit tests** run `40142616581` — Windows e Ubuntu: SUCCESS.
+- **Credential Provider compile and host checks** run `40142616599` —
+  build-real-credential-provider e compile-and-host: SUCCESS.
+- Os novos documentos e este checkpoint tem commits posteriores:
+  verificar o CI do HEAD final separadamente, nao extrapolar status.
+
+### Aceite bloqueado (nao apresentar como pronto)
+- `docs/ACEITE-SEGURANCA-WINDOWS.md` e roteiro, nao teste fisico.
+- Nao houve instalacao/registro do CP nem desinstalacao no PC familiar.
+- ACL legada `Filhos:(OI)(CI)(M)` para ProgramData nao foi removida
+  cegamente; requer migracao de codigo privilegiado e SQLite gravavel.
+- Identidade efetiva e token do servidor pipe na visao do CP precisam
+  de implementacao/validacao em VM antes de alterar o fluxo de login.
+- Rollback de CP e logon sem admin, webcam real, spoofing/liveness e
+  Win+L na versao nova NAO foram comprovados.
+- PR #4 permanece draft, destinado a handoff e NAO a main.
