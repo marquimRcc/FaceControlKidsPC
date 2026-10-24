@@ -70,6 +70,16 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
         self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
 
+    def test_installer_preflight_returns_before_mutation(self):
+        inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        self.assertIn("[switch]$PreflightOnly", inst)
+        self.assertIn("Auditar-Permissoes-FaceKids.ps1", inst)
+        gate = inst.index("if ($PreflightOnly)")
+        early_exit = inst.index("return", gate)
+        self.assertLess(early_exit, inst.index("Copy-Item -LiteralPath $dllSource"))
+        self.assertLess(early_exit, inst.index('Start-Process -FilePath "regsvr32.exe"'))
+        self.assertNotIn('/rp "', inst)
+
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:
             base = Path(td)
