@@ -41,6 +41,45 @@ class StorageTest(unittest.TestCase):
                 self.assertEqual(db.used(first, day), before)
             db.close()
 
+    def test_atomic_capped_debit_respects_quota_and_child_isolation(self):
+        with TemporaryDirectory() as d:
+            path = Path(d) / "ledger.sqlite3"
+            writer = Storage(path)
+            second_writer = Storage(path)
+            try:
+                first = writer.add_person("First", 1)
+                second = writer.add_person("Second", 2)
+                day = "2026-10-24"
+                self.assertEqual(writer.charge_up_to_available(first, 50, day), 50)
+                self.assertEqual(second_writer.charge_up_to_available(first, 50, day), 10)
+                self.assertEqual(writer.charge_up_to_available(first, 10, day), 0)
+                self.assertEqual(second_writer.remaining(first, day), 0)
+                self.assertEqual(writer.used(first, day), 60)
+                self.assertEqual(writer.remaining(second, day), 120)
+                self.assertEqual(second_writer.charge_up_to_available(second, 2.5, day), 2.5)
+                self.assertEqual(writer.remaining(second, day), 117.5)
+            finally:
+                second_writer.close()
+                writer.close()
+
+    def test_atomic_debit_rejects_invalid_request_without_side_effects(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "ledger.sqlite3")
+            try:
+                cid = db.add_person("Test", 1)
+                day = "2026-10-24"
+                for seconds in (float("nan"), float("inf"), -1, True, "50", None):
+                    with self.subTest(seconds=seconds), self.assertRaises(ValueError):
+                        db.charge_up_to_available(cid, seconds, day)
+                for invalid_day in ("2026-02-30", "2026-2-4", "", 3):
+                    with self.subTest(day=invalid_day), self.assertRaises(ValueError):
+                        db.charge_up_to_available(cid, 5, invalid_day)
+                with self.assertRaises(KeyError):
+                    db.charge_up_to_available(999_999, 5, day)
+                self.assertEqual(db.used(cid, day), 0)
+            finally:
+                db.close()
+
     def test_bonus_total_capped_per_child_and_day(self):
         with TemporaryDirectory() as d:
             db = Storage(Path(d) / "quotas.sqlite3")
