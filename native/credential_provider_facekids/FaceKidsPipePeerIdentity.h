@@ -48,6 +48,34 @@ public:
         return true;
     }
 
+    // Opt-in policy stored under protected HKLM. No value => legacy compatibility.
+    // A configured invalid/unreadable policy FAILS CLOSED. Never enable on
+    // family hardware before VM confirms the interactive auth-service SID.
+    static bool AuthorizeIfConfigured(HANDLE pipe) {
+        static const wchar_t* key =
+            L"SOFTWARE\\FaceControlKidsPC\\CredentialProvider";
+        DWORD enabled = 0;
+        DWORD size = sizeof(enabled);
+        LSTATUS result = RegGetValueW(
+            HKEY_LOCAL_MACHINE, key, L"EnforceAuthServiceSid",
+            RRF_RT_REG_DWORD, nullptr, &enabled, &size);
+        if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND)
+            return true;
+        if (result != ERROR_SUCCESS || size != sizeof(enabled))
+            return false;
+        if (enabled == 0) return true;
+        if (enabled != 1) return false;
+
+        wchar_t expected[256] = {};
+        DWORD stringBytes = sizeof(expected);
+        result = RegGetValueW(
+            HKEY_LOCAL_MACHINE, key, L"AuthServiceSid",
+            RRF_RT_REG_SZ, nullptr, expected, &stringBytes);
+        if (result != ERROR_SUCCESS || expected[0] == L'\0')
+            return false;
+        return MatchesExpectedSid(pipe, expected);
+    }
+
     static bool MatchesExpectedSid(HANDLE pipe, const std::wstring& expectedSid) {
         if (expectedSid.empty()) return false;
         PSID parsed = nullptr;
