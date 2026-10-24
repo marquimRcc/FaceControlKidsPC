@@ -48,6 +48,14 @@ public:
         return true;
     }
 
+    // A pure decision point for isolated synthetic SID and policy tests.
+    static bool EvaluatePolicy(HANDLE pipe, DWORD enabled,
+                               const std::wstring& expectedSid) {
+        if (enabled == 0) return true;
+        if (enabled != 1) return false;
+        return MatchesExpectedSid(pipe, expectedSid);
+    }
+
     // Opt-in policy stored under protected HKLM. No value => legacy compatibility.
     // A configured invalid/unreadable policy FAILS CLOSED. Never enable on
     // family hardware before VM confirms the interactive auth-service SID.
@@ -73,7 +81,7 @@ public:
             RRF_RT_REG_SZ, nullptr, expected, &stringBytes);
         if (result != ERROR_SUCCESS || expected[0] == L'\0')
             return false;
-        return MatchesExpectedSid(pipe, expected);
+        return EvaluatePolicy(pipe, enabled, expected);
     }
 
     static bool MatchesExpectedSid(HANDLE pipe, const std::wstring& expectedSid) {
