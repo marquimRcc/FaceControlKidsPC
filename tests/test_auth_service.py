@@ -86,7 +86,7 @@ class TestAuthService(unittest.TestCase):
 
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["user"], "Filhos")
-            self.assertEqual(data["password"], "1")
+            self.assertNotIn("password", data)
             self.assertEqual(data["child_id"], pid)
             self.assertEqual(data["child_name"], "Filho Smoke")
             self.assertGreater(data["remaining"], 0)
