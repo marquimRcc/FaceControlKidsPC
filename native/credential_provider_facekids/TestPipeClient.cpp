@@ -123,7 +123,29 @@ static int RunParsingUnitTests() {
     }
     std::wcout << L"  [PASS] 12. Status aninhado em data rejeitado com sucesso.\n";
 
-    std::wcout << L"[OK] Todos os 12 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+    // Numeric values must be complete JSON numbers, not accepted prefixes.
+    const std::string validPrefix = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":";
+    const std::string validSuffix = ",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    for (const std::string& badId : {"2junk", "\"2junk\"", "-2", "2.5", "2e1"}) {
+        if (FaceKidsPipeClient::ParseResponse(validPrefix + badId + validSuffix).success) {
+            std::wcerr << L"[FALHA] child_id malformado aceito.\n";
+            return 14;
+        }
+    }
+    std::string timestampGarbage = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "junk\"}";
+    if (FaceKidsPipeClient::ParseResponse(timestampGarbage).success) {
+        std::wcerr << L"[FALHA] timestamp com sufixo aceito.\n";
+        return 15;
+    }
+    std::string hugeRemaining = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":1e100}";
+    AuthResult bounded = FaceKidsPipeClient::ParseResponse(hugeRemaining);
+    if (!bounded.success || bounded.remainingSeconds != 0) {
+        std::wcerr << L"[FALHA] saldo fora de faixa.\n";
+        return 16;
+    }
+    std::wcout << L"  [PASS] 13. Numeros invalidos negados e saldo fora de faixa neutralizado.\n";
+
+    std::wcout << L"[OK] Todos os 13 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
