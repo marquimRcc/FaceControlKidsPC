@@ -204,9 +204,28 @@ static int RunParsingUnitTests() {
         }
     }
     std::wcout << L"  [PASS] 16. Tipos JSON de autorizacao validados.\n";
+    // Strings and nested JSON must never masquerade as top-level auth fields.
+    const std::string fakeNote = "{\"note\":\"escaped \\\"status\\\":\\\"DENY_UNKNOWN\\\"\"," + allowJson.substr(1);
+    AuthResult noteResult = FaceKidsPipeClient::ParseResponse(fakeNote);
+    if (!noteResult.success || noteResult.childId != 2) {
+        std::wcerr << L"[FALHA] Mensagem irrelevante alterou campos de autorizacao.\n";
+        return 23;
+    }
+    const std::string wrongStatus = "{\"data\":{\"status\":\"ALLOW\",\"child_id\":2},\"status\":\"DENY_UNKNOWN\",\"user\":\"Filhos\",\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    if (FaceKidsPipeClient::ParseResponse(wrongStatus).success) {
+        std::wcerr << L"[FALHA] Status falso aninhado autorizado.\n";
+        return 24;
+    }
+    const std::string disguisedStatus = "{\"sta\\u0074us\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    if (FaceKidsPipeClient::ParseResponse(disguisedStatus).success) {
+        std::wcerr << L"[FALHA] Alias Unicode de chave de autorizacao foi aceito.\n";
+        return 25;
+    }
+    std::wcout << L"  [PASS] 17. Extracao robusta contra campos falsos e aliases.\n";
 
 
-    std::wcout << L"[OK] Todos os 16 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+
+    std::wcout << L"[OK] Todos os 17 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
