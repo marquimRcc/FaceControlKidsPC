@@ -2,6 +2,8 @@
 
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
+#include <utility>
 
 // Syntax/ambiguity check only: the Credential Provider still validates the
 // authorization fields independently. No login decision is made here.
@@ -10,6 +12,7 @@ class FaceKidsJsonEnvelopeGuard final {
         const std::string& s_;
         size_t pos_ = 0;
         unsigned depth_ = 0;
+        std::unordered_map<std::string, std::pair<size_t, size_t>> topLevelFields_;
 
         void whitespace() {
             while (pos_ < s_.size() && (s_[pos_] == ' ' || s_[pos_] == '\t' ||
@@ -39,6 +42,9 @@ class FaceKidsJsonEnvelopeGuard final {
                 }
                 if (c < 0x20) return false;
                 if (c == '\\') {
+                    // The server emits literal ASCII JSON keys; escaped keys can
+                    // alias authorization fields and must fail closed.
+                    if (key) return false;
                     if (pos_ == s_.size()) return false;
                     char escaped = s_[pos_++];
                     if (escaped == 'u') {
@@ -112,7 +118,9 @@ class FaceKidsJsonEnvelopeGuard final {
                         (needsNumber && s_[pos_] != '-' &&
                          !(s_[pos_] >= '0' && s_[pos_] <= '9'))) return false;
                 }
+                const size_t fieldStart = pos_;
                 if (!value()) return false;
+                if (depth_ == 1) topLevelFields_.emplace(key, std::make_pair(fieldStart, pos_));
                 if (consume('}')) { --depth_; return true; }
                 if (!consume(',')) return false;
             }
@@ -133,9 +141,23 @@ class FaceKidsJsonEnvelopeGuard final {
             whitespace();
             return pos_ == s_.size();
         }
+        std::string topLevelValue(const std::string& key) const {
+            auto it = topLevelFields_.find(key);
+            if (it == topLevelFields_.end()) return "";
+            size_t first = it->second.first, last = it->second.second;
+            if (first < last && s_[first] == '"') return s_.substr(first + 1, last - first - 2);
+            return s_.substr(first, last - first);
+        }
     };
 public:
     static bool IsValidObject(const std::string& json) {
         return Parser(json).validObject();
+    }
+    // Only actual top-level JSON fields are returned; never search for key text
+    // inside strings or nested objects. Invalid/ambiguous JSON is rejected.
+    static std::string TopLevelValue(const std::string& json, const std::string& key) {
+        Parser parsed(json);
+        if (!parsed.validObject()) return "";
+        return parsed.topLevelValue(key);
     }
 };
