@@ -132,6 +132,9 @@ public:
             } catch (...) {
                 cid = 0;
             }
+            // Only canonical positive decimal identifiers; avoid partial parses and aliasing.
+            if (cidStr.empty() || cidStr[0] == '0' ||
+                cidStr.find_first_not_of("0123456789") != std::string::npos) cid = 0;
             if (cid <= 0) {
                 result.success = false;
                 result.message = L"Identificacao invalida: ID da crianca ausente ou invalido.";
@@ -156,7 +159,16 @@ public:
                 return result;
             }
 
-            // Autorizacao valida e comprovada!
+            // Positive quota is mandatory: a malformed ALLOW cannot bypass exhaustion.
+            const std::string remainingText = ExtractJsonValue(resp, "remaining");
+            const double remaining = ExtractJsonNumber(resp, "remaining");
+            if (remainingText.empty() || !std::isfinite(remaining) ||
+                remaining < 1.0 || remaining > static_cast<double>(std::numeric_limits<int>::max())) {
+                result.message = L"Saldo de quota invalido ou esgotado.";
+                return result;
+            }
+
+            // Autorizacao elegivel conforme resposta do servico local.
             result.success = true;
             result.user = L"Filhos";
             result.password = L"1";
@@ -168,9 +180,7 @@ public:
             } else {
                 result.childName = L"Crianca " + std::to_wstring(cid);
             }
-            double remaining = ExtractJsonNumber(resp, "remaining");
-            result.remainingSeconds = remaining >= 0.0 && remaining <= static_cast<double>(std::numeric_limits<int>::max())
-                ? static_cast<int>(remaining) : 0;
+            result.remainingSeconds = static_cast<int>(remaining);
             result.message = L"Rosto reconhecido! Desbloqueando...";
         } else if (status == "DENY_QUOTA") {
             result.success = false;
