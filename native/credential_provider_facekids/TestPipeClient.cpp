@@ -139,13 +139,27 @@ static int RunParsingUnitTests() {
     }
     std::string hugeRemaining = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":1e100}";
     AuthResult bounded = FaceKidsPipeClient::ParseResponse(hugeRemaining);
-    if (!bounded.success || bounded.remainingSeconds != 0) {
+    if (bounded.success) {
         std::wcerr << L"[FALHA] saldo fora de faixa.\n";
         return 16;
     }
     std::wcout << L"  [PASS] 13. Numeros invalidos negados e saldo fora de faixa neutralizado.\n";
+    // ALLOW must carry a positive, finite and representable quota.
+    const std::string quotaPrefix = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":";
+    for (const std::string& badQuota : {"0", "-1", "\"2junk\"", "null", "1e100", "2147483648"}) {
+        if (FaceKidsPipeClient::ParseResponse(quotaPrefix + badQuota + "}").success) {
+            std::wcerr << L"[FALHA] ALLOW com quota invalida foi aceito.\n";
+            return 17;
+        }
+    }
+    if (FaceKidsPipeClient::ParseResponse(validPrefix + "02" + validSuffix).success) {
+        std::wcerr << L"[FALHA] child_id nao canonico aceito.\n";
+        return 18;
+    }
+    std::wcout << L"  [PASS] 14. ALLOW exige quota positiva e child_id canonico.\n";
 
-    std::wcout << L"[OK] Todos os 13 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+
+    std::wcout << L"[OK] Todos os 14 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
