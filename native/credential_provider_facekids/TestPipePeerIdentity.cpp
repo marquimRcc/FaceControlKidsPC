@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 
-int wmain() {
+int main() {
     std::wstring ignored;
     if (FaceKidsPipePeerIdentity::QueryServerUserSid(INVALID_HANDLE_VALUE, ignored) ||
         FaceKidsPipePeerIdentity::MatchesExpectedSid(INVALID_HANDLE_VALUE, L"S-1-5-18") ||
