@@ -53,6 +53,19 @@ int main() {
         std::wcerr << L"FAIL: SID comparison accepted impostor or denied real owner\n";
         return 6;
     }
+    // Policy must default to legacy compatibility but fail closed whenever
+    // the protected policy enables SID enforcement and the peer is different.
+    if (!FaceKidsPipePeerIdentity::EvaluatePolicy(client, 0, L"") ||
+        !FaceKidsPipePeerIdentity::EvaluatePolicy(client, 1, ignored) ||
+        FaceKidsPipePeerIdentity::EvaluatePolicy(client, 1, L"S-1-0-0") ||
+        FaceKidsPipePeerIdentity::EvaluatePolicy(client, 1, L"") ||
+        FaceKidsPipePeerIdentity::EvaluatePolicy(client, 2, ignored)) {
+        CloseHandle(client);
+        DisconnectNamedPipe(server);
+        CloseHandle(server);
+        std::wcerr << L"FAIL: opt-in policy denied safe or accepted unsafe SID\\n";
+        return 7;
+    }
     CloseHandle(client);
     DisconnectNamedPipe(server);
     CloseHandle(server);
