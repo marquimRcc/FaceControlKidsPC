@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,25 @@ class TestAuthService(unittest.TestCase):
         # Verifica que usuarios interativos possuem apenas leitura e escrita, nao controle total
         self.assertIn("(A;;GRGW;;;IU)", SDDL_PERMISSIVE)
         self.assertNotIn("(A;;GA;;;IU)", SDDL_PERMISSIVE)
+
+    def test_named_pipe_descriptor_conversion_fails_closed(self):
+        import facekids.auth_service as service
+
+        failing_api = SimpleNamespace(
+            ConvertStringSecurityDescriptorToSecurityDescriptorW=lambda *args: 0
+        )
+        with patch.object(service.sys, "platform", "win32"), \
+             patch.object(service.ctypes, "windll", SimpleNamespace(advapi32=failing_api), create=True):
+            with self.assertRaisesRegex(RuntimeError, "SDDL conversion"):
+                create_security_attributes()
+
+    def test_missing_named_pipe_security_api_fails_closed(self):
+        import facekids.auth_service as service
+
+        with patch.object(service.sys, "platform", "win32"), \
+             patch.object(service.ctypes, "windll", SimpleNamespace(advapi32=None), create=True):
+            with self.assertRaisesRegex(RuntimeError, "security API"):
+                create_security_attributes()
 
     def test_command_routing_logic(self):
         # Valida regras de interpretacao de comando IPC
