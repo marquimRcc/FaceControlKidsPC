@@ -70,8 +70,16 @@ BUFFER_SIZE = 4096
 PIPE_ACCESS_DUPLEX = 0x00000003
 PIPE_TYPE_MESSAGE = 0x00000004
 PIPE_READMODE_MESSAGE = 0x00000002
+# Windows: remote clients must never query the facial authorization pipe.
+PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
+
+
+def auth_pipe_mode_flags() -> int:
+    """Local-only message-mode pipe; authentication peers are same-machine."""
+    return PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS
+
 INVALID_HANDLE_VALUE = -1
 
 # Marcador de versao do contrato IPC. Isto NAO e segredo nem mecanismo
@@ -337,7 +345,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
         h_pipe = kernel32.CreateNamedPipeW(
             PIPE_NAME,
             PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            auth_pipe_mode_flags(),
             PIPE_UNLIMITED_INSTANCES,
             BUFFER_SIZE,
             BUFFER_SIZE,
