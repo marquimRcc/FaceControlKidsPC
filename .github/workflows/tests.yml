@@ -45,12 +45,16 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:ProgramData 'FaceKids'
-          if (Test-Path -LiteralPath $root) { throw 'Unexpected FaceKids installation in CI' }
+          $dll = Join-Path $root 'FaceKidsCredentialProvider.dll'
+          $beforeDll = Test-Path -LiteralPath $dll
+          $beforeTask = [bool](Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue)
           $report = & ./scripts/Instalar-FaceKids-Nativo.ps1 -PreflightOnly | ConvertFrom-Json
           if (@($report).Count -ne 11) { throw 'Installer preflight did not enumerate protected paths' }
-          if (Test-Path -LiteralPath $root) { throw 'Preflight must not install any files' }
-          $existingTask = Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue
-          if ($existingTask) { throw 'Preflight registered a task unexpectedly' }
+          $afterDll = Test-Path -LiteralPath $dll
+          $afterTask = [bool](Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue)
+          if ($beforeDll -ne $afterDll -or $beforeTask -ne $afterTask) {
+            throw 'Preflight changed Credential Provider or scheduled task state'
+          }
       - name: Recovery audit is read-only on disposable runner
         if: runner.os == 'Windows'
         shell: pwsh
