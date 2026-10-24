@@ -1,3 +1,4 @@
+import os
 import ctypes
 from ctypes import wintypes
 import json
@@ -117,8 +118,11 @@ class BootAuthTests(unittest.TestCase):
 
     @unittest.skipUnless(auth_service.sys.platform == "win32", "Requires real Win32 named pipe")
     def test_real_pipe_once_without_webcam_or_login_changes(self):
+        import facekids.filhos_agent as filhos_agent
         from facekids.filhos_agent import query_auth_service
         failures = []
+        test_pipe = rf"\\.\pipe\FaceKidsAuthPipe_Test_{os.getpid()}"
+        test_mutex = rf"Global\FaceKidsAuthServiceMutex_Test_{os.getpid()}"
 
         def serve():
             try:
@@ -126,7 +130,10 @@ class BootAuthTests(unittest.TestCase):
             except Exception as exc:
                 failures.append(exc)
 
-        with patch.object(auth_service, "is_session_zero_or_system", return_value=False), \
+        with patch.object(auth_service, "AUTH_MUTEX_NAME", test_mutex), \
+             patch.object(auth_service, "PIPE_NAME", test_pipe), \
+             patch.object(filhos_agent, "AUTH_PIPE_NAME", test_pipe), \
+             patch.object(auth_service, "is_session_zero_or_system", return_value=False), \
              patch.object(auth_service.FaceAuthenticator, "evaluate",
                           return_value=("DENY_UNKNOWN", {"message": "isolated CI test"})):
             worker = threading.Thread(target=serve, daemon=True)
@@ -134,7 +141,7 @@ class BootAuthTests(unittest.TestCase):
             deadline = time.monotonic() + 5
             response = None
             while response is None and time.monotonic() < deadline and not failures:
-                response = query_auth_service(timeout_seconds=1)
+                response = query_auth_service(timeout_seconds=1, pipe_name=test_pipe)
                 time.sleep(0.02)
             worker.join(timeout=5)
         self.assertFalse(worker.is_alive(), "One-shot pipe server did not exit")

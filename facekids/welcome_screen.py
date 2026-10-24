@@ -66,7 +66,36 @@ def load_programs_config() -> dict:
 _programs_launched = False
 
 
+
+def is_active_console_user_filhos() -> bool:
+    """Verifica se a sessao de console fisica ativa pertence de fato a conta 'Filhos'."""
+    override = os.environ.get("FACEKIDS_TEST_ACTIVE_USER")
+    if override:
+        return override.lower() == "filhos"
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        wts = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+        active_sid = kernel32.WTSGetActiveConsoleSessionId()
+        buf = ctypes.c_void_p()
+        bytes_read = wintypes.DWORD()
+        ok = wts.WTSQuerySessionInformationW(0, active_sid, 5, ctypes.byref(buf), ctypes.byref(bytes_read))
+        if not ok or not buf.value:
+            return False
+        username = ctypes.wstring_at(buf.value).strip().lower()
+        wts.WTSFreeMemory(buf)
+        return username == "filhos"
+    except Exception:
+        return os.environ.get("USERNAME", "").lower() == "filhos"
+
 def launch_configured_programs():
+    if not is_active_console_user_filhos():
+        logger.info("Programas configurados nao serao executados fora da sessao de console dos Filhos.")
+        return
+
     global _programs_launched
     if _programs_launched:
         return
@@ -357,6 +386,9 @@ class WelcomeWindow:
 
 
 def show_welcome():
+    if not is_active_console_user_filhos():
+        logger.info("Tela de boas-vindas ignorada: sessao de console ativa nao e 'Filhos'.")
+        return
     child_id, child_name, remaining_seconds = get_current_child_info()
     # Abre o conteudo infantil apenas depois de um reconhecimento facial valido.
     # A janela de boas-vindas permanece topmost e aparece sobre o navegador.

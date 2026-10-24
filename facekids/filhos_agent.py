@@ -38,6 +38,8 @@ from .session import SessionState, current_session_state
 from .storage import Storage
 from .windows_pipe_api import configure_kernel32
 
+AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
+
 log_dir = application_data_dir()
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "filhos_agent.log"
@@ -165,7 +167,7 @@ def trigger_welcome_screen():
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
 
-def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
+def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = None) -> Optional[dict]:
     """Consulta o servico facial com um prazo total, inclusive para ReadFile.
 
     O handle e aberto com I/O sobreposto para que uma resposta travada nunca
@@ -176,7 +178,8 @@ def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
     kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
     if kernel32 is None:
         return None
-    pipe_name = r"\\.\pipe\FaceKidsAuthPipe"
+    if pipe_name is None:
+        pipe_name = AUTH_PIPE_NAME
 
     configure_kernel32(kernel32)
 
@@ -435,7 +438,38 @@ class QuotaTracker:
         return False
 
 
+
+def is_active_console_user_filhos() -> bool:
+    """Verifica se a sessao de console fisica ativa pertence de fato a conta 'Filhos'."""
+    override = os.environ.get("FACEKIDS_TEST_ACTIVE_USER")
+    if override:
+        return override.lower() == "filhos"
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        wts = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+        active_sid = kernel32.WTSGetActiveConsoleSessionId()
+        buf = ctypes.c_void_p()
+        bytes_read = wintypes.DWORD()
+        # WTSUserName = 5
+        ok = wts.WTSQuerySessionInformationW(0, active_sid, 5, ctypes.byref(buf), ctypes.byref(bytes_read))
+        if not ok or not buf.value:
+            return False
+        username = ctypes.wstring_at(buf.value).strip().lower()
+        wts.WTSFreeMemory(buf)
+        return username == "filhos"
+    except Exception:
+        return os.environ.get("USERNAME", "").lower() == "filhos"
+
 def run_agent():
+    # Garante que o agente so roda se a sessao ativa for a conta Filhos
+    if not is_active_console_user_filhos():
+        logger.info("FilhosAgent: Sessao de console ativa nao pertence a 'Filhos' (usuario: %s). Encerrando imediatamente.", os.environ.get("USERNAME"))
+        return
+
     # Evita multiplas instancias concorrentes na mesma sessao
     kernel32 = ctypes.windll.kernel32
     h_mutex = kernel32.CreateMutexW(None, False, "Local\\FaceKidsFilhosAgentMutex")
@@ -479,6 +513,11 @@ def run_agent():
     # 2. Loop continuo de monitoramento (a cada 2 segundos)
     while True:
         try:
+            if not is_active_console_user_filhos():
+                # Administrador no console ativo (ex: troca rapida de usuario)
+                time.sleep(2.0)
+                continue
+
             now_day = date.today().isoformat()
             if now_day != today:
                 today = now_day

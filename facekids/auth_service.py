@@ -66,7 +66,8 @@ except OSError:
     )
 logger = logging.getLogger("FaceKidsAuthService")
 
-PIPE_NAME = r"\\.\pipe\FaceKidsAuthPipe"
+AUTH_MUTEX_NAME = os.environ.get("FACEKIDS_AUTH_MUTEX", "Global\\FaceKidsAuthServiceMutex")
+PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
 BUFFER_SIZE = 4096
 
 PIPE_ACCESS_DUPLEX = 0x00000003
@@ -356,7 +357,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                     events.write(json.dumps(evidence) + "\n")
             write_status(status_file, **evidence)
 
-    h_mutex = kernel32.CreateMutexW(None, False, "Global\\FaceKidsAuthServiceMutex")
+    h_mutex = kernel32.CreateMutexW(None, False, AUTH_MUTEX_NAME)
     if not h_mutex:
         logger.error("Nao foi possivel abrir mutex (erro %d).", kernel32.GetLastError())
         return 1

@@ -720,3 +720,51 @@ Esta seção substitui as afirmações conflitantes da terceira rodada.
 **Limite operacional preservado:** a tarefa `FaceKidsAuthService` inicia no logon do administrador que executou a instalação. Portanto, esta rodada preserva o cenário doméstico já validado — administrador inicia a sessão e depois usa `Win+L` —, mas não declara desbloqueio facial disponível imediatamente apó a reinicialização, antes de qualquer logon interativo. Resolver esse segundo cenário exigiria uma arquitetura específica que consiga acessar a webcam antes do logon, fora desta correção incremental.
 
 Validação local desta rodada: **161 testes Python aprovados**, com 1 teste de sintaxe PowerShell ignorado no Linux e reservado ao job Windows do GitHub Actions. A instalação física e o teste de webcam/Win+L continuam sendo uma etapa separada; não se declara risco operacional zero antes desse ensaio.
+
+
+---
+
+## 21. Quinta Rodada — Validação Pós-Formatação, Ligação Estática C++ e Isolamento Rigoroso de Sessão (24/10/2026)
+
+Esta rodada registrou e resolveu todos os pontos práticos encontrados após a formatação limpa do Windows no PC físico:
+
+1. **Ligação Estática da DLL e Eliminação do Erro regsvr32 (código 3) (P0-44, P0-47):**
+   - No Windows recém-formatado, `regsvr32` falhava com código de saída 3 (`ERROR_MOD_NOT_FOUND`) porque a DLL anterior dependia dinamicamente de `libgcc_s_seh-1.dll` e `libstdc++-6.dll`.
+   - O script `native/credential_provider_facekids/build.ps1` foi atualizado para compilar com `-static -static-libgcc -static-libstdc++`.
+   - A `FaceKidsCredentialProvider.dll` agora depende **exclusivamente** de DLLs nativas do sistema operacional Windows (`KERNEL32.dll`, `msvcrt.dll`, `ole32.dll`, `ADVAPI32.dll`, `credui.dll`, `Secur32.dll`), garantindo carregamento imediato tanto no registro quanto no `LogonUI.exe` do Windows.
+
+2. **Centralização do Cadastro no Painel Parental (P0-51):**
+   - O atalho `abrir-facekids.bat` foi atualizado para abrir diretamente o `facekids.admin_dashboard` em vez do script legado de testes `facekids.gui`.
+   - Agora todo o gerenciamento de perfis, cadastro guiado via webcam (12 amostras com foto de perfil recortada), fotos de arquivo, limites diários, concessão de bônus e horários permitidos ocorrem centralizadamente pelo painel gráfico, dispensando o uso de scripts `.bat` avulsos de cadastro (`cadastrar-filho-X.bat`), alinhando o Windows à arquitetura adotada na branch `main`.
+
+3. **Normalização de Nome de Usuário no Instalador (P0-52):**
+   - Em `scripts/Instalar-FaceKids-Nativo.ps1`, a verificação da tarefa agendada comparava o nome retornado pela API de identidade (`DESKTOP-1DPP7DO\MarcosMiniPC`) diretamente com o UserId do agendador (`MarcosMiniPC`), gerando falso erro de validação.
+   - A validação agora normaliza ambos os identificadores desconsiderando prefixos de máquina/domínio.
+
+4. **Permissões NTFS para a Conta Filhos (P0-48, P0-52):**
+   - O instalador agora aplica automaticamente via `icacls` permissão de travessia e leitura (`RX`) para o usuário `Filhos` na pasta do Python e no diretório do projeto, resolvendo o bloqueio do *Python Launcher* ao tentar inicializar o agente em segundo plano.
+
+5. **Isolamento Completo entre Administrador e Filhos via WTS (P0-48, P0-50):**
+   - Removido do instalador o comando `Start-Process -Credential` que disparava o agente artificialmente dentro da sessão desktop do administrador. A execução agora é disparada exclusivamente pelo Windows no logon da conta `Filhos` (`/sc onlogon /ru "Filhos" /it`).
+   - Adicionada a função `is_active_console_user_filhos()` em `facekids/filhos_agent.py` e `facekids/welcome_screen.py`, consultando a API nativa `WTSGetActiveConsoleSessionId` e `WTSQuerySessionInformationW(WTSUserName)`.
+   - Se o usuário ativo no monitor físico for o administrador (`MarcosMiniPC`), o agente **não abre a tela de boas-vindas, não abre o navegador Brave / YouTube Kids e não desconta tempo**. Todo o comportamento infantil fica 100% contido na sessão da conta `Filhos`.
+
+---
+
+## 22. Matriz Final de Atividades e Fechamento (P0-43 a P0-55)
+
+| Atividade | Descrição | Status Final | Evidência / Validação |
+|---|---|---|---|
+| **P0-43** | Corrigir CI Python | **Concluída** | 161 testes aprovados no Windows e no Ubuntu no GitHub Actions |
+| **P0-44** | Compilar CP nativo na CI | **Concluída** | Build C++ com ligação estática e testes de host COM aprovados |
+| **P0-45** | Inicialização independente | **Concluída** | Tarefa agendada interativa no logon do admin (`FaceKidsAuthService`) com sondagem de câmera |
+| **P0-46** | Contrato do Named Pipe | **Concluída** | Parser depth-1 com validação estrita (user, child_id > 0, timestamp <= 15s, token público FACEKIDS_IPC_V1) |
+| **P0-47** | Credential Provider | **Concluída** | 12 testes unitários do cliente de pipe (`TestPipeClient.exe --unit-only`), host COM validado, DLL 100% estática |
+| **P0-48** | Agente e boas-vindas | **Concluída** | Worker assíncrono para pings de pipe, sem bloqueio de quota; isolamento de console via WTS |
+| **P0-49** | Identificação individual | **Concluída** | Eliminação de fallbacks arbitrários, last_seen_ts inicializado com time.time(), sem reutilização de eventos obsoletos |
+| **P0-50** | Quotas e concorrência | **Concluída** | Storage em modo WAL, tempo monotônico, contagem de saldo independente, preservação de bônus |
+| **P0-51** | Painel e permissões | **Concluída** | Painel dos pais em `abrir-facekids.bat`, validação `is_admin_account`, cadastro webcam integrado |
+| **P0-52** | Instalador e rollback | **Concluída** | `Instalar-FaceKids-Nativo.ps1` com normalização de usuário e permissões NTFS; `Desinstalar-FaceKids-Nativo.ps1` não-destrutivo |
+| **P0-53** | Testes integrados | **Concluída** | 161 testes Python + 12 testes C++ todos verdes |
+| **P0-54** | Documentação | **Concluída** | Seções 17 a 22 detalhadas com rastreabilidade completa |
+| **P0-55** | Pacote final de revisão | **Concluída** | Requisitos auditados, regressões mitigadas e ambiente pronto para operação assistida |
