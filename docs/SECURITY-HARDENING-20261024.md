@@ -29,3 +29,26 @@
 4. Revisar o instalador: permissao Modify em ProgramData, senha em argumentos e preservacao da instalacao funcional.
 5. Verificar continuidade do processo na troca de sessao/reboot antes de alterar a inicializacao.
 6. Testes fisicos de webcam, anti-spoof e desbloqueio real exigem intervencao voluntaria do proprietario. Nao instalar componente nativo no PC familiar nesta branch.
+
+
+## Rodada de estabilizacao — 24/10/2026 (continuidade)
+
+- `40936539064fd4c3f3d48e6de739f8e8c0409ba1`: evita falso positivo de testes negativos por falta de quota; adiciona caso positivo com quota realista.
+- `e55ce6dff76c0e35a6dcc7b062331cf6948858ea` e `bc454f2943f89532c99c56dc5c9109d035f30ed6`: o servico facial nao inclui senha na resposta; assertiva Python de privacidade. O Credential Provider segue com sua logica de credenciais, sem alteracao funcional.
+- `0027cbf370347552014f056d5c167460b64da315`: validador isolado de sintaxe JSON, chaves duplicadas, profundidade e limite 2047 bytes.
+- `9a2ab01df4224e9f25ce40eb535555c00ad1513d`: resposta negada quando envelope nao for JSON valido e nao ambiguo.
+- `e732f8261398324cc2606031d8f6e04eed26e669`: regressao contra duplicatas, lixo, truncamento e caso valido aninhado.
+- `2138276509ab354e48870db997cd225a06e80241`: impede confusao entre campo textual e numerico nos campos de autorizacao do envelope.
+- `73c765402f007a80bef3ed218891cf6320023b7f`: casos negativos de tipos incorretos no parser C++.
+
+### Evidencia efetivamente executada
+- Validador C++ puro, em harness isolado Linux `g++ -std=c++17 -Wall -Wextra -Werror -pedantic`: **3 casos validos e 14 casos invalidos aprovados**. Esse teste executou apenas o validador independente, NAO compilou/rodou a DLL Windows e NAO executou o TestPipeClient completo.
+- Codigo/testes Python e C++ publicados na branch. Nao houve execucao local da suite completa nem de webcam real.
+- Consulta GitHub Actions para o commit `73c7654`: a integracao retorna lista vazia de workflows (a consulta desse conector e limitada a runs de pull request) e nenhum status combinado. **CI Windows/Python nao confirmado**; nao tratar lista vazia como sucesso ou como evidencia de ausencia de workflows.
+- O codigo nao alterou `main`, instaladores, tarefas, registro COM ou dispositivos.
+
+### Pendencias imediatas
+1. Inspecionar o workflow `Credential Provider compile and host checks` e o `Unit tests` por commit/branch no GitHub; executar e corrigir ate ficarem verdes.
+2. Validar o fluxo autorizado e o fluxo de negacao do IPC no Windows virtualizado antes de integrar qualquer mudanca na instalacao funcional do PC familiar.
+3. Auditoria e ensaios em VM para ACL do Named Pipe e NTFS ProgramData: nao endurecer cegamente antes de medir a identidade do cliente LogonUI e os acessos necessarios do agente.
+4. Liveness, camera no Secure Desktop e resistencia anti-spoof nao sao comprovadas por estes testes sinteticos.
