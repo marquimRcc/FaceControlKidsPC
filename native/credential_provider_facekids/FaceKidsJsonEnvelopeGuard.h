@@ -99,8 +99,20 @@ class FaceKidsJsonEnvelopeGuard final {
             if (consume('}')) { --depth_; return true; }
             while (true) {
                 std::string key;
-                if (!stringValue(&key) || !keys.insert(key).second ||
-                    !consume(':') || !value()) return false;
+                if (!stringValue(&key) || !keys.insert(key).second || !consume(':'))
+                    return false;
+                whitespace();
+                if (depth_ == 1) {
+                    const bool needsText = key == "status" || key == "user" ||
+                                           key == "protocol_marker" || key == "child_name";
+                    const bool needsNumber = key == "child_id" || key == "remaining" ||
+                                             key == "timestamp";
+                    if (pos_ == s_.size() ||
+                        (needsText && s_[pos_] != '"') ||
+                        (needsNumber && s_[pos_] != '-' &&
+                         !(s_[pos_] >= '0' && s_[pos_] <= '9'))) return false;
+                }
+                if (!value()) return false;
                 if (consume('}')) { --depth_; return true; }
                 if (!consume(',')) return false;
             }
