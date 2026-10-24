@@ -35,10 +35,22 @@ jobs:
           if ($errors.Count -ne 0) { throw "ACL audit PowerShell parse failed: $($errors[0].Message)" }
           $missing = Join-Path $env:RUNNER_TEMP 'facekids-not-installed'
           $result = & ./scripts/Auditar-Permissoes-FaceKids.ps1 -Root $missing | ConvertFrom-Json
-          if (@($result).Count -ne 6) { throw "ACL audit did not report six expected locations" }
+          if (@($result).Count -ne 11) { throw "ACL audit did not report eleven expected locations" }
           if (@($result | Where-Object { $_.Exists }).Count -ne 0) {
             throw "ACL audit found unexpected installed data on disposable runner"
           }
+      - name: Installer read-only preflight on disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:ProgramData 'FaceKids'
+          if (Test-Path -LiteralPath $root) { throw 'Unexpected FaceKids installation in CI' }
+          $report = & ./scripts/Instalar-FaceKids-Nativo.ps1 -PreflightOnly | ConvertFrom-Json
+          if (@($report).Count -ne 11) { throw 'Installer preflight did not enumerate protected paths' }
+          if (Test-Path -LiteralPath $root) { throw 'Preflight must not install any files' }
+          $existingTask = Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue
+          if ($existingTask) { throw 'Preflight registered a task unexpectedly' }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
