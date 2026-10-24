@@ -161,6 +161,55 @@ class Storage:
             """, (person_id,day,float(seconds)))
         return self.used(person_id,day)
 
+    def charge_up_to_available(self, person_id: int, seconds: float,
+                               day: Optional[str] = None) -> float:
+        """Atomically debit no more than available seconds for a trusted caller.
+
+        BEGIN IMMEDIATE serializes read/modify/write across SQLite connections;
+        it is NOT a Windows privilege or authorization boundary. The Filhos
+        account can still tamper with the unprotected legacy database.
+        Returns the actual seconds debited.
+        """
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador invalido")
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Debito deve ser finito e nao negativo")
+        day = date.today().isoformat() if day is None else day
+        if not isinstance(day, str):
+            raise ValueError("Dia invalido")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Dia invalido")
+        except (TypeError, ValueError):
+            raise ValueError("Dia invalido") from None
+
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            row = self.db.execute(
+                "SELECT daily_limit_seconds FROM people WHERE id=?", (person_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(person_id)
+            bonus_row = self.db.execute(
+                "SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            usage_row = self.db.execute(
+                "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            allowed = max(0.0, float(row[0]) +
+                          (float(bonus_row[0]) if bonus_row else 0.0) -
+                          (float(usage_row[0]) if usage_row else 0.0))
+            debit = min(float(seconds), allowed)
+            if debit > 0:
+                self.db.execute("""
+                    INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
+                    ON CONFLICT(person_id,day)
+                    DO UPDATE SET seconds = seconds + excluded.seconds
+                """, (person_id, day, debit))
+            return debit
+
     def bonus(self, person_id: int, day: Optional[str] = None) -> int:
         row=self.db.execute("SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
                             (person_id, day or date.today().isoformat())).fetchone()
