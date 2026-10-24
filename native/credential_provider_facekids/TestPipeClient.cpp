@@ -125,14 +125,14 @@ static int RunParsingUnitTests() {
 
     // Numeric values must be complete JSON numbers, not accepted prefixes.
     const std::string validPrefix = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":";
-    const std::string validSuffix = ",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    const std::string validSuffix = ",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":7200}";
     for (const std::string& badId : {"2junk", "\"2junk\"", "-2", "2.5", "2e1"}) {
         if (FaceKidsPipeClient::ParseResponse(validPrefix + badId + validSuffix).success) {
             std::wcerr << L"[FALHA] child_id malformado aceito.\n";
             return 14;
         }
     }
-    std::string timestampGarbage = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "junk\"}";
+    std::string timestampGarbage = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "junk\",\"remaining\":7200}";
     if (FaceKidsPipeClient::ParseResponse(timestampGarbage).success) {
         std::wcerr << L"[FALHA] timestamp com sufixo aceito.\n";
         return 15;
@@ -155,6 +155,12 @@ static int RunParsingUnitTests() {
     if (FaceKidsPipeClient::ParseResponse(validPrefix + "02" + validSuffix).success) {
         std::wcerr << L"[FALHA] child_id nao canonico aceito.\n";
         return 18;
+    }
+    std::string positiveQuota = quotaPrefix + "7200}";
+    AuthResult withPositiveQuota = FaceKidsPipeClient::ParseResponse(positiveQuota);
+    if (!withPositiveQuota.success || withPositiveQuota.remainingSeconds != 7200) {
+        std::wcerr << L"[FALHA] ALLOW com quota positiva legitima foi recusado.\\n";
+        return 19;
     }
     std::wcout << L"  [PASS] 14. ALLOW exige quota positiva e child_id canonico.\n";
 
