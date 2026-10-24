@@ -101,9 +101,14 @@ def create_security_attributes() -> SECURITY_ATTRIBUTES:
         ):
             sa.lpSecurityDescriptor = p_sd
         else:
-            logger.warning("Falha ao criar SDDL customizado; usando seguranca padrao.")
-            sa.lpSecurityDescriptor = None
+            # Never silently fall back to a process-default DACL for a pipe
+            # consulted by LogonUI during local authentication.
+            logger.error("Falha ao criar SDDL do pipe; recusando abertura insegura.")
+            raise RuntimeError("Named Pipe SDDL conversion failed")
     else:
+        if sys.platform == "win32":
+            logger.error("Advapi32 indisponivel; recusando pipe com ACL padrao.")
+            raise RuntimeError("Named Pipe security API unavailable")
         sa.lpSecurityDescriptor = None
     return sa
 
