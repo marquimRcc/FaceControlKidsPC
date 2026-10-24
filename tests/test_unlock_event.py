@@ -7,7 +7,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-from facekids.unlock_event import validated_unlock_event
+from facekids.unlock_event import validated_unlock_event, enrolled_display_name
+from facekids.storage import Storage
 from facekids.filhos_agent import read_last_unlock_child
 
 
@@ -53,6 +54,21 @@ class UnlockEventTests(unittest.TestCase):
             self.assertIsNone(validated_unlock_event(
                 {**self.event, "child_name": name}, now=self.now
             ))
+
+    def test_enrolled_name_not_overwritten_by_untrusted_notification(self):
+        with TemporaryDirectory() as td:
+            store = Storage(Path(td) / "enrollments.sqlite3")
+            try:
+                valid_id = store.add_person("Real profile", 120)
+                fake_file = {**self.event, "child_id": valid_id, "child_name": "Forged name"}
+                event = validated_unlock_event(fake_file, now=self.now)
+                self.assertIsNotNone(event)
+                self.assertEqual(enrolled_display_name(store, event[0]), "Real profile")
+                self.assertIsNone(enrolled_display_name(store, 999999))
+                for invalid_id in (0, -1, True, str(valid_id), None):
+                    self.assertIsNone(enrolled_display_name(store, invalid_id))
+            finally:
+                store.close()
 
     def test_file_reader_rejects_future_and_bad_id(self):
         with TemporaryDirectory() as td:
