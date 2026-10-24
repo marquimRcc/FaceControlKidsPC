@@ -70,6 +70,15 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
         self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
 
+    def test_uninstaller_audit_exits_before_mutation(self):
+        uninst = (self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        self.assertIn("[switch]$AuditOnly", uninst)
+        self.assertIn("HardwareRollbackVerified = $false", uninst)
+        start = uninst.index("if ($AuditOnly)")
+        stop = uninst.index("return", start)
+        self.assertLess(stop, uninst.index("Stop-Process"))
+        self.assertLess(stop, uninst.index("Remove-Item"))
+
     def test_installer_preflight_returns_before_mutation(self):
         inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
         self.assertIn("[switch]$PreflightOnly", inst)
