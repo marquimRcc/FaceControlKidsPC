@@ -35,7 +35,7 @@ from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
-from .unlock_event import validated_unlock_event
+from .unlock_event import validated_unlock_event, enrolled_display_name
 from .ipc_reply import validated_pipe_allow
 from .ipc_json import parse_local_json
 
@@ -476,6 +476,15 @@ def run_agent():
 
     cid, cname, unlock_ts = read_last_unlock_child()
     if cid is not None:
+        # Child identity labels must come from the enrollment table, not an
+        # editable notification file. This still does not authenticate the event.
+        enrolled_name = enrolled_display_name(store, cid)
+        if enrolled_name is None:
+            logger.warning("Unlock metadata referred to missing enrollment ID %s", cid)
+            cid = None
+        else:
+            cname = enrolled_name
+    if cid is not None:
         last_seen_ts = unlock_ts
         tracker.switch_child(cid, cname)
         time.sleep(1.0)
@@ -524,8 +533,12 @@ def run_agent():
                     if event is not None:
                         new_cid, new_cname, current_ts = event
                         if current_ts > last_seen_ts:
-                            # Recusa IDs inexistentes, sem afetar outras criancas.
+                            # Confirma que o perfil existe e usa seu nome local.
                             store.remaining(new_cid, today)
+                            enrolled_name = enrolled_display_name(store, new_cid)
+                            if enrolled_name is None:
+                                raise KeyError(new_cid)
+                            new_cname = enrolled_name
                             last_seen_ts = current_ts
                             tracker.switch_child(new_cid, new_cname)
                             if (time.time() - current_ts) < 15.0:
