@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "FaceKidsJsonEnvelopeGuard.h"
+#include "FaceKidsPipePeerIdentity.h"
 #include <cmath>
 #include <ctime>
 #include <limits>
@@ -204,6 +205,14 @@ public:
 
         if (hPipe == INVALID_HANDLE_VALUE) {
             result.message = L"Servico FaceKids nao esta em execucao.";
+            return result;
+        }
+
+        // Strict server identity can be enabled only by protected HKLM policy.
+        // Default remains off until the Windows VM hardware/session tests pass.
+        if (!FaceKidsPipePeerIdentity::AuthorizeIfConfigured(hPipe)) {
+            CloseHandle(hPipe);
+            result.message = L"Identidade do servico facial nao autorizada.";
             return result;
         }
 
