@@ -1,8 +1,16 @@
 import { z } from "zod";
 
+export const childNameSchema = z.string().trim().min(1).max(80).refine(
+  val => !/[\x00-\x1f\x7f]/.test(val),
+  "Nome não pode conter caracteres de controle"
+);
+
+export const dailyLimitMinutesSchema = z.number().int().min(1).max(1440);
+export const bonusMinutesSchema = z.number().int().min(1).max(480);
+
 export const childStatusSchema = z.object({
   id: z.number().int().positive(),
-  name: z.string().trim().min(1).max(80),
+  name: childNameSchema,
   initials: z.string().trim().min(1).max(3),
   remainingSeconds: z.number().int().nonnegative(),
   dailyLimitSeconds: z.number().int().positive(),

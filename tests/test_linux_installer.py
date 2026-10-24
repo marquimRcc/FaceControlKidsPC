@@ -1,3 +1,4 @@
+import sys
 import unittest
 from pathlib import Path
 
@@ -155,6 +156,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn('mv "${STAGING}" "${TARGET}"', bundle_installer)
         self.assertNotIn("/home/marcos", bundle_installer)
 
+    @unittest.skipIf(sys.platform == "win32", "Linux desktop bundle installer requires POSIX environment")
     def test_desktop_bundle_installer_functional_lifecycle(self):
         import hashlib
         import os

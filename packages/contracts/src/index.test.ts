@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraProbeSchema, demoSnapshot, disconnectedSnapshot, enrollmentStatusSchema, profilePhotoSchema, systemSnapshotSchema } from ".";
+import { bonusMinutesSchema, cameraProbeSchema, childNameSchema, dailyLimitMinutesSchema, demoSnapshot, disconnectedSnapshot, enrollmentStatusSchema, profilePhotoSchema, systemSnapshotSchema } from ".";
 
 describe("systemSnapshotSchema", () => {
   it("accepts the typed demo state", () => {
@@ -69,5 +69,29 @@ describe("systemSnapshotSchema", () => {
       { date: "2026-10-23", usedSeconds: -10 },
     ];
     expect(() => systemSnapshotSchema.parse(negativeSeconds)).toThrow();
+  });
+
+  it("validates and sanitizes child names", () => {
+    expect(childNameSchema.parse("  Lucas  ")).toBe("Lucas");
+    expect(childNameSchema.parse("Maria Eduarda")).toBe("Maria Eduarda");
+    expect(() => childNameSchema.parse("")).toThrow();
+    expect(() => childNameSchema.parse("   ")).toThrow();
+    expect(() => childNameSchema.parse("A".repeat(81))).toThrow();
+    expect(() => childNameSchema.parse("Lucas\x00Injection")).toThrow();
+    expect(() => childNameSchema.parse("Lucas\nNewline")).toThrow();
+    expect(() => childNameSchema.parse("Lucas\x1b[31mRed")).toThrow();
+  });
+
+  it("validates daily limit and bonus ranges", () => {
+    expect(dailyLimitMinutesSchema.parse(60)).toBe(60);
+    expect(dailyLimitMinutesSchema.parse(1440)).toBe(1440);
+    expect(() => dailyLimitMinutesSchema.parse(0)).toThrow();
+    expect(() => dailyLimitMinutesSchema.parse(1441)).toThrow();
+    expect(() => dailyLimitMinutesSchema.parse(60.5)).toThrow();
+
+    expect(bonusMinutesSchema.parse(30)).toBe(30);
+    expect(bonusMinutesSchema.parse(480)).toBe(480);
+    expect(() => bonusMinutesSchema.parse(0)).toThrow();
+    expect(() => bonusMinutesSchema.parse(481)).toThrow();
   });
 });

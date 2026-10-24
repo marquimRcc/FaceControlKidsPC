@@ -333,6 +333,8 @@ class LinuxSessionTests(unittest.TestCase):
             for request in (
                 {"op": "unknown"},
                 {"op": "add_child", "name": "", "minutes": 90},
+                {"op": "add_child", "name": "   \n\t  ", "minutes": 90},
+                {"op": "add_child", "name": "A" * 81, "minutes": 90},
                 {"op": "start_enrollment", "childId": 999},
             ):
                 with self.subTest(request=request), self.assertRaises(
@@ -474,6 +476,33 @@ class LinuxSessionTests(unittest.TestCase):
     def test_admin_check_handles_multiple_groups_and_fallbacks(self):
         self.assertTrue(uid_is_admin(0, "wheel,sudo"))
         self.assertFalse(uid_is_admin(99999, "nonexistent_group"))
+
+    def test_sanitize_child_name_strips_control_characters_and_validates(self):
+        from facekids.linux_runtime import sanitize_child_name
+        self.assertEqual(sanitize_child_name("  Lucas  "), "Lucas")
+        self.assertEqual(sanitize_child_name("João Pedro"), "João Pedro")
+        self.assertEqual(sanitize_child_name("Lucas\x1b[31m\n"), "Lucas[31m")
+        with self.assertRaises(ValueError):
+            sanitize_child_name("")
+        with self.assertRaises(ValueError):
+            sanitize_child_name("   \n\t  ")
+        with self.assertRaises(ValueError):
+            sanitize_child_name("A" * 81)
+        with self.assertRaises(ValueError):
+            sanitize_child_name(123)  # type: ignore
+
+    def test_admin_protocol_rename_sanitizes_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Storage(Path(directory) / "children.sqlite3")
+            child_id = store.add_person("Ana", 90)
+            runtime = object.__new__(LinuxFaceQuotaRuntime)
+            runtime._admin_lock = __import__("threading").Lock()
+            runtime._enrollment = None
+            runtime._dispatch_admin(store, {"op": "rename_child", "childId": child_id, "name": "  Ana Clara\n"})
+            people = store.people()
+            self.assertEqual(people[0][1], "Ana Clara")
+            store.close()
+
 
 
 if __name__ == "__main__":

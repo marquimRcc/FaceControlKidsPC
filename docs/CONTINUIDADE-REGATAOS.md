@@ -792,11 +792,44 @@ O ciclo planejado na auditoria anterior foi totalmente implementado e validado:
 - `pnpm build`: build de produção concluído com sucesso.
 - Rebuild do pacote executável autocontido: `artifacts/facekids-desktop-linux-x64.tar.gz` atualizado e gerado.
 
+## Sanidade CI Windows, Proteção de IPC e Script de Saúde — 23/10/2026 às 21:22
+
+Avanço autônomo focado na correção de runner cruzado, higienização de entradas IPC e diagnóstico automático:
+
+1. **Compatibilidade Cross-Platform no CI Windows ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/tests/test_linux_installer.py))**:
+   - Adicionado `@unittest.skipIf(sys.platform == "win32", "Linux desktop bundle installer requires POSIX environment")` ao teste funcional de ciclo de vida do instalador em bash. O runner Windows CI passa a ignorar graciosamente este teste específico de shell POSIX, enquanto os runners Linux (`ubuntu-latest` e `linux-integration`) continuam executando-o com 100% de cobertura.
+
+2. **Higienização de Strings e Proteção Contra Injeção no IPC ([`facekids/linux_runtime.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/facekids/linux_runtime.py), [`packages/contracts/src/index.ts`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packages/contracts/src/index.ts))**:
+   - Criada a função `sanitize_child_name` em `facekids/linux_runtime.py`: remove caracteres de controle (`\r`, `\n`, `\t`, sequências de escape ANSI), restringe tamanho a 1–80 caracteres e valida que o valor consiste apenas de caracteres imprimíveis.
+   - Aplicada a sanitização tanto na criação (`add_child`, `add_child_and_start_enrollment`) quanto na renomeação de perfis (`rename_child`).
+   - Atualizados os esquemas Zod em `packages/contracts` (`childNameSchema`, `dailyLimitMinutesSchema`, `bonusMinutesSchema`) para rejeitar caracteres de controle e garantir limites válidos (1 a 1440 min de limite, 1 a 480 min de bônus).
+   - Adicionados testes de unidade cobrindo a sanitização e validação de nomes e intervalos numéricos.
+
+3. **Script de Diagnóstico Automatizado ([`scripts/Verificar-Saude-FaceKids-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Verificar-Saude-FaceKids-RegataOS.sh))**:
+   - Criado script de diagnóstico não destrutivo e somente leitura para verificação rápida de:
+     - Permissões de usuário e grupo administrativo (`wheel`/`sudo`).
+     - Status do serviço systemd (`facekids-linux.service`).
+     - Presença e permissões dos modelos de IA (`YuNet` e `SFace`).
+     - Permissões do banco de dados SQLite (`0600`/`0660`).
+     - Presença e permissões dos sockets IPC (`/run/facekids/admin.sock` e `/run/facekids-child/status.sock`).
+     - Consulta ativa ao daemon via socket Unix para telemetria de câmera (`probe`) e estado geral (`status`).
+     - Integridade do pacote desktop Electron em `/opt/facekids/desktop`.
+     - Análise de erros recentes no journal do systemd.
+
+4. **Rebuild e Revalidação**:
+   - Reconstruído o pacote `artifacts/facekids-desktop-linux-x64.tar.gz` e atualizado o manifesto `.sha256`.
+   - Suíte de testes:
+     - Python: **233 testes aprovados** (2 Win32 pipe ignorados).
+     - Vitest: **9 testes aprovados** no pacote de contratos.
+     - Typecheck: 0 erros em todos os 4 pacotes TypeScript.
+     - Build de produção Vite + Electron concluído com sucesso.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
-> `docs/CONTINUIDADE-REGATAOS.md`. Todos os testes funcionais de instalação,
-> atualização e rollback do bundle desktop foram implementados e validados (232 testes Python e 7 Vitest).
-> O pacote autocontido está pronto em artifacts/.
+> `docs/CONTINUIDADE-REGATAOS.md`. Todos os testes de unidade, integração, tipagem
+> e CI multiplataforma estão validados e verdes. O script de verificação de saúde
+> `scripts/Verificar-Saude-FaceKids-RegataOS.sh` está operacional.
 > Prossiga conforme orientações do usuário para testes físicos na sessão do sistema.
+

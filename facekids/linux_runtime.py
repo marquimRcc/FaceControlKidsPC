@@ -130,6 +130,16 @@ class LinuxRuntimeConfig:
             raise ValueError("Grupo administrador inválido")
 
 
+def sanitize_child_name(raw: str) -> str:
+    """Higieniza o nome de uma criança removendo caracteres de controle e limitando tamanho."""
+    if not isinstance(raw, str):
+        raise ValueError("Nome deve ser texto")
+    cleaned = "".join(ch for ch in raw if ch.isprintable() and ch not in "\r\n\t").strip()
+    if not (1 <= len(cleaned) <= 80):
+        raise ValueError("Nome de criança deve ter entre 1 e 80 caracteres válidos")
+    return cleaned
+
+
 def resolve_admin_gids(group_names: str | tuple[str, ...]) -> set[int]:
     """Descobre os GIDs válidos para os grupos administrativos indicados."""
     if grp is None:
@@ -364,6 +374,7 @@ class LinuxFaceQuotaRuntime:
             name, minutes = request.get("name"), request.get("minutes")
             if not isinstance(name, str) or type(minutes) is not int:
                 raise ValueError("Nome ou limite inválido")
+            name = sanitize_child_name(name)
             if op == "add_child_and_start_enrollment":
                 with self._admin_lock:
                     if self._enrollment and self._enrollment["state"] == "capturing":
@@ -416,6 +427,7 @@ class LinuxFaceQuotaRuntime:
             if (type(child_id) is not int or child_id <= 0
                     or not isinstance(name, str)):
                 raise ValueError("Criança ou nome inválido")
+            name = sanitize_child_name(name)
             store.update_person_name(child_id, name)
             return {"ok": True}
         if op == "delete_child":
