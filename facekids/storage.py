@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import math
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -141,9 +142,18 @@ class Storage:
         return float(row[0]) if row else 0.0
 
     def charge(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
-        if seconds < 0:
-            raise ValueError("Não é permitido descontar tempo negativo")
-        day = day or date.today().isoformat()
+        # Never persist NaN/Inf, strings or negative clock differences in the ledger.
+        # This guard does not authenticate the caller or make local SQLite tamperproof.
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Tempo debitado deve ser um número finito não negativo")
+        day = date.today().isoformat() if day is None else day
+        if not isinstance(day, str):
+            raise ValueError("Dia inválido")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Dia inválido")
+        except (TypeError, ValueError):
+            raise ValueError("Dia inválido") from None
         with self.db:
             self.db.execute("""
                 INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
