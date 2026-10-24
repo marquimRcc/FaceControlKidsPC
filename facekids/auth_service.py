@@ -255,7 +255,6 @@ class FaceAuthenticator:
                 "child_name": child_name,
                 "remaining": remaining_seconds,
                 "user": "Filhos",
-                "password": "1",
             }
         finally:
             store.close()
