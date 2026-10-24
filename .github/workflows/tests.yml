@@ -82,6 +82,36 @@ jobs:
               $report.SafeForAuthentication -ne $false) {
             throw 'Read-only diagnostic must not claim authentication trust'
           }
+      - name: Simulate read-only security isolation plan
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Planejar-Isolamento-FaceKids.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw "Isolation plan parse failed: $($errors[0].Message)" }
+          $data = Join-Path $env:RUNNER_TEMP 'facekids-synthetic-data'
+          $protected = Join-Path $env:RUNNER_TEMP 'facekids-protected-should-not-exist'
+          New-Item -ItemType Directory -Path $data -Force | Out-Null
+          $dll = Join-Path $data 'FaceKidsCredentialProvider.dll'
+          Set-Content -LiteralPath $dll -Value 'synthetic, not a DLL' -Encoding utf8
+          try {
+            $before = (Get-FileHash -LiteralPath $dll).Hash
+            $plan = & $script -DataRoot $data -ProtectedRoot $protected | ConvertFrom-Json
+            if ($plan.ReadyToDeploy -or $plan.MutationsPerformed -ne 0 -or
+                -not $plan.RequiresServiceOwnedQuotaLedger -or
+                @($plan.ProposedAssets).Count -ne 3) {
+              throw 'Isolation plan unexpectedly approved deployment or changed scope'
+            }
+            if ((Get-FileHash -LiteralPath $dll).Hash -ne $before -or
+                (Test-Path -LiteralPath $protected)) {
+              throw 'Read-only migration planner modified filesystem'
+            }
+          } finally {
+            Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+          }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
