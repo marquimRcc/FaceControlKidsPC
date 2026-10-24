@@ -40,6 +40,17 @@ class TestAuthService(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "security API"):
                 create_security_attributes()
 
+    def test_auth_pipe_rejects_remote_clients_without_changing_message_mode(self):
+        from facekids.auth_service import (
+            PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_MESSAGE,
+            PIPE_READMODE_MESSAGE, auth_pipe_mode_flags
+        )
+        self.assertEqual(PIPE_REJECT_REMOTE_CLIENTS, 0x00000008)
+        flags = auth_pipe_mode_flags()
+        self.assertEqual(flags & PIPE_REJECT_REMOTE_CLIENTS, PIPE_REJECT_REMOTE_CLIENTS)
+        self.assertEqual(flags & PIPE_TYPE_MESSAGE, PIPE_TYPE_MESSAGE)
+        self.assertEqual(flags & PIPE_READMODE_MESSAGE, PIPE_READMODE_MESSAGE)
+
     def test_command_routing_logic(self):
         # Exercise the actual command decoder, not a test-only copy.
         from facekids.pipe_protocol import decode_pipe_command
