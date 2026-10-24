@@ -46,7 +46,13 @@ $observed = @(
         }
 )
 
+$policyKey = 'HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider'
+$policy = Get-ItemProperty -LiteralPath $policyKey -ErrorAction SilentlyContinue
+$enforceSid = ($null -ne $policy -and $policy.EnforceAuthServiceSid -eq 1)
+
 [pscustomobject]@{
+    TrustEnforcedByConfiguration = [bool]$enforceSid
+    ExpectedServiceSidConfigured = [bool]($policy -and $policy.AuthServiceSid)
     Task = $taskReport
     AuthProcesses = $observed
     NamedPipeServerIdentityVerified = $false
