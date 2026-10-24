@@ -113,6 +113,11 @@ int main() {
         FinishServer(thread, server);
         Require(provider->IsAutoLogonReady(), "provider did not arm auto-logon after ALLOW");
 
+        // LogonUI may refresh the callback while it re-enumerates after
+        // CredentialsChanged. Re-advising alone must not consume the ALLOW.
+        provider->Advise(nullptr, 42);
+        Require(provider->IsAutoLogonReady(), "provider Advise consumed pending auto-logon");
+
         // CredentialsChanged makes LogonUI unadvise/advise the existing tile
         // before it asks for GetSerialization. The authorization must survive
         // that notification-only lifecycle transition.
@@ -130,6 +135,19 @@ int main() {
         Require(response == CPGSR_RETURN_CREDENTIAL_FINISHED && serialization.cbSerialization != 0,
                 "authorized credential was not serialized after re-enumeration");
         CoTaskMemFree(serialization.rgbSerialization);
+        CoTaskMemFree(text);
+
+        // If Windows rejects the password/account serialization, the next
+        // enumeration must not auto-submit stale state without a new face
+        // authorization.
+        credential->ReportResult(static_cast<NTSTATUS>(0xC000006D), 0, &text, &icon);
+        Require(!provider->IsAutoLogonReady(), "failed Windows logon left auto-logon armed");
+        response = CPGSR_RETURN_CREDENTIAL_FINISHED;
+        serialization = {};
+        text = nullptr;
+        credential->GetSerialization(&response, &serialization, &text, &icon);
+        Require(response == CPGSR_NO_CREDENTIAL_NOT_FINISHED && serialization.cbSerialization == 0,
+                "failed Windows logon reused stale serialized credentials");
         CoTaskMemFree(text);
         provider->UnAdvise();
         provider->Release();

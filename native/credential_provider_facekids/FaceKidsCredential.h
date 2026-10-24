@@ -19,6 +19,8 @@ private:
     bool m_authEnabled = false;
     unsigned long m_authGeneration = 0;
 
+    FaceKidsProvider* AcquireProvider();
+
 public:
     FaceKidsCredential(FaceKidsProvider* pProvider = nullptr);
     ~FaceKidsCredential();

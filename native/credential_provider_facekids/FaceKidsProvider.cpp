@@ -87,7 +87,8 @@ void FaceKidsProvider::NotifyAuthSuccess() {
 
     if (pEvents) {
         LogCP(L"[FaceKidsProvider] Disparando CredentialsChanged para o LogonUI (context=%llu)...", (unsigned long long)context);
-        pEvents->CredentialsChanged(context);
+        const HRESULT hr = pEvents->CredentialsChanged(context);
+        LogCP(L"[FaceKidsProvider] CredentialsChanged retornou 0x%08lx", (unsigned long)hr);
         pEvents->Release();
     } else {
         LogCP(L"[FaceKidsProvider] AVISO: m_pEvents e nulo em NotifyAuthSuccess");
@@ -148,11 +149,17 @@ HRESULT STDMETHODCALLTYPE FaceKidsProvider::SetSerialization(const CREDENTIAL_PR
 HRESULT STDMETHODCALLTYPE FaceKidsProvider::Advise(ICredentialProviderEvents* pcpe, UINT_PTR upAdviseContext) {
     LogCP(L"[FaceKidsProvider] Advise: pcpe=%p, context=%llu", pcpe, (unsigned long long)upAdviseContext);
     EnterCriticalSection(&m_cs);
+    ICredentialProviderEvents* previousEvents = m_pEvents;
     m_pEvents = pcpe;
     if (m_pEvents) m_pEvents->AddRef();
     m_upAdviseContext = upAdviseContext;
-    m_readyToAutoLogon = false;
+    const bool ready = m_readyToAutoLogon;
     LeaveCriticalSection(&m_cs);
+    if (previousEvents) previousEvents->Release();
+    // Advise can be repeated while LogonUI re-enumerates after
+    // CredentialsChanged. UnAdvise and explicit credential cancellation are
+    // the lifecycle boundaries that revoke a previous facial authorization.
+    LogCP(L"[FaceKidsProvider] Advise concluido: autoLogonReady=%d", ready);
     return S_OK;
 }
 

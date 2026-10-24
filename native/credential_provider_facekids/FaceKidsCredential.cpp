@@ -44,6 +44,14 @@ ULONG STDMETHODCALLTYPE FaceKidsCredential::Release() {
     return static_cast<ULONG>(n);
 }
 
+FaceKidsProvider* FaceKidsCredential::AcquireProvider() {
+    EnterCriticalSection(&m_cs);
+    FaceKidsProvider* provider = m_pProvider;
+    if (provider && !provider->TryAddRef()) provider = nullptr;
+    LeaveCriticalSection(&m_cs);
+    return provider;
+}
+
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::Advise(ICredentialProviderCredentialEvents* pcpce) {
     LogCP(L"[FaceKidsCredential] Advise");
     EnterCriticalSection(&m_cs);
@@ -194,8 +202,12 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::SetDeselected() {
     m_authEnabled = false;
     ++m_authGeneration;
     m_lastAuth = {};
-    if (m_pProvider) m_pProvider->ResetAuth();
     LeaveCriticalSection(&m_cs);
+    FaceKidsProvider* provider = AcquireProvider();
+    if (provider) {
+        provider->ResetAuth();
+        provider->Release();
+    }
     return S_OK;
 }
 
@@ -252,6 +264,11 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::CommandLinkClicked(DWORD dwFieldID
         ++m_authGeneration;
         m_authEnabled = true;
         LeaveCriticalSection(&m_cs);
+        FaceKidsProvider* provider = AcquireProvider();
+        if (provider) {
+            provider->ResetAuth();
+            provider->Release();
+        }
         TriggerAsyncAuth();
         return S_OK;
     }
@@ -308,15 +325,25 @@ HRESULT STDMETHODCALLTYPE FaceKidsCredential::GetSerialization(
 HRESULT STDMETHODCALLTYPE FaceKidsCredential::ReportResult(
     NTSTATUS status, NTSTATUS subStatus, PWSTR* ppszOptionalStatusText, CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon) {
     LogCP(L"[FaceKidsCredential] ReportResult: status=0x%lx, subStatus=0x%lx", (unsigned long)status, (unsigned long)subStatus);
+    const bool failed = status != 0;
     EnterCriticalSection(&m_cs);
-    if (status != 0) {
+    if (failed) {
         m_lastAuth = {};
         m_statusText = L"Falha na autenticacao do Windows. Clique para tentar novamente.";
     }
     LeaveCriticalSection(&m_cs);
 
+    // Windows rejected the serialized credential. Do not leave the provider's
+    // auto-logon bit armed with an empty/stale m_lastAuth, otherwise a later
+    // enumeration can loop into GetSerialization without a fresh face check.
+    FaceKidsProvider* provider = failed ? AcquireProvider() : nullptr;
+    if (provider) {
+        provider->ResetAuth();
+        provider->Release();
+    }
+
     if (ppszOptionalStatusText) *ppszOptionalStatusText = nullptr;
-    if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = (status == 0) ? CPSI_SUCCESS : CPSI_ERROR;
+    if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = failed ? CPSI_ERROR : CPSI_SUCCESS;
     return S_OK;
 }
 
