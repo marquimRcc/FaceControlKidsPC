@@ -37,6 +37,7 @@ from .session import SessionState, current_session_state
 from .storage import Storage
 from .unlock_event import validated_unlock_event
 from .ipc_reply import validated_pipe_allow
+from .ipc_json import parse_local_json
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +278,7 @@ def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
         ok = perform_io(kernel32.ReadFile, buf, 2047, bytes_read)
         if ok and bytes_read.value > 0:
             resp_str = buf.value.decode("utf-8", errors="ignore").strip()
-            return json.loads(resp_str)
+            return parse_local_json(resp_str)
     except Exception as e:
         logger.debug("Falha na consulta ao pipe em sessao: %s", e)
     finally:
@@ -326,7 +327,7 @@ def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
     if LAST_UNLOCK_FILE.exists():
         try:
             event = validated_unlock_event(
-                json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+                parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
             )
             if event is not None:
                 return event
@@ -518,7 +519,7 @@ def run_agent():
             if LAST_UNLOCK_FILE.exists():
                 try:
                     event = validated_unlock_event(
-                        json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+                        parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
                     )
                     if event is not None:
                         new_cid, new_cname, current_ts = event
