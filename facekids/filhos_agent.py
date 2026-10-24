@@ -35,6 +35,7 @@ from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .unlock_event import validated_unlock_event
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -320,25 +321,16 @@ class InSessionFaceIdentifier:
 
 
 def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
-    """Le as informacoes do ultimo filho identificado se recente e de hoje."""
+    """Le metadados recentes de desbloqueio, sem tratar o arquivo como prova de identidade."""
     if LAST_UNLOCK_FILE.exists():
         try:
-            data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            ts = float(data.get("timestamp", 0))
-            is_fresh = True
-            if ts > 0:
-                if (time.time() - ts) >= 600:
-                    is_fresh = False
-                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
-                    is_fresh = False
-
-            if is_fresh:
-                cid = data.get("child_id")
-                cname = data.get("child_name", f"Crianca {cid}")
-                if cid is not None:
-                    return int(cid), str(cname), ts
-        except Exception as e:
-            logger.warning("Erro ao ler last_unlock.json: %s", e)
+            event = validated_unlock_event(
+                json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+            )
+            if event is not None:
+                return event
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            logger.warning("Evento local de desbloqueio invalido: %s", exc)
     return None, "", 0.0
 
 
@@ -520,34 +512,26 @@ def run_agent():
                 today = now_day
                 tracker.reset_warnings()
 
-            # A. Verificar se houve novo evento de desbloqueio facial no lock screen
+            # A. Metadados de ultimo desbloqueio: validar data e identidade antes da troca.
+            # Nota: last_unlock.json ainda nao e uma prova criptografica da origem.
             if LAST_UNLOCK_FILE.exists():
                 try:
-                    data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-                    current_ts = float(data.get("timestamp", 0.0))
-                    # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
-                    is_fresh = (
-                        (current_ts > last_seen_ts)
-                        and ((time.time() - current_ts) < 600.0)
-                        and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())
+                    event = validated_unlock_event(
+                        json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
                     )
-                    if is_fresh:
-                        last_seen_ts = current_ts
-                        new_cid = data.get("child_id")
-                        new_cname = data.get("child_name", f"Crianca {new_cid}")
-                        if new_cid is not None:
-                            tracker.switch_child(int(new_cid), str(new_cname))
-                        # Se recente (menos de 15s), reabre a tela de boas-vindas
-                        if (time.time() - current_ts) < 15.0:
-                            logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
-                            time.sleep(0.5)
-                            trigger_welcome_screen()
-                    elif current_ts > last_seen_ts:
-                        # Evento expirado: avanca ponteiro sem comutar filho
-                        last_seen_ts = current_ts
-                        logger.debug("Evento facial ignorado por estar expirado (ts=%.1f)", current_ts)
-                except Exception as e:
-                    logger.debug("Erro ao ler unlock timestamp: %s", e)
+                    if event is not None:
+                        new_cid, new_cname, current_ts = event
+                        if current_ts > last_seen_ts:
+                            # Recusa IDs inexistentes, sem afetar outras criancas.
+                            store.remaining(new_cid, today)
+                            last_seen_ts = current_ts
+                            tracker.switch_child(new_cid, new_cname)
+                            if (time.time() - current_ts) < 15.0:
+                                logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
+                                time.sleep(0.5)
+                                trigger_welcome_screen()
+                except (OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
+                    logger.debug("Metadados de desbloqueio ignorados: %s", exc)
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
