@@ -80,6 +80,48 @@ class StorageTest(unittest.TestCase):
             finally:
                 db.close()
 
+    def test_service_tick_receipt_blocks_replay_across_connections(self):
+        with TemporaryDirectory() as d:
+            path = Path(d) / "ledger.sqlite3"
+            first_connection = Storage(path)
+            second_connection = Storage(path)
+            try:
+                child = first_connection.add_person("Child", 1)
+                day = "2026-10-24"
+                first_id = "0123456789abcdef0123456789abcdef"
+                second_id = "11111111111111111111111111111111"
+                self.assertEqual(first_connection.charge_capped_once(first_id, child, 40, day), 40)
+                self.assertEqual(second_connection.charge_capped_once(first_id, child, 40, day), 0)
+                with self.assertRaises(ValueError):
+                    second_connection.charge_capped_once(first_id, child, 30, day)
+                self.assertEqual(second_connection.charge_capped_once(second_id, child, 40, day), 20)
+                self.assertEqual(first_connection.remaining(child, day), 0)
+                self.assertEqual(first_connection.used(child, day), 60)
+                self.assertEqual(first_connection.charge_capped_once(second_id, child, 40, day), 0)
+            finally:
+                second_connection.close()
+                first_connection.close()
+
+    def test_service_tick_rejects_malformed_identity_and_rolls_back(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "ledger.sqlite3")
+            try:
+                cid = db.add_person("Child", 1)
+                day = "2026-10-24"
+                for bad_id in ("", "a" * 31, "A" * 32, "z" * 32, None):
+                    with self.subTest(event_id=bad_id), self.assertRaises(ValueError):
+                        db.charge_capped_once(bad_id, cid, 10, day)
+                good_id = "22222222222222222222222222222222"
+                for seconds in (float("nan"), float("inf"), -3, True, "10"):
+                    with self.subTest(amount=seconds), self.assertRaises(ValueError):
+                        db.charge_capped_once(good_id, cid, seconds, day)
+                with self.assertRaises(KeyError):
+                    db.charge_capped_once(good_id, 99999, 5, day)
+                self.assertEqual(db.charge_capped_once(good_id, cid, 10, day), 10)
+                self.assertEqual(db.used(cid, day), 10)
+            finally:
+                db.close()
+
     def test_bonus_total_capped_per_child_and_day(self):
         with TemporaryDirectory() as d:
             db = Storage(Path(d) / "quotas.sqlite3")
