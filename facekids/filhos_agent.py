@@ -563,8 +563,11 @@ def run_agent():
                             try:
                                 # A quota e o curfew sao revalidados localmente.
                                 if store.remaining(cid, today) > 0 and not store.is_curfew_active()[0]:
-                                    logger.info("Identificacao facial em sessao: %s (ID %d)", cname, cid)
-                                    tracker.switch_child(cid, cname)
+                                    canonical_name = enrolled_display_name(store, cid)
+                                    if canonical_name is None:
+                                        raise KeyError(cid)
+                                    logger.info("Identificacao facial em sessao: %s (ID %d)", canonical_name, cid)
+                                    tracker.switch_child(cid, canonical_name)
                                     last_seen_ts = max(last_seen_ts, auth_ts)
                                     trigger_welcome_screen()
                             except KeyError:
