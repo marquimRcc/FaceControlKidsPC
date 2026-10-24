@@ -45,11 +45,11 @@ class TestAuthService(unittest.TestCase):
         from facekids.pipe_protocol import decode_pipe_command
 
         self.assertEqual(decode_pipe_command(b"PING"), ("PING", None))
-        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\\n"), ("AUTH_QUERY", None))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\n"), ("AUTH_QUERY", None))
         self.assertEqual(decode_pipe_command(b"QUERY"), ("QUERY", None))
         self.assertEqual(decode_pipe_command(b"UNKNOWN"), (None, "INVALID_COMMAND"))
         self.assertEqual(decode_pipe_command(b"X" * 600), (None, "INVALID_REQUEST"))
-        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\\x00"), (None, "INVALID_REQUEST"))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\x00"), (None, "INVALID_REQUEST"))
 
     def test_authenticator_nonexistent_db(self):
         auth = FaceAuthenticator(Path("models"), Path("nonexistent.sqlite3"))
