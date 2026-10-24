@@ -36,6 +36,7 @@ from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
 from .unlock_event import validated_unlock_event
+from .ipc_reply import validated_pipe_allow
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -542,18 +543,38 @@ def run_agent():
                 if pipe_resp:
                     status = pipe_resp.get("status")
                     if status == "ALLOW":
-                        cid = pipe_resp.get("child_id") or pipe_resp.get("data", {}).get("child_id")
-                        cname = pipe_resp.get("child_name") or pipe_resp.get("data", {}).get("child_name", f"Crianca {cid}")
-                        if cid is not None:
-                            logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
-                            tracker.switch_child(int(cid), str(cname))
-                            last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
-                            trigger_welcome_screen()
-                    elif status in ("DENY_QUOTA", "DENY_CURFEW"):
-                        msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
-                        show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
-                        time.sleep(1.2)
-                        lock_current_session()
+                        decision = validated_pipe_allow(pipe_resp)
+                        if decision is not None:
+                            cid, cname, auth_ts = decision
+                            try:
+                                # A quota e o curfew sao revalidados localmente.
+                                if store.remaining(cid, today) > 0 and not store.is_curfew_active()[0]:
+                                    logger.info("Identificacao facial em sessao: %s (ID %d)", cname, cid)
+                                    tracker.switch_child(cid, cname)
+                                    last_seen_ts = max(last_seen_ts, auth_ts)
+                                    trigger_welcome_screen()
+                            except KeyError:
+                                logger.warning("Pipe indicou perfil de crianca inexistente: %s", cid)
+                        else:
+                            logger.warning("Resposta ALLOW do IPC recusada por campos invalidos.")
+                    elif status == "DENY_QUOTA":
+                        # Rejeita bloqueio por mensagem forjada sem corroboracao no ledger.
+                        details = pipe_resp.get("data")
+                        cid = details.get("child_id") if isinstance(details, dict) else None
+                        if type(cid) is int and cid > 0:
+                            try:
+                                if store.remaining(cid, today) <= 0:
+                                    show_toast("FaceControl Kids", "Tempo diario esgotado.", icon="🔒", color="#F38BA8")
+                                    time.sleep(1.2)
+                                    lock_current_session()
+                            except KeyError:
+                                logger.debug("Quota negada para perfil inexistente.")
+                    elif status == "DENY_CURFEW":
+                        blocked, msg = store.is_curfew_active()
+                        if blocked:
+                            show_toast("FaceControl Kids", msg, icon="🔒", color="#F38BA8")
+                            time.sleep(1.2)
+                            lock_current_session()
 
                 if tracker.current_child_id is None:
                     identifier.trigger_if_due()
