@@ -140,6 +140,12 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("/usr/local/bin/facekids-child-gui", child_desktop)
         self.assertIn("Icon=${ICON}", child_desktop)
 
+        sddm_script = (ROOT / "scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh").read_text(encoding="utf-8")
+        self.assertIn("RememberLastUser=true", sddm_script)
+        self.assertIn("User=${CHILD_USER}", sddm_script)
+        self.assertIn("sddm/faces", sddm_script)
+        self.assertIn(".face.icon", sddm_script)
+
     def test_self_contained_desktop_bundle_has_integrity_and_atomic_install(self):
         builder = (ROOT / "scripts/Empacotar-FaceKids-Desktop-Linux.sh").read_text(
             encoding="utf-8"

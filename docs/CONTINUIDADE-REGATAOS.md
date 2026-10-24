@@ -824,12 +824,23 @@ Avanço autônomo focado na correção de runner cruzado, higienização de entr
      - Typecheck: 0 erros em todos os 4 pacotes TypeScript.
      - Build de produção Vite + Electron concluído com sucesso.
 
+## Configuração de Pré-Seleção da Conta Filhos no SDDM — 23/10/2026 às 22:00
+
+Implementada a Opção 2 de inicialização do sistema, onde ao ligar o notebook a conta `filhos` é automaticamente selecionada no login manager SDDM:
+
+1. **Script de Automação ([`scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh))**:
+   - Associa o avatar oficial FaceKids (`assets/facekids-256.png`) à conta `filhos` em `/usr/share/sddm/faces/filhos.face.icon` e `/home/filhos/.face.icon`.
+   - Adiciona configuração em `/etc/sddm.conf.d/10-facekids-user.conf` ativando `RememberLastUser=true` e `RememberLastSession=true`.
+   - Inicializa `/var/lib/sddm/state.conf` com a sessão do Plasma 6 e usuário `filhos`, garantindo foco automático ao ligar.
+   - Adicionado teste em `tests/test_linux_installer.py`.
+
 ### Prompt de continuidade
 
 > Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
 > `docs/CONTINUIDADE-REGATAOS.md`. Todos os testes de unidade, integração, tipagem
-> e CI multiplataforma estão validados e verdes. O script de verificação de saúde
-> `scripts/Verificar-Saude-FaceKids-RegataOS.sh` está operacional.
+> e CI multiplataforma estão validados e verdes. O script de pré-seleção
+> `scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh` e o script de diagnóstico de saúde estão operacionais.
 > Prossiga conforme orientações do usuário para testes físicos na sessão do sistema.
+
 
