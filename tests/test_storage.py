@@ -18,6 +18,29 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(db.embeddings()[0][0],a)
             db.close()
 
+    def test_charge_rejects_nonfinite_and_invalid_usage_without_mutation(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "family.sqlite3")
+            first = db.add_person("First", 120)
+            second = db.add_person("Second", 120)
+            day = "2026-10-24"
+            db.charge(first, 12.5, day)
+            before = db.used(first, day)
+            for amount in (float("nan"), float("inf"), -float("inf"), -1,
+                           True, "5", None, [], {}):
+                with self.subTest(amount=str(amount)), self.assertRaises(ValueError):
+                    db.charge(first, amount, day)
+                self.assertEqual(db.used(first, day), before)
+                self.assertEqual(db.used(second, day), 0)
+            for invalid_day in ("2026-02-30", "2026-2-4", "", 123, None):
+                # None means "today" by existing contract and is allowed.
+                if invalid_day is None:
+                    continue
+                with self.subTest(day=str(invalid_day)), self.assertRaises(ValueError):
+                    db.charge(first, 10, invalid_day)
+                self.assertEqual(db.used(first, day), before)
+            db.close()
+
     def test_bonus_total_capped_per_child_and_day(self):
         with TemporaryDirectory() as d:
             db = Storage(Path(d) / "quotas.sqlite3")
