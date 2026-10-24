@@ -16,6 +16,12 @@
 - GitHub Actions desta branch: NAO confirmado; aguardar jobs e corrigir falhas antes de aprovar qualquer integracao.
 - Nenhum teste deste ciclo comprova liveness, camera segura ou Winlogon.
 
+## Rodada adicional — 24/10/2026
+- 60dfdda688b575e6c808f0278ea1ce1e20387dc1: ALLOW exige quota positiva e representavel; child_id em decimal canonico.
+- ee8718b3e59b4c3e0a9dd624d42fee72a92af94b: casos negativos para quota nula, negativa, malformada, overflow e ID com zero inicial.
+- Testes C++ foram adicionados, mas ainda nao ha evidencia verificada de compilacao/execucao desta branch.
+- Nao houve alteracao no SDDL, instalador, senha, Provider COM nem registro de componentes.
+
 ## Fila e riscos remanescentes
 1. Conferir GitHub Actions do HEAD, sobretudo build-real-credential-provider e TestPipeClient.exe. Corrigir qualquer falha.
 2. Reforcar validacao de JSON duplicado/malformado com parser correto, em alteracoes pequenas e testadas.
