@@ -36,6 +36,10 @@ try {
     & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestPipeClient.cpp -o TestPipeClient.exe -lole32
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipeClient.exe" }
 
+    Write-Host "[FaceKids] Compilando teste isolado de identidade do Named Pipe..." -ForegroundColor Cyan
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestPipePeerIdentity.cpp -o TestPipePeerIdentity.exe -ladvapi32
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipePeerIdentity.exe" }
+
     Write-Host "[FaceKids] Build completo com sucesso!" -ForegroundColor Green
 } finally {
     Pop-Location
