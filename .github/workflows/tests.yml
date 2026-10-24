@@ -82,6 +82,14 @@ jobs:
               $report.SafeForAuthentication -ne $false) {
             throw 'Read-only diagnostic must not claim authentication trust'
           }
+          if ('PrincipalSid' -notin @($report.Task.PSObject.Properties.Name)) {
+            throw 'Pipe audit must include the scheduled principal SID field'
+          }
+          foreach ($proc in @($report.AuthProcesses)) {
+            if ($proc -and 'OwnerMatchesScheduledPrincipal' -notin @($proc.PSObject.Properties.Name)) {
+              throw 'Pipe audit must report owner/principal SID comparison'
+            }
+          }
       - name: Simulate read-only security isolation plan
         if: runner.os == 'Windows'
         shell: pwsh
