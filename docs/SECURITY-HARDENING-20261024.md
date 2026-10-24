@@ -128,3 +128,50 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
 - Rollback de CP e logon sem admin, webcam real, spoofing/liveness e
   Win+L na versao nova NAO foram comprovados.
 - PR #4 permanece draft, destinado a handoff e NAO a main.
+
+
+## Novo ciclo — identidade de servidor, comandos IPC e segregacao de diretorios (24/10/2026)
+
+### Implementacao publicada
+- `d8df0156`, `90d04dca`, `67c00d67`, `1b52148d`, `622656a7`:
+  novo `FaceKidsPipePeerIdentity.h` e `TestPipePeerIdentity.cpp` usam
+  `GetNamedPipeServerProcessId`, token de processo e SID em pipe **sintetico**
+  do runner. O helper e **apenas diagnostico** e NAO e invocado pelo
+  `FaceKidsPipeClient::RequestAuthentication` em producao. Um SID igual
+  tambem nao comprova a integridade do executavel do servidor.
+- `08027907`, `636390e0`, `4f5115a8`: o agente usa decodificacao local
+  JSON limitada a 2047 bytes que rejeita chaves duplicadas, NaN,
+  Infinity, UTF-8 invalido e dados malformados.
+- `d8f3177f`, `93b17c44`: plano de **migracao somente leitura** em
+  `scripts/Planejar-Isolamento-FaceKids.ps1`, com teste Windows sintetico.
+  Nenhuma ACL, tarefa, DLL, SQLite ou pasta do Windows real foi alterada.
+- `dfac74a7`, `dea6a8ea`, `b12260d3`: servidor usa os bytes efetivos
+  recebidos de `ReadFile`, aceita apenas comandos ASCII esperados com
+  CRLF/LF opcional, nega NUL, codificacao invalida e comandos maiores
+  que 512 bytes. Nao autentica a identidade do cliente.
+- `1996ab1b`, `95627a81`: teste do serviço reutiliza a implementacao
+  efetiva de decodificacao, sem logica fake no teste.
+
+### Verificacoes
+- Commit `b12260d32af5ef85187f710a32e453e78df9b4e0`:
+  `Unit tests` run **40143404435**: Windows e Ubuntu SUCCESS;
+  `Credential Provider compile and host checks` run **40143404372**:
+  ambos jobs SUCCESS, incluindo verificacao de SID em pipe sintetico.
+- Os ajustes de teste posteriores (`1996ab1b`, `95627a81`) exigem
+  verificacao do CI do HEAD mais recente; NAO herdam automaticamente status.
+- O PR #4 permanece em rascunho, baseado em handoff e sem merge.
+
+### Bloqueios e criterio de migracao
+1. `C:\ProgramData\FaceKids` permanece legado com riscos: scripts/
+   DLL e banco no mesmo diretorio historicamente gravavel por Filhos.
+   Mudar isso exige separacao do codigo para pasta com ACL privilegiada
+   e servico/broker que grave o ledger em vez de Filhos. O novo
+   planejador so lista caminhos e impedimentos.
+2. Nao ativar o helper SID no Credential Provider ate que a identidade
+   esperada esteja gravada de modo protegido, uma VM/snapshot demonstre
+   login e o pipe nao possa ser substituido por impostor.
+3. Nem JSON rigoroso nem SID do servidor solucionam a ausencia de
+   anti-spoof/liveness real, a serializacao de credenciais legada no CP
+   ou a integridade do banco SQLite gravado por Filhos.
+4. O teste Win+L real e a recuperacao de login permanecem bloqueados
+   por aceitacao supervisionada. Nao registrar o CP no PC familiar.
