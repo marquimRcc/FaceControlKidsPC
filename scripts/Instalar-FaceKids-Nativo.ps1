@@ -113,7 +113,9 @@ try {
     Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $authAction -Trigger $authTrigger -Principal $authPrincipal -Force | Out-Null
 
     $registeredTask = Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction Stop
-    if ($registeredTask.Principal.UserId -ne $authServiceUser -or
+    $regUser = if ($registeredTask.Principal.UserId) { $registeredTask.Principal.UserId.Split('\')[-1] } else { '' }
+    $expectedUser = $authServiceUser.Split('\')[-1]
+    if ($regUser -ne $expectedUser -or
         [string]$registeredTask.Principal.LogonType -ne 'Interactive') {
         throw "A tarefa FaceKidsAuthService nao ficou vinculada ao usuario/sessao interativa esperada."
     }
