@@ -1,21 +1,35 @@
 <#
 .SYNOPSIS
-  Diagnostica tarefa e processo que hospeda FaceKidsAuthPipe (somente leitura).
+  Diagnostico SOMENTE LEITURA de identidade do processo de autenticacao facial.
 .DESCRIPTION
-  Nao conecta ao pipe, nao abre webcam, nao consulta rostos, nao modifica
-  tarefas ou logon. A observacao de processos nao prova a identidade de um
-  servidor Named Pipe conectado: GetNamedPipeServerProcessId e validacao de
-  token no cliente nativo ainda precisam de ensaio em VM.
+  Compara SIDs da tarefa agendada e processos observados, sem abrir o pipe,
+  webcam, credenciais ou arquivos biometricos. Uma correspondencia NAO
+  comprova que aquele processo e o servidor conectado no pipe:
+  so GetNamedPipeServerProcessId no handle do cliente oferece essa associacao.
 #>
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
 
+function Resolve-PrincipalSid {
+    param([AllowNull()][string]$Principal)
+    if ([string]::IsNullOrWhiteSpace($Principal)) { return $null }
+    if ($Principal -match '^S-\d+(-\d+)+$') { return $Principal }
+    try {
+        $account = New-Object Security.Principal.NTAccount($Principal)
+        return $account.Translate([Security.Principal.SecurityIdentifier]).Value
+    } catch {
+        return $null
+    }
+}
+
 $task = Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction SilentlyContinue
+$taskSid = if ($task) { Resolve-PrincipalSid -Principal $task.Principal.UserId } else { $null }
 $taskReport = if ($null -eq $task) {
     [pscustomobject]@{
         Present = $false
         Principal = $null
+        PrincipalSid = $null
         LogonType = $null
         RunLevel = $null
         State = $null
@@ -24,37 +38,42 @@ $taskReport = if ($null -eq $task) {
     [pscustomobject]@{
         Present = $true
         Principal = $task.Principal.UserId
+        PrincipalSid = $taskSid
         LogonType = [string]$task.Principal.LogonType
         RunLevel = [string]$task.Principal.RunLevel
         State = [string]$task.State
     }
 }
 
-# A enumeração usa apenas metadados de processos, sem capturar comandos
-# completos, senhas, fotos ou quaisquer frames da câmera.
+# Enumera apenas metadados. Nunca inclui linha de comando nos resultados,
+# pois comandos arbitrarios podem conter credenciais ou caminhos sensiveis.
 $observed = @(
     Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -like '*-m facekids.auth_service*' } |
         ForEach-Object {
-            $identity = Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction SilentlyContinue
+            $owner = Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction SilentlyContinue
+            $ownerSidResult = Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue
+            $ownerSid = if ($ownerSidResult -and $ownerSidResult.ReturnValue -eq 0) {
+                [string]$ownerSidResult.Sid
+            } else { $null }
+            $ownerMatchesTask = if ($ownerSid -and $taskSid) {
+                $ownerSid -eq $taskSid
+            } else { $null }
             [pscustomobject]@{
                 ProcessId = [int]$_.ProcessId
                 SessionId = [int]$_.SessionId
-                OwnerName = if ($identity) { $identity.User } else { $null }
-                OwnerDomain = if ($identity) { $identity.Domain } else { $null }
+                OwnerName = if ($owner) { $owner.User } else { $null }
+                OwnerDomain = if ($owner) { $owner.Domain } else { $null }
+                OwnerSid = $ownerSid
+                OwnerMatchesScheduledPrincipal = $ownerMatchesTask
             }
         }
 )
 
-$policyKey = 'HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider'
-$policy = Get-ItemProperty -LiteralPath $policyKey -ErrorAction SilentlyContinue
-$enforceSid = ($null -ne $policy -and $policy.EnforceAuthServiceSid -eq 1)
-
 [pscustomobject]@{
-    TrustEnforcedByConfiguration = [bool]$enforceSid
-    ExpectedServiceSidConfigured = [bool]($policy -and $policy.AuthServiceSid)
     Task = $taskReport
     AuthProcesses = $observed
     NamedPipeServerIdentityVerified = $false
     SafeForAuthentication = $false
+    Limitations = 'Task/process SID agreement is diagnostic only; connected-pipe identity and executable trust are not established.'
 } | ConvertTo-Json -Depth 5
