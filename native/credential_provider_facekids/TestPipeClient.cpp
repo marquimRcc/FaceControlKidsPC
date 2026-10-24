@@ -190,8 +190,23 @@ static int RunParsingUnitTests() {
         }
     }
     std::wcout << L"  [PASS] 15. Envelope estrito rejeita duplicatas e lixo externo.\n";
+    // A JSON string containing a number is not a numeric authorization field.
+    const std::string numericStart = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":";
+    const std::string numericEnd = ",\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    const std::string quotedId = numericStart + "\"2\"" + numericEnd;
+    const std::string quotedQuota = numericStart + "2,\"remaining\":\"7200\",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    const std::string quotedTimestamp = numericStart + "2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "\"}";
+    const std::string numericUser = "{\"status\":\"ALLOW\",\"user\":123,\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    for (const auto& mismatched : {quotedId, quotedQuota, quotedTimestamp, numericUser}) {
+        if (FaceKidsPipeClient::ParseResponse(mismatched).success) {
+            std::wcerr << L"[FALHA] Tipo incorreto em campo de autorizacao aceito.\n";
+            return 22;
+        }
+    }
+    std::wcout << L"  [PASS] 16. Tipos JSON de autorizacao validados.\n";
 
-    std::wcout << L"[OK] Todos os 15 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+
+    std::wcout << L"[OK] Todos os 16 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 
