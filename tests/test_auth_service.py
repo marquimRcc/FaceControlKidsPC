@@ -41,22 +41,15 @@ class TestAuthService(unittest.TestCase):
                 create_security_attributes()
 
     def test_command_routing_logic(self):
-        # Valida regras de interpretacao de comando IPC
-        def route_request(request_str: str):
-            if len(request_str) > 512:
-                return "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
-            elif request_str in ("AUTH_QUERY", "QUERY"):
-                return "QUERY_ROUTED", {}
-            elif request_str == "PING":
-                return "PONG", {"version": "1.0"}
-            else:
-                return "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
+        # Exercise the actual command decoder, not a test-only copy.
+        from facekids.pipe_protocol import decode_pipe_command
 
-        self.assertEqual(route_request("PING")[0], "PONG")
-        self.assertEqual(route_request("AUTH_QUERY")[0], "QUERY_ROUTED")
-        self.assertEqual(route_request("QUERY")[0], "QUERY_ROUTED")
-        self.assertEqual(route_request("UNKNOWN")[0], "INVALID_COMMAND")
-        self.assertEqual(route_request("X" * 600)[0], "INVALID_REQUEST")
+        self.assertEqual(decode_pipe_command(b"PING"), ("PING", None))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\\n"), ("AUTH_QUERY", None))
+        self.assertEqual(decode_pipe_command(b"QUERY"), ("QUERY", None))
+        self.assertEqual(decode_pipe_command(b"UNKNOWN"), (None, "INVALID_COMMAND"))
+        self.assertEqual(decode_pipe_command(b"X" * 600), (None, "INVALID_REQUEST"))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\\x00"), (None, "INVALID_REQUEST"))
 
     def test_authenticator_nonexistent_db(self):
         auth = FaceAuthenticator(Path("models"), Path("nonexistent.sqlite3"))
