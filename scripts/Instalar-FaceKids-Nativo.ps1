@@ -161,13 +161,24 @@ start "" "$pythonw" -m facekids.filhos_agent
 "@
 Set-Content -Path $agentBat -Value $agentContent -Encoding ASCII -Force
 
-# Agendar exclusivamente no Logon da conta Filhos de forma interativa (/it)
+# Agendar somente o agente da conta Filhos, sem senha nos argumentos.
+# A tarefa usa o token interativo depois que Filhos ja estiver logada.
+# Validar na VM antes de atualizar o PC familiar.
 try {
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /ru "Filhos" /rp "1" /it /f 2>&1 | Out-Null
-    Write-Host "Agente dos Filhos agendado com sucesso vinculado exclusivamente a conta 'Filhos' (/it)." -ForegroundColor Green
+    $childAccount = Get-LocalUser -Name 'Filhos' -ErrorAction Stop
+    if (-not $childAccount.Enabled) { throw 'Conta Filhos desabilitada.' }
+    $agentArgs = '/c ' + [char]34 + $agentBat + [char]34
+    $agentAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $agentArgs
+    $agentTrigger = New-ScheduledTaskTrigger -AtLogOn -User $childAccount.Name
+    $agentPrincipal = New-ScheduledTaskPrincipal -UserId $childAccount.SID.Value -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -Action $agentAction -Trigger $agentTrigger -Principal $agentPrincipal -Force -ErrorAction Stop | Out-Null
+    $registeredAgent = Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction Stop
+    if ([string]$registeredAgent.Principal.LogonType -ne 'Interactive') {
+        throw 'Agendamento do agente nao ficou em modo interativo.'
+    }
+    Write-Host "Agente Filhos agendado sem senha na linha de comando." -ForegroundColor Green
 } catch {
-    Write-Host "Aviso ao agendar tarefa vinculada com senha: $($_.Exception.Message)" -ForegroundColor DarkGray
-    & schtasks.exe /create /tn "FaceKidsFilhosAgent" /tr "cmd.exe /c \`"$agentBat\`"" /sc onlogon /f 2>&1 | Out-Null
+    throw "Nao foi possivel registrar o agente Filhos com seguranca: $($_.Exception.Message)"
 }
 
 # 7. Iniciar os servicos em segundo plano
@@ -186,5 +197,5 @@ Write-Host "============================================================" -Foreg
 Write-Host "- DLL ativa em: $dllTarget"
 Write-Host "- Servico de autenticacao facial rodando em segundo plano."
 Write-Host "- Agente dos Filhos ativo para exibir a Tela de Boas-Vindas com Foto."
-Write-Host "- O login tradicional por senha ('1' e '11') continua 100% disponivel."
+Write-Host "- O login tradicional do Windows nao foi desativado pelo instalador."
 Write-Host "============================================================" -ForegroundColor Cyan
