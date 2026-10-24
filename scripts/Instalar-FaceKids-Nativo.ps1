@@ -142,6 +142,15 @@ try {
 
 # 6. Configurar Agente de Sessao da conta Filhos (Tela de Boas-Vindas e Quota)
 Write-Host "Configurando Agente de Sessao da conta Filhos..." -ForegroundColor Yellow
+
+# Garantir permissoes NTFS para que a conta Filhos possa executar o Python e o agente
+try {
+    & icacls "$env:USERPROFILE" /grant "Filhos:(RX)" 2>&1 | Out-Null
+    & icacls "$env:LOCALAPPDATA\Programs\Python" /grant "Filhos:(OI)(CI)(RX)" /T 2>&1 | Out-Null
+    & icacls (Split-Path $root -Parent) /grant "Filhos:(RX)" 2>&1 | Out-Null
+    & icacls $root /grant "Filhos:(OI)(CI)(RX)" /T 2>&1 | Out-Null
+    & icacls $programDataDir /grant "Filhos:(OI)(CI)(M)" /T 2>&1 | Out-Null
+} catch {}
 $agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
 $agentContent = @"
 @echo off
