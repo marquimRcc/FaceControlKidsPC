@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include "FaceKidsJsonEnvelopeGuard.h"
 #include <cmath>
 #include <ctime>
 #include <limits>
@@ -103,10 +104,8 @@ public:
             return result;
         }
 
-        // Valida delimitadores JSON basicos
-        size_t firstBrace = resp.find('{');
-        size_t lastBrace = resp.rfind('}');
-        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+        // Rejeita JSON incompleto, campos duplicados e conteudo apos o objeto.
+        if (!FaceKidsJsonEnvelopeGuard::IsValidObject(resp)) {
             result.message = L"Resposta em formato JSON invalido.";
             return result;
         }
