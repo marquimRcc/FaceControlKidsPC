@@ -63,6 +63,21 @@ jobs:
           if ($report.ProviderDllPresent -or $report.ProviderRegistered -or $report.ChildTaskPresent) {
             throw 'Recovery audit unexpectedly found an installed provider on CI runner'
           }
+      - name: Read-only pipe provenance diagnostic
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Auditar-Identidade-PipeFaceKids.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw "Pipe provenance script parse failure: $($errors[0].Message)" }
+          $report = & $script | ConvertFrom-Json
+          if ($report.NamedPipeServerIdentityVerified -ne $false -or
+              $report.SafeForAuthentication -ne $false) {
+            throw 'Read-only diagnostic must not claim authentication trust'
+          }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
