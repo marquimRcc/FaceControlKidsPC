@@ -22,6 +22,23 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic native/credential_provider_facekids/TestJsonEnvelopeGuardPortable.cpp -o "$RUNNER_TEMP/facekids-json-guard"
           "$RUNNER_TEMP/facekids-json-guard"
+      - name: Read-only ACL audit syntax and uninstalled-host smoke test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/Auditar-Permissoes-FaceKids.ps1').Path,
+            [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw "ACL audit PowerShell parse failed: $($errors[0].Message)" }
+          $missing = Join-Path $env:RUNNER_TEMP 'facekids-not-installed'
+          $result = & ./scripts/Auditar-Permissoes-FaceKids.ps1 -Root $missing | ConvertFrom-Json
+          if (@($result).Count -ne 6) { throw "ACL audit did not report six expected locations" }
+          if (@($result | Where-Object { $_.Exists }).Count -ne 0) {
+            throw "ACL audit found unexpected installed data on disposable runner"
+          }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
