@@ -38,6 +38,7 @@ from .storage import Storage
 from .unlock_event import validated_unlock_event, enrolled_display_name
 from .ipc_reply import validated_pipe_allow
 from .ipc_json import parse_local_json
+from .quota_broker_shadow import QuotaBrokerShadowProbe, compare_shadow_balance
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -506,6 +507,16 @@ def run_agent():
 
     last_active_time = time.monotonic()
     identifier = InSessionFaceIdentifier(interval_seconds=15.0)
+    # Explicit LAB shadow mode only. Never changes billing or session locks.
+    shadow_probe = None
+    if sys.platform == "win32" and os.environ.get("FACEKIDS_QUOTA_BROKER_SHADOW") == "1":
+        try:
+            shadow_probe = QuotaBrokerShadowProbe(
+                os.environ.get("FACEKIDS_QUOTA_LAB_SUFFIX", "")
+            )
+            logger.info("Quota broker LAB shadow diagnostics enabled; no enforcement.")
+        except ValueError as exc:
+            logger.warning("Invalid quota broker shadow configuration: %s", exc)
     today = date.today().isoformat()
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
@@ -624,6 +635,14 @@ def run_agent():
                 if tracker.current_child_id is not None and 0.5 <= delta <= 15.0:
                     store.charge(tracker.current_child_id, delta, today)
                     rem = store.remaining(tracker.current_child_id, today)
+                    if shadow_probe is not None:
+                        # Ignore the response except for non-authoritative logging.
+                        diagnostic = shadow_probe.take_result()
+                        if diagnostic is not None:
+                            comparison, discrepancy = compare_shadow_balance(rem, diagnostic)
+                            logger.info("Quota shadow-only: %s; delta=%s",
+                                        comparison, discrepancy)
+                        shadow_probe.trigger_if_due()
                     tracker.update_balance(rem)
 
                     # Verifica avisos e bloqueio automatico
