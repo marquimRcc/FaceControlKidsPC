@@ -18,6 +18,7 @@ from typing import Mapping
 
 from .quota_broker_lab import validate_lab_options
 from .quota_broker_supervisor import QuotaLabSupervisor
+from .quota_broker_wts import WtsLockTracker
 
 REGISTRY_PATH = r"SOFTWARE\FaceControlKidsPC\QuotaBrokerLabService"
 SERVICE_NAME = "FaceKidsQuotaLabOnly"
@@ -140,11 +141,26 @@ class FaceKidsQuotaLabService(_ServiceBase):
             raise RuntimeError("Install optional pywin32 only in isolated Windows VM")
         super().__init__(args)
         self._stop_signal = threading.Event()
+        self._wts_locks = WtsLockTracker()
         self._supervisor: QuotaLabSupervisor | None = None
+
+    def GetAcceptedControls(self):
+        # The Windows SCM, not the Filhos IPC, supplies session notifications.
+        return super().GetAcceptedControls() | win32service.SERVICE_ACCEPT_SESSIONCHANGE
+
+    def SvcOtherEx(self, control, event_type, data):
+        if control != win32service.SERVICE_CONTROL_SESSIONCHANGE:
+            return super().SvcOtherEx(control, event_type, data)
+        try:
+            self._wts_locks.record_windows_scm_notification(event_type, data)
+        except (TypeError, ValueError):
+            # Unknown session state is never interpreted as unlocked.
+            self._wts_locks.reset()
 
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self._stop_signal.set()
+        self._wts_locks.reset()
         if self._supervisor is not None:
             self._supervisor.request_stop()
 
