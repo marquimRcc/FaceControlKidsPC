@@ -172,6 +172,14 @@ def main() -> int:
         win32security.ImpersonateLoggedOnUser(child_token)
         child_impersonating = True
         try:
+            # The child must not be able to replace the SYSTEM service's
+            # trusted SID-to-enrollment mapping stored in HKLM.
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REGISTRY_PATH,
+                                    0, winreg.KEY_SET_VALUE):
+                    raise AssertionError("Synthetic child may modify SCM HKLM policy")
+            except PermissionError:
+                pass
             balance = query_lab_balance(pipe)
         finally:
             win32security.RevertToSelf()
