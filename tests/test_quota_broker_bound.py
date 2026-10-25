@@ -215,6 +215,44 @@ class FaceBoundHostTests(unittest.TestCase):
             release.set()
             host.request_stop()
 
+    def test_restart_and_disconnect_cannot_reuse_face_lease(self):
+        self.host.on_scm_session_change(8, (23,))
+        self.host.step()
+        self.now += 4
+        self.assertEqual(self.host.step().charged_seconds, 4)
+        original = self.store.used(self.children[0], "2026-10-25")
+        self.host.on_scm_session_change(2, (23,))  # disconnected
+        self.assertIsNone(self.lookup())
+        self.now += 120
+        self.assertEqual(self.host.step().charged_seconds, 0)
+        self.host.request_stop()
+        runtime = ServiceOwnedQuotaRuntime(
+            self.store, expected_windows_sid=self.sid,
+            observe_wts=lambda: self.wts,
+            capture_face_locally=lambda: (
+                "ALLOW", {"user": "Filhos", "child_id": self.children[0]}
+            ),
+            monotonic=lambda: self.now, today=lambda: date(2026, 10, 25),
+        )
+        restarted = ServiceOwnedScmHost(runtime, monotonic=lambda: self.now)
+        try:
+            self.assertEqual(restarted.step().charged_seconds, 0)
+            self.assertIsNone(restarted.read_bound_balance(
+                verified_client_sid=self.sid
+            ))
+            self.now += 60
+            self.assertEqual(restarted.step().charged_seconds, 0)
+            self.assertEqual(
+                self.store.used(self.children[0], "2026-10-25"), original
+            )
+            restarted.on_scm_session_change(8, (23,))
+            self.assertEqual(restarted.step().charged_seconds, 0)
+            self.assertIsNotNone(restarted.read_bound_balance(
+                verified_client_sid=self.sid
+            ))
+        finally:
+            restarted.request_stop()
+
 
 if __name__ == "__main__":
     unittest.main()
