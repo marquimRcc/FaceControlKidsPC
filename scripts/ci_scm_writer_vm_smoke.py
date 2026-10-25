@@ -174,7 +174,12 @@ def main() -> int:
         # No WTS_SESSION_UNLOCK was dispatched and no face embeddings
         # exist. An actual SCM worker must not invent such evidence.
         with closing(sqlite3.connect(database)) as audit:
-            count = audit.execute("SELECT COUNT(*) FROM quota_tick_receipts").fetchone()[0]
+            receipts_exist = audit.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='quota_tick_receipts'"
+            ).fetchone() is not None
+            count = (audit.execute(
+                "SELECT COUNT(*) FROM quota_tick_receipts").fetchone()[0]
+                if receipts_exist else 0)
             charges = audit.execute("SELECT COUNT(*) FROM daily_usage").fetchone()[0]
             children = audit.execute("SELECT COUNT(*) FROM people").fetchone()[0]
         if (count, charges, children) != (0, 0, 3):
