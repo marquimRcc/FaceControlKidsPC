@@ -56,15 +56,14 @@ def validate_real_lock(os_type: str, account: str, *, confirmed: bool) -> None:
 
 
 def _child_id(store: Storage, index: int) -> int:
-    if index not in (1, 2, 3):
-        raise ValueError("Indice de crianca deve ser de 1 a 3")
     for p in store.people():
         if p[0] == index:
             return int(p[0])
-    row = store.get_person(CHILD_LABELS[index - 1])
-    if row is None:
-        raise RuntimeError("Cadastre os tres perfis antes de iniciar.")
-    return int(row[0])
+    if 1 <= index <= len(CHILD_LABELS):
+        row = store.get_person(CHILD_LABELS[index - 1])
+        if row is not None:
+            return int(row[0])
+    raise ValueError("Indice de crianca deve ser de 1 a 3")
 
 
 def _enroll(store: Storage, index: int, models: Path, camera: int):
@@ -203,7 +202,7 @@ def main(argv=None) -> int:
     parser.add_argument("--camera", type=int, default=0)
     sub = parser.add_subparsers(dest="action", required=True)
     enroll = sub.add_parser("enroll", help="Cadastrar uma crianca com responsavel presente")
-    enroll.add_argument("child", type=int, choices=(1, 2, 3))
+    enroll.add_argument("child", type=int)
     sub.add_parser("status")
     monitor = sub.add_parser("monitor")
     monitor.add_argument("--seconds", type=int, default=90)
@@ -211,7 +210,7 @@ def main(argv=None) -> int:
                          help="Somente Filhos, pedido manual de Win+L por quota")
     monitor.add_argument("--confirm-real-lock", action="store_true")
     erase = sub.add_parser("erase", help="Apagar apenas biometria do perfil indicado")
-    erase.add_argument("child",type=int,choices=(1,2,3))
+    erase.add_argument("child", type=int)
     args = parser.parse_args(argv)
     if os.name != "nt" or not 0 <= args.camera <= 10:
         parser.error("Piloto requer Windows e camera 0..10")
@@ -221,18 +220,18 @@ def main(argv=None) -> int:
         validate_real_lock(os.name, windows_token_user(), confirmed=args.confirm_real_lock)
     store = Storage(args.database)
     try:
-        engine = ChildQuotaEngine(store)
         if args.action == "enroll":
             return 0 if _enroll(store, args.child, args.models, args.camera) else 2
+        if args.action == "erase":
+            count = store.remove_embeddings(_child_id(store, args.child))
+            print(f"PERFIL_{args.child}_APAGADO: {count} vetores removidos; quotas mantidas.")
+            return 0
+        engine = ChildQuotaEngine(store)
         if args.action == "status":
             _status(store, engine)
             return 0
-        if args.action == "erase":
-            count = store.remove_embeddings(_child_id(store,args.child))
-            print(f"PERFIL_{args.child}_APAGADO: {count} vetores removidos; quotas mantidas.")
-            return 0
-        _monitor(store,engine,args.models,args.camera,args.seconds,args.real_lock)
-        _status(store,engine)
+        _monitor(store, engine, args.models, args.camera, args.seconds, args.real_lock)
+        _status(store, engine)
         return 0
     finally:
         store.close()

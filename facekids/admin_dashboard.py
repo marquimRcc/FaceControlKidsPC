@@ -1346,23 +1346,48 @@ class AdminDashboard(tk.Tk):
             )
             return
 
+        python_exe = sys.executable
+        if python_exe.endswith("pythonw.exe"):
+            py_normal = Path(python_exe).with_name("python.exe")
+            if py_normal.exists():
+                python_exe = str(py_normal)
+
         # Executa children_pilot enroll <id>
-        cmd = [sys.executable, "-m", "facekids.children_pilot", "enroll", str(child_id)]
+        cmd = [
+            python_exe,
+            "-m",
+            "facekids.children_pilot",
+            "--database",
+            str(self.db_path),
+            "enroll",
+            str(child_id),
+        ]
         try:
             self.active_enrollment_proc = subprocess.Popen(cmd, cwd=str(ROOT_DIR))
             self.status_text.set(f"Janela de captura da webcam aberta para o Perfil #{child_id}...")
 
             # Thread para aguardar termino e atualizar UI
             def _wait_completion():
-                self.active_enrollment_proc.wait()
-                self.after(500, self._on_enrollment_finished, child_id)
+                exit_code = self.active_enrollment_proc.wait()
+                self.after(500, self._on_enrollment_finished, child_id, exit_code)
 
             threading.Thread(target=_wait_completion, daemon=True).start()
         except Exception as e:
             messagebox.showerror("Erro ao Iniciar Webcam", f"Não foi possível iniciar o cadastro: {e}", parent=self)
 
-    def _on_enrollment_finished(self, child_id: int):
-        self.status_text.set(f"Cadastro via webcam finalizado para o Perfil #{child_id}.")
+    def _on_enrollment_finished(self, child_id: int, exit_code: int = 0):
+        if exit_code == 0:
+            self.status_text.set(f"Cadastro via webcam finalizado com sucesso para o Perfil #{child_id}.")
+        elif exit_code == 2:
+            self.status_text.set(f"Cadastro via webcam cancelado para o Perfil #{child_id}.")
+        else:
+            self.status_text.set(f"Falha no cadastro via webcam (código {exit_code}).")
+            messagebox.showerror(
+                "Falha no Cadastro",
+                f"O processo de cadastro da webcam encerrou com erro (código {exit_code}).\n"
+                "Verifique se a câmera não está em uso por outro aplicativo.",
+                parent=self,
+            )
         self.refresh()
 
     def _rename_child(self, child_id: int, current_name: str):
