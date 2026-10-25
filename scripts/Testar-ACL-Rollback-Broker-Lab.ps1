@@ -21,6 +21,9 @@ try {
     $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
     $original = Get-Acl -LiteralPath $file
     $initialSddl = $original.Sddl
+    $beforeRules = @($original.Access | ForEach-Object {
+        "$($_.IdentityReference.Value)|$($_.FileSystemRights)|$($_.AccessControlType)|$($_.IsInherited)"
+    } | Sort-Object)
     $acl = Get-Acl -LiteralPath $file
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($entry in @($acl.Access)) {
@@ -48,9 +51,23 @@ try {
         throw 'Lab ACL mutation unexpectedly modified file bytes'
     }
 
-    Set-Acl -LiteralPath $file -AclObject $original -ErrorAction Stop
-    $restored = ((Get-Acl -LiteralPath $file).Sddl -eq $initialSddl)
-    if (-not $restored) { throw 'Synthetic ACL failed rollback' }
+    # Set the complete original descriptor, not only a cached ACL object.
+    # Windows can canonicalize SDDL text; compare owner, inheritance state and
+    # the actual ACEs, rather than raw SDDL textual order/flags.
+    $revertAcl = Get-Acl -LiteralPath $file
+    $revertAcl.SetSecurityDescriptorSddlForm($initialSddl)
+    Set-Acl -LiteralPath $file -AclObject $revertAcl -ErrorAction Stop
+    $after = Get-Acl -LiteralPath $file
+    $afterRules = @($after.Access | ForEach-Object {
+        "$($_.IdentityReference.Value)|$($_.FileSystemRights)|$($_.AccessControlType)|$($_.IsInherited)"
+    } | Sort-Object)
+    $difference = @(Compare-Object -ReferenceObject $beforeRules -DifferenceObject $afterRules)
+    $restored = ($after.Owner -eq $original.Owner -and
+                 $after.AreAccessRulesProtected -eq $original.AreAccessRulesProtected -and
+                 $difference.Count -eq 0)
+    if (-not $restored) {
+        throw "Synthetic ACL rollback mismatch: owner=$($after.Owner -eq $original.Owner); inheritance=$($after.AreAccessRulesProtected -eq $original.AreAccessRulesProtected); rules=$($difference.Count)"
+    }
 
     [pscustomobject]@{
         Mode = 'DisposableAclRollback'
