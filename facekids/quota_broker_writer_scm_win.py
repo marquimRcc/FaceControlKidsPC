@@ -142,7 +142,7 @@ def assert_protected_vm_ledger_acl(database: Path, models: Path, child_sid: str)
     targets = {database, models, lab, database.parent, models.parent}
     # The model files themselves cannot be writable by children either:
     # replacing them would silently change the service's face provenance.
-    targets.update(path for path in models.rglob("*") if path.is_file())
+    targets.update(models.rglob("*"))  # Includes nested directories and model files
     # All parents up to lab's immediate parent must also refuse broad writes,
     # or an unprivileged account could replace the directory itself.
     targets.add(lab.parent)
