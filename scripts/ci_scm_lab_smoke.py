@@ -21,7 +21,7 @@ import uuid
 import winreg
 
 from facekids.quota_broker_client_win import query_lab_balance
-from facekids.quota_agent_accounting import BrokerLabReadOnlyQuota
+from facekids.filhos_quota_vm_readonly import run_vm_lab_probe
 from facekids.quota_broker_scm_win import (
     REGISTRY_PATH, SERVICE_NAME, FaceKidsQuotaLabService,
 )
@@ -184,9 +184,11 @@ def main() -> int:
             # Exercise the future agent's non-authoritative, read-only
             # integration over the REAL isolated SCM Named Pipe. The service
             # validates the caller's token SID; the child never opens SQLite.
-            observation = BrokerLabReadOnlyQuota(
-                lambda: query_lab_balance(pipe)
-            ).observe()
+            observation = run_vm_lab_probe()
+            if observation.status != "observed":
+                raise AssertionError(
+                    "Protected HKLM VM reader failed: " + observation.status
+                )
             balance = {
                 "status": "OK" if observation.status == "observed" else "DENY",
                 "remaining_seconds": observation.remaining_seconds,
