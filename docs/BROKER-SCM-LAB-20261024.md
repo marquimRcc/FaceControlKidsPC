@@ -113,3 +113,46 @@ acesso efetivo da conta Filhos. Nenhum desses componentes foi modificado.
 
 **Critério de saída:** os quatro jobs Windows/Ubuntu/C++ do commit exato
 da última implementação devem passar antes de dar o código por validado.
+
+
+## Evidência adicional — SCM real e identidade infantil em runner descartável
+
+**Integração real em Windows hospedado pelo GitHub (CI efêmero):**
+`scripts/ci_scm_lab_smoke.py` só aceita `GITHUB_ACTIONS=true`,
+`RUNNER_ENVIRONMENT=github-hosted`, `RUNNER_OS=Windows` e
+`GITHUB_REPOSITORY=marquimRcc/FaceControlKidsPC`, além de privilégios
+administrativos. Fora disso, **recusa executar**.
+
+O ensaio instala temporariamente o `FaceKidsQuotaLabOnly` no SCM,
+inicia como `SYSTEM`, abre um banco SQLite **fictício**, verifica a
+leitura de quotas por Named Pipe, encerra e remove o serviço. A política
+HKLM e o diretório do banco de ensaio são removidos no `finally`.
+Não instala nem modifica o Credential Provider familiar.
+
+O ensaio agora também cria uma conta Windows local infantil **fictícia**
+(temporária e apagada na limpeza), exige que o serviço recuse a consulta
+da conta administrativa do runner e aceite apenas a consulta da conta
+infantil mapeada por SID. O programa comprova que nem essa conta pode
+gravar dados de quota através do protocolo. A nova checagem final exige
+que o token infantil não possua acesso de escrita à chave HKLM que
+controla o serviço.
+
+`scripts/ci_acl_child_token_smoke.py` realiza outro ensaio independente:
+o token infantil real **consegue ler** DLL/ledger fictícios protegidos,
+**não consegue escrevê-los** e pode **gravar somente na pasta separada
+de cache**. Os testes atuam apenas em `FaceKidsAclCi<uuid>` sob
+ProgramData, sem acessar `ProgramData\\FaceKids`.
+
+CI comprovado em commits prévios:
+- `40148637510`: instalação/start/consulta/stop/remoção SCM reais — SUCCESS;
+- `40148877387`: teste de ACL com token infantil não administrativo — SUCCESS;
+- `40149075585`: serviço SCM com aceitação por SID infantil e recusa do
+  SID administrativo — Windows/Ubuntu SUCCESS;
+- o HEAD que adiciona negação de escrita HKLM deve ter seu status
+  consultado separadamente.
+
+**Portão de hardware ainda fechado:** os testes são em uma VM descartável
+do GitHub, não no PC doméstico nem em uma VM equivalente ao Windows
+doméstico com webcam e LogonUI. A associação rosto/criança, eventos WTS,
+banco de produção, migração efetiva das ACLs e recuperação real
+continuam pendentes.
