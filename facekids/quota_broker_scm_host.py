@@ -16,6 +16,7 @@ from typing import Callable
 
 from .quota_broker_face_binding import FaceBindingOutcome
 from .quota_broker_policy import BrokerTick
+from .quota_broker_bound_protocol import BoundBalance
 from .quota_broker_runtime import ServiceOwnedQuotaRuntime
 
 
@@ -52,6 +53,7 @@ class ServiceOwnedScmHost:
         self.ticks = 0
         self.charged_total = 0.0
         self.last_tick: BrokerTick | None = None
+        self._last_tick_at: float | None = None
         self.last_face: FaceBindingOutcome | None = None
 
     def on_scm_session_change(self, code: int, payload: tuple[int]) -> None:
@@ -60,6 +62,8 @@ class ServiceOwnedScmHost:
             if self._stop.is_set():
                 return
             self._generation += 1
+            self.last_tick = None
+            self._last_tick_at = None
             # Fail closed even when Windows gives an unsupported event.
             self._needs_face = False
             try:
@@ -86,6 +90,10 @@ class ServiceOwnedScmHost:
                 capture = True
                 self._next_face_attempt = now + self._retry
                 generation = self._generation
+                # The former face's balance must not be published during
+                # a new service-owned recognition attempt.
+                self.last_tick = None
+                self._last_tick_at = None
         if capture:
             result = self._runtime.bind_from_service_camera()
             with self._lock:
@@ -98,12 +106,49 @@ class ServiceOwnedScmHost:
                 return BrokerTick(None, 0, 0, False, "service-stopped")
             tick = self._runtime.service_tick()
             self.last_tick = tick
+            self._last_tick_at = self._now()
             self.ticks += 1
             self.charged_total += tick.charged_seconds
             if tick.reason in ("quota", "curfew", "session-switched", "wts-unverified", "wts-inactive"):
                 # Never silently rebind after session switches or exhausted time.
                 self._needs_face = False
             return tick
+
+    def read_bound_balance(self, *, verified_client_sid: str) -> BoundBalance | None:
+        """Read the latest service-generated result for the *face-bound* child.
+
+        No SQLite connection is used in the Named Pipe thread. Refuse stale
+        samples, stop, unknown face, lock, SID/session change or unverified
+        camera capture. The only input is the caller's OS TOKEN_USER.
+        """
+        with self._lock:
+            if self._stop.is_set():
+                return None
+            tick = self.last_tick
+            sampled = self._last_tick_at
+            if tick is None or sampled is None or tick.reason not in (
+                "charged", "paused"
+            ):
+                return None
+            now = self._now()
+            if now < sampled or now - sampled > max(3.0, 3.0 * self._interval):
+                return None
+            child = self._runtime.verified_child_for_client(
+                token_sid=verified_client_sid
+            )
+            if type(child) is not int or child != tick.child_id:
+                return None
+            remaining = tick.remaining_seconds
+            if type(remaining) not in (int, float):
+                return None
+            import math
+            if not math.isfinite(remaining) or remaining < 0:
+                return None
+            return BoundBalance(
+                child_id=child,
+                remaining_seconds=float(remaining),
+                allowed_now=not tick.locked and remaining > 0,
+            )
 
     def run(self) -> None:
         try:
@@ -121,3 +166,5 @@ class ServiceOwnedScmHost:
         with self._lock:
             self._generation += 1
             self._needs_face = False
+            self.last_tick = None
+            self._last_tick_at = None
