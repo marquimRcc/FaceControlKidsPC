@@ -13,6 +13,7 @@ import unittest
 import uuid
 
 from facekids.storage import Storage
+from facekids.quota_broker_client_win import query_lab_balance
 from facekids.quota_broker_transport_win import LAB_PIPE_PREFIX, serve_one_lab_request
 
 
@@ -24,7 +25,7 @@ class LabBrokerWindowsTests(unittest.TestCase):
         ).strip()
         return next(csv.reader([line]))[-1].strip()
 
-    def _exercise_pipe(self, sid_to_child):
+    def _exercise_pipe(self, sid_to_child, *, via_client=False):
         with TemporaryDirectory() as td:
             root = Path(td) / "facekids-quota-lab"
             root.mkdir()
@@ -74,23 +75,26 @@ class LabBrokerWindowsTests(unittest.TestCase):
                     break
                 time.sleep(0.02)
             self.assertTrue(ready, f"pipe not ready: {errors}")
-            handle = k.CreateFileW(pipe, 0xC0000000, 0, None, 3, 0, None)
-            self.assertNotIn(handle, (None, 0, ctypes.c_void_p(-1).value))
-            try:
-                request = b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}'
-                sent = wintypes.DWORD()
-                buf = ctypes.create_string_buffer(request)
-                self.assertTrue(k.WriteFile(
-                    handle, buf, len(request), ctypes.byref(sent), None
-                ))
-                self.assertEqual(sent.value, len(request))
-                result = ctypes.create_string_buffer(2048)
-                read = wintypes.DWORD()
-                ok = k.ReadFile(handle, result, 2047, ctypes.byref(read), None)
-                self.assertTrue(ok, f"GetLastError={ctypes.get_last_error()}, server={errors}")
-                reply = json.loads(result.raw[:read.value].decode("ascii"))
-            finally:
-                k.CloseHandle(handle)
+            if via_client:
+                reply = query_lab_balance(pipe)
+            else:
+                handle = k.CreateFileW(pipe, 0xC0000000, 0, None, 3, 0, None)
+                self.assertNotIn(handle, (None, 0, ctypes.c_void_p(-1).value))
+                try:
+                    request = b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}'
+                    sent = wintypes.DWORD()
+                    buf = ctypes.create_string_buffer(request)
+                    self.assertTrue(k.WriteFile(
+                        handle, buf, len(request), ctypes.byref(sent), None
+                    ))
+                    self.assertEqual(sent.value, len(request))
+                    result = ctypes.create_string_buffer(2048)
+                    read = wintypes.DWORD()
+                    ok = k.ReadFile(handle, result, 2047, ctypes.byref(read), None)
+                    self.assertTrue(ok, f"GetLastError={ctypes.get_last_error()}, server={errors}")
+                    reply = json.loads(result.raw[:read.value].decode("ascii"))
+                finally:
+                    k.CloseHandle(handle)
             worker.join(timeout=5)
             self.assertFalse(worker.is_alive())
             self.assertFalse(errors, f"server errors: {errors}")
@@ -100,6 +104,11 @@ class LabBrokerWindowsTests(unittest.TestCase):
         self.assertEqual(
             self._exercise_pipe({self._current_sid(): 1})["remaining_seconds"],
             60,
+        )
+
+    def test_reusable_read_only_client_round_trip(self):
+        self.assertEqual(
+            self._exercise_pipe({self._current_sid(): 1}, via_client=True)["remaining_seconds"], 60,
         )
 
     def test_sid_not_in_protected_mapping_is_denied(self):
