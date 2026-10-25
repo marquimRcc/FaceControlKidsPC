@@ -30,6 +30,7 @@ class ServiceOwnedQuotaRuntime:
         today: Callable[[], date] = date.today,
     ) -> None:
         self._lock = threading.RLock()
+        self._child_windows_sid = expected_windows_sid
         self._locks = WtsLockTracker()
         self._broker = ServiceOwnedQuotaBroker(
             store, monotonic=monotonic, today=today
@@ -91,6 +92,17 @@ class ServiceOwnedQuotaRuntime:
     def service_tick(self) -> BrokerTick:
         with self._lock:
             return self._worker.observe_service_tick()
+
+    def verified_child_for_client(self, *, token_sid: str) -> int | None:
+        """Only returns a face-bound child after independently checking WTS.
+
+        The token SID MUST come from impersonating the connected pipe client,
+        not from JSON. No SQLite operations or WTS state changes here.
+        """
+        if type(token_sid) is not str or token_sid != self._child_windows_sid:
+            return None
+        with self._lock:
+            return self._worker.verified_child_for_current_console()
 
     def stop(self) -> None:
         with self._lock:
