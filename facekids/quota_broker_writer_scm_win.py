@@ -12,6 +12,7 @@ not exposed by the app or installer.
 """
 from __future__ import annotations
 
+from contextlib import closing
 import os
 from pathlib import Path
 import re
@@ -81,8 +82,12 @@ def validate_vm_writer_config(data: Mapping[str, object]) -> tuple[Path, str, Pa
     # Strictly synthetic data: an unrelated or copied family database has no
     # opt-in marker. This is checked read-only before any Storage is opened.
     try:
-        with sqlite3.connect("file:" + database.as_posix() + "?mode=ro", uri=True) as db:
-            row = db.execute("SELECT value FROM settings WHERE key=?", (LAB_MARKER_KEY,)).fetchone()
+        # Connection context manager does NOT close its handle on exit.
+        # Windows requires an explicit close for safe rollback and teardown.
+        with closing(sqlite3.connect("file:" + database.as_posix() + "?mode=ro",
+                                     uri=True)) as db:
+            row = db.execute("SELECT value FROM settings WHERE key=?",
+                             (LAB_MARKER_KEY,)).fetchone()
     except sqlite3.Error as exc:
         raise ValueError("Missing valid synthetic VM marker") from exc
     if row != (LAB_MARKER_VALUE,):
@@ -135,6 +140,9 @@ def assert_protected_vm_ledger_acl(database: Path, models: Path, child_sid: str)
         raise PermissionError("Missing protected VM directory")
     lab = lab_roots[0]
     targets = {database, models, lab, database.parent, models.parent}
+    # The model files themselves cannot be writable by children either:
+    # replacing them would silently change the service's face provenance.
+    targets.update(path for path in models.rglob("*") if path.is_file())
     # All parents up to lab's immediate parent must also refuse broad writes,
     # or an unprivileged account could replace the directory itself.
     targets.add(lab.parent)
