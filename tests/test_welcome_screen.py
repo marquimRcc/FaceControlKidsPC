@@ -38,11 +38,23 @@ class TestWelcomeScreen(unittest.TestCase):
         self.assertIn("enabled", cfg)
         self.assertIn("programs", cfg)
 
-    def test_default_program_opens_youtube_kids_in_brave(self):
+    def test_default_program_opens_brave_start_page(self):
         program = default_programs_config()["programs"][0]
         self.assertIn("BraveSoftware", program["executable"])
-        self.assertIn("--new-window", program["arguments"])
-        self.assertIn("youtubekids.com", program["arguments"])
+        self.assertEqual(program["arguments"], "")
+
+    def test_launch_configured_programs_skips_running_process(self):
+        with patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
+             patch.object(welcome_screen, "load_programs_config", return_value={
+                 "enabled": True,
+                 "programs": [{"executable": "C:\\Windows\\notepad.exe", "arguments": "", "enabled": True}]
+             }), \
+             patch("pathlib.Path.is_file", return_value=True), \
+             patch.object(welcome_screen, "is_process_running", return_value=True), \
+             patch("subprocess.Popen") as mock_popen:
+            welcome_screen._programs_launched = False
+            welcome_screen.launch_configured_programs()
+            mock_popen.assert_not_called()
 
     def test_programs_only_launch_for_identified_child(self):
         fake_root = Mock()
