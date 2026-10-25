@@ -118,12 +118,12 @@ class LabBrokerWindowsTests(unittest.TestCase):
         # Bypass ONLY the peer attestation here to exercise wire encoding;
         # the actual SYSTEM token check is exercised end-to-end by the
         # disposable real Windows SCM service smoke.
-        with patch("facekids.quota_broker_client_win.require_system_pipe_server",
+        with patch("facekids.quota_broker_client_win.require_registered_system_service_pipe",
                    return_value=1234) as peer:
             self.assertEqual(
                 self._exercise_pipe({self._current_sid(): 1}, via_client=True)["remaining_seconds"], 60,
             )
-            peer.assert_called_once()
+            peer.assert_called_once_with(peer.call_args.args[0], "FaceKidsQuotaLabOnly")
 
     def test_sid_not_in_protected_mapping_is_denied(self):
         self.assertEqual(self._exercise_pipe({"S-1-5-18": 1}), {"status": "DENY"})
