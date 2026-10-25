@@ -30,8 +30,7 @@ from .quota_broker_runtime import ServiceOwnedQuotaRuntime
 from .quota_broker_wts_win import observe_console_from_system
 from .storage import Storage
 
-VM_WRITER_REGISTRY_PATH = r"SOFTWARE\FaceControlKidsPC\QuotaWriterVmLab"
-VM_WRITER_SERVICE_NAME = "FaceKidsQuotaWriterVmOnly"
+from .quota_vm_policy_constants import VM_WRITER_REGISTRY_PATH, VM_WRITER_SERVICE_NAME
 LAB_MARKER_KEY = "quota_writer_vm_fixture"
 LAB_MARKER_VALUE = "synthetic-acceptance-v1"
 
