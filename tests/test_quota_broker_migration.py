@@ -1,3 +1,4 @@
+from contextlib import closing
 """Snapshot migration rehearsals only (no real Windows installation)."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -23,7 +24,7 @@ class MigrationSnapshotTests(unittest.TestCase):
                 self.assertEqual(result.children, 2)
                 self.assertEqual(result.ledger_rows, 1)
                 self.assertEqual(len(result.sha256), 64)
-                with sqlite3.connect(result.output) as snapshot:
+                with closing(sqlite3.connect(result.output)) as snapshot:
                     self.assertEqual(snapshot.execute("PRAGMA integrity_check").fetchone()[0], "ok")
                     self.assertEqual(snapshot.execute("SELECT COUNT(*) FROM people").fetchone()[0], 2)
                     self.assertEqual(snapshot.execute("SELECT seconds FROM daily_usage").fetchone()[0], 12.5)
@@ -68,13 +69,13 @@ class MigrationSnapshotTests(unittest.TestCase):
             restored = create_vm_snapshot(
                 snapshot.output, root / "restored.sqlite3", lab_root=root
             )
-            with sqlite3.connect(restored.output) as check:
+            with closing(sqlite3.connect(restored.output)) as check:
                 usage = check.execute(
                     "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
                     (cid, day),
                 ).fetchone()[0]
                 self.assertEqual(usage, 60)
-            with sqlite3.connect(original) as current:
+            with closing(sqlite3.connect(original)) as current:
                 self.assertEqual(
                     current.execute("SELECT seconds FROM daily_usage").fetchone()[0],
                     180,
