@@ -134,7 +134,7 @@ class FaceAuthenticator:
             self._recognizer = Recognizer(self.models_dir)
         return self._recognizer
 
-    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5,
+    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 3.0,
                  camera_backend: str = "dshow") -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
@@ -377,6 +377,10 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                 return 21
         report("camera_ready")
         auth = FaceAuthenticator(models, db)
+        try:
+            _ = auth.recognizer
+        except Exception as e:
+            logger.warning("Aviso ao pre-aquecer modelos faciais: %s", e)
         sa = create_security_attributes()
         _serve_connections(kernel32, sa, auth, camera_backend, once, report)
         return 0
@@ -460,7 +464,10 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 ctypes.byref(bytes_written),
                 None,
             )
-            kernel32.FlushFileBuffers(h_pipe)
+            try:
+                kernel32.FlushFileBuffers(h_pipe)
+            except Exception:
+                pass
             logger.info("Resposta enviada: status=%s (%d bytes)", status, bytes_written.value)
 
             kernel32.DisconnectNamedPipe(h_pipe)
