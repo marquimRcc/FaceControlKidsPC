@@ -25,6 +25,7 @@ from facekids.quota_broker_writer_scm_win import (
 )
 from facekids.storage import Storage
 from facekids.quota_broker_bound_client_win import query_current_bound_vm_balance
+from facekids.quota_vm_recovery_gate_win import verify_offline_vm_recovery
 from facekids.filhos_bound_vm_agent import observe_vm_bound_once
 from facekids.quota_vm_cutover import (
     OWNER_KEY, SERVICE_ONLY, promote_vm_lab_writer, restore_vm_lab_offline,
@@ -182,6 +183,12 @@ def main() -> int:
         )
         win32serviceutil.StartService(VM_WRITER_SERVICE_NAME)
         _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_RUNNING)
+        try:
+            verify_offline_vm_recovery(expected_database=database)
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("Running SCM writer passed the offline rollback gate")
 
         # A real child token cannot read/replace the VM-owned ledger or
         # models, or mutate SCM policy. There is no write IPC to attack.
@@ -271,11 +278,15 @@ def main() -> int:
         win32serviceutil.StopService(VM_WRITER_SERVICE_NAME)
         _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_STOPPED)
 
-        # An offline rollback is tested only AFTER the SCM writer has stopped.
+        # Independent administrative recovery gate: actual registered SCM
+        # state, protected HKLM and file/model ACL must all agree before
+        # the cutover can restore the synthetic fixture.
+        if not verify_offline_vm_recovery(expected_database=database):
+            raise AssertionError("Recovery gate did not attest SERVICE_STOPPED")
         restored = restore_vm_lab_offline(
             config, backup_path=backup, preserved_current_path=undo,
-            offline_gate=lambda: (
-                _query_state(VM_WRITER_SERVICE_NAME) == win32service.SERVICE_STOPPED
+            offline_gate=lambda: verify_offline_vm_recovery(
+                expected_database=database
             ),
         )
         if not restored.samefile(undo):
@@ -287,7 +298,7 @@ def main() -> int:
                 raise AssertionError("Rollback lost synthetic profiles")
         print("PASS: real SCM SYSTEM quota writer restarted fail-closed, "
               "VM child read-only, legacy double-charge rejected, "
-              "WAL rollback restored 3 synthetic children and 0 unauthorized debits")
+              "SCM-attested offline rollback restored 3 synthetic children and 0 unauthorized debits")
         return 0
     finally:
         problems = []
