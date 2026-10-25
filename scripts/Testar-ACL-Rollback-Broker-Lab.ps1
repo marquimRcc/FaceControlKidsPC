@@ -28,10 +28,12 @@ try {
     }
     $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $builtinUsers = New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-545'
-    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
-        $currentSid, 'FullControl', 'Allow')))
-    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
-        $builtinUsers, 'ReadAndExecute', 'Allow')))
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        $currentSid, [Security.AccessControl.FileSystemRights]::FullControl,
+        [Security.AccessControl.AccessControlType]::Allow))
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        $builtinUsers, [Security.AccessControl.FileSystemRights]::ReadAndExecute,
+        [Security.AccessControl.AccessControlType]::Allow))
     Set-Acl -LiteralPath $file -AclObject $acl -ErrorAction Stop
 
     $check = Get-Acl -LiteralPath $file
