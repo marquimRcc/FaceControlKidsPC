@@ -16,25 +16,27 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 from datetime import date
-from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Optional
 
 from .avatar_utils import (
-    AVATAR_DIR,
     get_child_avatar_path,
-    remove_child_avatar_files,
     set_child_photo_from_file,
+    remove_child_avatar_files,
+    AVATAR_DIR,
 )
+from .storage import Storage
+from .parent_ui_state import filter_children, load_overview, screen_time_label, validate_schedule
+from .ui_theme import THEMES, load_theme, save_theme, theme_palette
 from .children_pilot import child_pilot_database, windows_token_user
 from .platform_paths import application_data_dir
-from .storage import Storage
 
 logger = logging.getLogger("FaceKidsAdmin")
 
@@ -42,25 +44,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT_DIR / "models"
 PROGRAMS_FILE = application_data_dir() / "programas_inicializar.json"
 
-# Paleta Moderna Escura (Alinhada com Catppuccin Mocha / Welcome Screen)
-BG_MAIN = "#0F0F17"
-BG_HEADER = "#181825"
-BG_CARD = "#181825"
-BG_BOX = "#1E1E2E"
-BG_BOX_HOVER = "#252538"
-BORDER_DEFAULT = "#313244"
-BORDER_ACCENT = "#38BDF8"
+# The classic palette is unchanged. Theme changes rebuild Tk widgets with
+# these active module-level roles, including existing dialogs and card canvases.
+def _activate_theme(name: str) -> None:
+    globals().update(theme_palette(name))
 
-TEXT_TITLE = "#CDD6F4"
-TEXT_SUB = "#A6ADC8"
-TEXT_MUTED = "#6C7086"
 
-ACCENT_BLUE = "#38BDF8"
-ACCENT_CYAN = "#89DCEB"
-ACCENT_GREEN = "#A6E3A1"
-ACCENT_YELLOW = "#F9E2AF"
-ACCENT_RED = "#F38BA8"
-ACCENT_PURPLE = "#CBA6F7"
+_activate_theme("Atual")
 
 
 def is_admin_account() -> bool:
@@ -197,7 +187,7 @@ class ProgramsConfigDialog(tk.Toplevel):
             text="💾 Salvar Alterações",
             font=("Segoe UI", 9, "bold"),
             bg=ACCENT_BLUE,
-            fg="#0B0B12",
+            fg=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=14,
@@ -238,7 +228,7 @@ class ProgramsConfigDialog(tk.Toplevel):
                 variable=var,
                 command=_toggle,
                 bg=BG_BOX,
-                selectcolor="#11111B",
+                selectcolor=BG_FIELD,
                 activebackground=BG_BOX,
             )
             cb.pack(side=tk.LEFT)
@@ -357,7 +347,7 @@ class WeeklyUsageDialog(tk.Toplevel):
                 tk.Label(row, text=day_str, font=("Segoe UI", 9), fg=TEXT_TITLE, bg=BG_BOX, width=12, anchor="w").pack(side=tk.LEFT)
 
                 pct = min(1.0, sec / 7200.0)
-                bar_c = tk.Canvas(row, height=8, bg="#11111B", highlightthickness=0)
+                bar_c = tk.Canvas(row, height=8, bg=BG_FIELD, highlightthickness=0)
                 bar_c.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
 
                 fill_w = int(220 * pct)
@@ -399,14 +389,14 @@ class CurfewConfigDialog(tk.Toplevel):
         r1 = tk.Frame(box, bg=BG_BOX)
         r1.pack(fill=tk.X, pady=4)
         tk.Label(r1, text="Liberar acesso a partir das:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.start_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_CYAN, justify="center")
+        self.start_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=8, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, justify="center")
         self.start_entry.insert(0, start_val)
         self.start_entry.pack(side=tk.RIGHT)
 
         r2 = tk.Frame(box, bg=BG_BOX)
         r2.pack(fill=tk.X, pady=4)
         tk.Label(r2, text="Encerrar acesso (bloquear) às:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.end_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_RED, justify="center")
+        self.end_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=8, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_RED, justify="center")
         self.end_entry.insert(0, end_val)
         self.end_entry.pack(side=tk.RIGHT)
 
@@ -425,7 +415,7 @@ class CurfewConfigDialog(tk.Toplevel):
 
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
         btn_bar.pack(fill=tk.X)
-        save_btn = tk.Button(btn_bar, text="💾 Salvar Horário", font=("Segoe UI", 9, "bold"), bg=ACCENT_PURPLE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=16, pady=6, command=self._save)
+        save_btn = tk.Button(btn_bar, text="💾 Salvar Horário", font=("Segoe UI", 9, "bold"), bg=ACCENT_PURPLE, fg=TEXT_ON_ACCENT, relief=tk.FLAT, cursor="hand2", padx=16, pady=6, command=self._save)
         save_btn.pack(side=tk.RIGHT)
 
     def _save(self):
@@ -440,6 +430,8 @@ class CurfewConfigDialog(tk.Toplevel):
             return
 
         self.store.set_curfew_config(self.enabled_var.get(), s, e)
+        if hasattr(self.master, "refresh"):
+            self.master.refresh()
         status_txt = f"Horário de uso configurado: {s} às {e} (Ativo: {'Sim' if self.enabled_var.get() else 'Não'})"
         messagebox.showinfo("Sucesso", status_txt, parent=self)
         self.destroy()
@@ -474,13 +466,13 @@ class PinConfigDialog(tk.Toplevel):
         r1 = tk.Frame(box, bg=BG_BOX)
         r1.pack(fill=tk.X, pady=4)
         tk.Label(r1, text="Novo PIN (4 a 8 números):", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.pin_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.pin_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=10, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, show="*", justify="center")
         self.pin_entry.pack(side=tk.RIGHT)
 
         r2 = tk.Frame(box, bg=BG_BOX)
         r2.pack(fill=tk.X, pady=4)
         tk.Label(r2, text="Confirmar Novo PIN:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.confirm_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.confirm_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=10, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, show="*", justify="center")
         self.confirm_entry.pack(side=tk.RIGHT)
 
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
@@ -490,7 +482,7 @@ class PinConfigDialog(tk.Toplevel):
             rem_btn = tk.Button(btn_bar, text="🗑️ Desativar PIN", font=("Segoe UI", 9), bg=BG_BOX, fg=ACCENT_RED, relief=tk.FLAT, cursor="hand2", padx=10, pady=5, command=self._remove_pin)
             rem_btn.pack(side=tk.LEFT)
 
-        save_btn = tk.Button(btn_bar, text="💾 Salvar PIN", font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=14, pady=5, command=self._save_pin)
+        save_btn = tk.Button(btn_bar, text="💾 Salvar PIN", font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg=TEXT_ON_ACCENT, relief=tk.FLAT, cursor="hand2", padx=14, pady=5, command=self._save_pin)
         save_btn.pack(side=tk.RIGHT)
 
     def _save_pin(self):
@@ -530,9 +522,12 @@ class AdminDashboard(tk.Tk):
             self.destroy()
             sys.exit(1)
 
+        self.theme_name = load_theme()
+        _activate_theme(self.theme_name)
+
         self.title("FaceControl Kids — Painel de Controle dos Pais")
-        self.geometry("1040x720")
-        self.minsize(880, 600)
+        self.geometry("1180x780")
+        self.minsize(960, 620)
         self.configure(bg=BG_MAIN)
 
         # Referencia de banco
@@ -579,9 +574,36 @@ class AdminDashboard(tk.Tk):
         )
         app_sub.pack(anchor="w")
 
+        # Three user-selectable palettes; persist only in the parent profile,
+        # never in the shared child SQLite or the Windows authentication path.
+        selector = tk.Frame(header, bg=BG_HEADER, padx=18, pady=12)
+        selector.pack(side=tk.RIGHT)
+        tk.Label(
+            selector, text="Tema das cores", bg=BG_HEADER, fg=TEXT_SUB,
+            font=("Segoe UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 9))
+        self.theme_var = tk.StringVar(value=self.theme_name)
+        chooser = tk.OptionMenu(
+            selector, self.theme_var, *THEMES.keys(), command=self._change_theme
+        )
+        chooser.configure(
+            bg=BG_BOX, fg=TEXT_TITLE, activebackground=BG_BOX_HOVER,
+            activeforeground=TEXT_TITLE, relief=tk.FLAT, bd=0,
+            highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            cursor="hand2", font=("Segoe UI", 10, "bold"),
+            width=8, padx=7, pady=5,
+        )
+        chooser["menu"].configure(
+            bg=BG_BOX, fg=TEXT_TITLE, activebackground=BG_BOX_HOVER,
+            activeforeground=TEXT_TITLE, font=("Segoe UI", 10),
+        )
+        chooser.pack(side=tk.LEFT)
+
         # Botoes Superiores
-        top_btn_frame = tk.Frame(header, bg=BG_HEADER, padx=20, pady=16)
-        top_btn_frame.pack(side=tk.RIGHT)
+        # Navigation lives below the brand header, so all actions remain visible
+        # on a 960px wide laptop screen (instead of overflowing on the right).
+        top_btn_frame = tk.Frame(self, bg=BG_MAIN, padx=20, pady=10)
+        top_btn_frame.pack(fill=tk.X, side=tk.TOP)
 
         history_btn = tk.Button(
             top_btn_frame,
@@ -668,9 +690,9 @@ class AdminDashboard(tk.Tk):
             text="➕ Nova Criança",
             font=("Segoe UI", 9, "bold"),
             bg=ACCENT_BLUE,
-            fg="#0B0B12",
+            fg=TEXT_ON_ACCENT,
             activebackground=ACCENT_CYAN,
-            activeforeground="#0B0B12",
+            activeforeground=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=10,
@@ -692,7 +714,91 @@ class AdminDashboard(tk.Tk):
             bg=BG_MAIN,
         ).pack(side=tk.LEFT)
 
-        # 3. Area Principal com Scroll para os Cards
+        # 3. Overview: four compact metrics and an always-visible search.
+        overview_bar = tk.Frame(self, bg=BG_MAIN, padx=20, pady=6)
+        overview_bar.pack(fill=tk.X)
+        overview_heading = tk.Frame(overview_bar, bg=BG_MAIN)
+        overview_heading.pack(fill=tk.X, pady=(0, 9))
+        tk.Label(overview_heading, text="Visão geral", bg=BG_MAIN, fg=TEXT_TITLE,
+                 font=("Segoe UI", 15, "bold")).pack(side=tk.LEFT)
+        self.result_counter = tk.StringVar(value="")
+        tk.Label(overview_heading, textvariable=self.result_counter, bg=BG_MAIN,
+                 fg=TEXT_MUTED, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(12, 0))
+        search_row = tk.Frame(overview_heading, bg=BG_MAIN)
+        search_row.pack(side=tk.RIGHT)
+        tk.Label(search_row, text="Buscar filho", bg=BG_MAIN, fg=TEXT_SUB,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 8))
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(
+            search_row, textvariable=self.search_var, width=23,
+            font=("Segoe UI", 10), bg=BG_BOX, fg=TEXT_TITLE,
+            insertbackground=TEXT_TITLE, relief=tk.FLAT,
+            highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            highlightcolor=ACCENT_BLUE,
+        )
+        self.search_entry.pack(side=tk.LEFT, ipady=5)
+        self.search_var.trace_add("write", lambda *_: self.refresh())
+
+        metrics_row = tk.Frame(overview_bar, bg=BG_MAIN)
+        metrics_row.pack(fill=tk.X)
+        self.total_var = tk.StringVar(value="—")
+        self.enrolled_var = tk.StringVar(value="—")
+        self.remaining_var = tk.StringVar(value="—")
+        self.schedule_var = tk.StringVar(value="—")
+        for column, (label, value, accent) in enumerate((
+            ("CRIANÇAS", self.total_var, ACCENT_CYAN),
+            ("ROSTOS CADASTRADOS", self.enrolled_var, ACCENT_GREEN),
+            ("SALDO TOTAL HOJE", self.remaining_var, ACCENT_BLUE),
+            ("HORÁRIO DE USO", self.schedule_var, ACCENT_PURPLE),
+        )):
+            tile = tk.Frame(metrics_row, bg=BG_CARD, padx=13, pady=10,
+                            highlightthickness=1, highlightbackground=BORDER_DEFAULT)
+            tile.grid(row=0, column=column, sticky="nsew", padx=(0, 9 if column < 3 else 0))
+            metrics_row.columnconfigure(column, weight=1, uniform="metrics")
+            tk.Label(tile, text=label, bg=BG_CARD, fg=TEXT_MUTED,
+                     font=("Segoe UI", 8, "bold")).pack(anchor="w")
+            tk.Label(tile, textvariable=value, bg=BG_CARD, fg=accent,
+                     font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(3, 0))
+
+        # Global allowed-hours editor, embedded beside the quotas.
+        schedule_row = tk.Frame(overview_bar, bg=BG_BOX, padx=12, pady=9,
+                                highlightthickness=1, highlightbackground=BORDER_DEFAULT)
+        schedule_row.pack(fill=tk.X, pady=(10, 0))
+        tk.Label(schedule_row, text="Horário permitido (todos os filhos)",
+                 bg=BG_BOX, fg=TEXT_TITLE, font=("Segoe UI", 10, "bold")).pack(
+                     side=tk.LEFT, padx=(0, 14))
+        self.schedule_enabled_var = tk.BooleanVar(value=False)
+        self.schedule_start_var = tk.StringVar(value="08:00")
+        self.schedule_end_var = tk.StringVar(value="20:00")
+        self._schedule_loaded = None
+        tk.Checkbutton(
+            schedule_row, text="Ativo", variable=self.schedule_enabled_var,
+            bg=BG_BOX, fg=TEXT_SUB, selectcolor=BG_CARD,
+            activebackground=BG_BOX, activeforeground=TEXT_TITLE,
+        ).pack(side=tk.LEFT, padx=(0, 12))
+        for caption, var in (("Das", self.schedule_start_var),
+                             ("até", self.schedule_end_var)):
+            tk.Label(schedule_row, text=caption, bg=BG_BOX, fg=TEXT_SUB,
+                     font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 5))
+            tk.Entry(
+                schedule_row, textvariable=var, width=6, justify="center",
+                bg=BG_CARD, fg=TEXT_TITLE, insertbackground=TEXT_TITLE,
+                font=("Segoe UI", 10), relief=tk.FLAT,
+                highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            ).pack(side=tk.LEFT, padx=(0, 10), ipady=3)
+        tk.Button(
+            schedule_row, text="Salvar horário", command=self._save_inline_schedule,
+            bg=ACCENT_PURPLE, fg=BG_MAIN, activebackground=ACCENT_CYAN,
+            activeforeground=BG_MAIN, relief=tk.FLAT, cursor="hand2",
+            font=("Segoe UI", 9, "bold"), padx=10, pady=4,
+        ).pack(side=tk.LEFT, padx=(2, 0))
+
+        self.data_source_var = tk.StringVar(value="")
+        tk.Label(overview_bar, textvariable=self.data_source_var, bg=BG_MAIN,
+                 fg=TEXT_SUB, anchor="w", font=("Segoe UI", 9),
+                 wraplength=1080, justify="left").pack(fill=tk.X, pady=(9, 0))
+
+        # 4. Cards retain the existing enrollment, photo, bonus and quota flows.
         main_container = tk.Frame(self, bg=BG_MAIN, padx=20, pady=10)
         main_container.pack(fill=tk.BOTH, expand=True)
 
@@ -715,44 +821,146 @@ class AdminDashboard(tk.Tk):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    def refresh(self):
-        """Atualiza os dados lendo diretamente do SQLite compartilhado."""
-        for w in self.cards_frame.winfo_children():
-            w.destroy()
+    def _change_theme(self, selected: str) -> None:
+        """Apply immediately, rebuilding only presentation widgets.
 
-        self.avatar_images.clear()
-        people = self.store.people()
-
-        if not people:
-            empty_box = tk.Frame(self.cards_frame, bg=BG_CARD, padx=30, pady=30)
-            empty_box.pack(fill=tk.X, pady=20)
-            tk.Label(
-                empty_box,
-                text="Nenhum perfil de criança encontrado no banco de dados.",
-                font=("Segoe UI", 12),
-                fg=TEXT_SUB,
-                bg=BG_CARD,
-            ).pack()
+        The enrollment subprocess, database connection, Windows session and
+        authentication remain untouched. Changing a theme never asks for a
+        second PIN or silently applies unsaved quota/schedule changes.
+        """
+        if selected == self.theme_name:
+            return
+        try:
+            save_theme(selected)
+        except (OSError, ValueError) as exc:
+            self.theme_var.set(self.theme_name)
+            messagebox.showerror(
+                "Tema não salvo",
+                f"Não foi possível salvar a preferência: {exc}", parent=self
+            )
             return
 
-        today = date.today().isoformat()
+        search = self.search_var.get()
+        schedule_fields = (
+            self.schedule_enabled_var.get(),
+            self.schedule_start_var.get(),
+            self.schedule_end_var.get(),
+            self._schedule_loaded,
+        )
 
-        # Renderizar cada crianca
-        for pid, name, limit_seconds in people:
-            samples = self.store.enrollment_count(pid)
-            used_seconds = self.store.used(pid, today)
-            bonus_seconds = self.store.bonus(pid, today)
-            rem_seconds = self.store.remaining(pid, today)
-            limit_min = limit_seconds // 60
+        self.theme_name = selected
+        _activate_theme(selected)
+        self.withdraw()
+        try:
+            # Existing modal dialogs use grab_set(), so the user cannot change
+            # the theme from the main window while one is open.
+            for widget in self.winfo_children():
+                if not isinstance(widget, tk.Toplevel):
+                    widget.destroy()
+            self.avatar_images.clear()
+            self.configure(bg=BG_MAIN)
+            self._build_ui()
+            enabled, start, end, previous_loaded = schedule_fields
+            self._schedule_loaded = previous_loaded
+            self.schedule_enabled_var.set(enabled)
+            self.schedule_start_var.set(start)
+            self.schedule_end_var.set(end)
+            self.search_var.set(search)
+            self.refresh()
+            self.status_text.set(f"Tema {selected} aplicado e salvo.")
+        finally:
+            self.deiconify()
 
+    def _save_inline_schedule(self):
+        """Apply global hours only on deliberate parent action, never during refresh."""
+        try:
+            enabled, start, end = validate_schedule(
+                self.schedule_enabled_var.get(),
+                self.schedule_start_var.get(),
+                self.schedule_end_var.get(),
+            )
+            self.store.set_curfew_config(enabled, start, end)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Horário inválido", str(exc), parent=self)
+            return
+        self._schedule_loaded = (enabled, start, end)
+        self.status_text.set(
+            f"Horário {'ativado' if enabled else 'desativado'} • {start} às {end}"
+        )
+        self.refresh()
+
+    def refresh(self):
+        """Re-render UI from read-only view models; never change quota in refresh."""
+        for widget in self.cards_frame.winfo_children():
+            widget.destroy()
+        self.avatar_images.clear()
+
+        overview = load_overview(self.store)
+        actual_schedule = (
+            overview.schedule_enabled,
+            overview.schedule_start,
+            overview.schedule_end,
+        )
+        edited_schedule = (
+            self.schedule_enabled_var.get(),
+            self.schedule_start_var.get(),
+            self.schedule_end_var.get(),
+        )
+        # Preserve partially edited fields during search/filter refresh.
+        if self._schedule_loaded is None or edited_schedule == self._schedule_loaded:
+            self.schedule_enabled_var.set(overview.schedule_enabled)
+            self.schedule_start_var.set(overview.schedule_start)
+            self.schedule_end_var.set(overview.schedule_end)
+            self._schedule_loaded = actual_schedule
+        visible = filter_children(overview.children, self.search_var.get())
+        self.total_var.set(str(overview.total_children))
+        self.enrolled_var.set(
+            f"{overview.recognized_children} de {overview.total_children}"
+        )
+        self.remaining_var.set(screen_time_label(overview.remaining_seconds))
+        self.schedule_var.set(overview.schedule_text)
+        self.result_counter.set(
+            f"{len(visible)} de {overview.total_children} exibidos"
+        )
+        if overview.outside_schedule:
+            self.schedule_var.set("Fora do horário")
+
+        shared = Path("C:/ProgramData/FaceKids/criancas.sqlite3")
+        is_shared = self.db_path.resolve() == shared.resolve()
+        self.data_source_var.set(
+            "Dados compartilhados do FaceKids • horários e saldos de hoje"
+            if is_shared else
+            "Atenção: banco local de teste. Ele pode não ser o mesmo da conta Filhos. "
+            "Não utilize estes saldos como controle de segurança."
+        )
+
+        if not visible:
+            box = tk.Frame(self.cards_frame, bg=BG_CARD, padx=30, pady=30)
+            box.pack(fill=tk.X, pady=16)
+            title = (
+                "Nenhum filho cadastrado"
+                if not overview.children else
+                "Nenhum filho corresponde à sua busca"
+            )
+            tk.Label(box, text=title, bg=BG_CARD, fg=TEXT_TITLE,
+                     font=("Segoe UI", 13, "bold")).pack(pady=(0, 6))
+            tk.Label(box, text=(
+                "Clique em '+ Nova Criança' para criar um perfil."
+                if not overview.children else
+                "Altere o termo de busca para mostrar outros perfis."
+            ), bg=BG_CARD, fg=TEXT_SUB,
+                     font=("Segoe UI", 10)).pack()
+            return
+
+        for child in visible:
             self._create_child_card(
-                child_id=pid,
-                name=name,
-                samples=samples,
-                limit_min=limit_min,
-                used_sec=used_seconds,
-                bonus_sec=bonus_seconds,
-                rem_sec=rem_seconds,
+                child_id=child.child_id,
+                name=child.name,
+                samples=child.samples,
+                limit_min=child.limit_minutes,
+                used_sec=child.used_seconds,
+                bonus_sec=child.bonus_minutes * 60,
+                rem_sec=child.remaining_seconds,
             )
 
     def _create_child_card(
@@ -791,8 +999,12 @@ class AdminDashboard(tk.Tk):
         )
         badge.pack(side=tk.LEFT)
 
-        status_text = f"● {samples} amostras cadastradas" if samples > 0 else "○ Sem biometria cadastrada"
-        status_color = ACCENT_GREEN if samples > 0 else TEXT_MUTED
+        if samples == 0:
+            status_text, status_color = "○ Cadastro facial pendente", ACCENT_YELLOW
+        elif rem_sec <= 0:
+            status_text, status_color = "● Tempo esgotado hoje", ACCENT_RED
+        else:
+            status_text, status_color = f"● Rosto cadastrado · {samples} amostras", ACCENT_GREEN
         status_label = tk.Label(
             header_row,
             text=status_text,
@@ -854,7 +1066,7 @@ class AdminDashboard(tk.Tk):
 
         tk.Label(
             avatar_col,
-            text="Foto da\nboas-vindas",
+            text="Foto da\\nboas-vindas",
             font=("Segoe UI", 8, "bold"),
             fg=TEXT_SUB,
             bg=BG_CARD,
@@ -946,7 +1158,7 @@ class AdminDashboard(tk.Tk):
         # Barra visual de progresso
         total_quota_sec = max(1, (limit_min * 60) + bonus_sec)
         pct = max(0.0, min(1.0, rem_sec / total_quota_sec))
-        bar_canvas = tk.Canvas(quota_box, height=6, bg="#11111B", highlightthickness=0)
+        bar_canvas = tk.Canvas(quota_box, height=6, bg=BG_FIELD, highlightthickness=0)
         bar_canvas.pack(fill=tk.X, pady=(2, 10))
 
         def _draw_bar(evt, c=bar_canvas, p=pct):
@@ -976,8 +1188,8 @@ class AdminDashboard(tk.Tk):
                 controls_row,
                 text=label,
                 font=("Segoe UI", 8, "bold" if limit_min == m else "normal"),
-                bg=ACCENT_BLUE if limit_min == m else "#11111B",
-                fg="#0B0B12" if limit_min == m else TEXT_TITLE,
+                bg=ACCENT_BLUE if limit_min == m else BG_FIELD,
+                fg=TEXT_ON_ACCENT if limit_min == m else TEXT_TITLE,
                 relief=tk.FLAT,
                 cursor="hand2",
                 padx=6,
@@ -990,7 +1202,7 @@ class AdminDashboard(tk.Tk):
             controls_row,
             text="Outro...",
             font=("Segoe UI", 8),
-            bg="#11111B",
+            bg=BG_FIELD,
             fg=TEXT_SUB,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1017,7 +1229,7 @@ class AdminDashboard(tk.Tk):
                 bonus_frame,
                 text=f"+{b_min}m",
                 font=("Segoe UI", 8, "bold"),
-                bg="#11111B",
+                bg=BG_FIELD,
                 fg=ACCENT_YELLOW,
                 relief=tk.FLAT,
                 cursor="hand2",
@@ -1034,7 +1246,7 @@ class AdminDashboard(tk.Tk):
             textvariable=custom_bonus_var,
             font=("Segoe UI", 8, "bold"),
             width=4,
-            bg="#11111B",
+            bg=BG_FIELD,
             fg=ACCENT_YELLOW,
             insertbackground=ACCENT_YELLOW,
             highlightbackground=BORDER_DEFAULT,
@@ -1071,9 +1283,9 @@ class AdminDashboard(tk.Tk):
             text="+",
             font=("Segoe UI", 8, "bold"),
             bg=ACCENT_YELLOW,
-            fg="#0B0B12",
-            activebackground="#FFF0BA",
-            activeforeground="#0B0B12",
+            fg=TEXT_ON_ACCENT,
+            activebackground=YELLOW_HOVER,
+            activeforeground=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=6,
