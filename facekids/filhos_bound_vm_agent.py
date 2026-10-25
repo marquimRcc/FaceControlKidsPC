@@ -36,7 +36,7 @@ class VmBoundChildObserver:
     def observe(self) -> VmBoundStatus:
         try:
             balance = self._read()
-        except (OSError, ValueError, RuntimeError, TimeoutError, PermissionError):
+        except (OSError, ValueError, RuntimeError, TimeoutError, PermissionError, TypeError):
             return VmBoundStatus("unavailable")
         if balance is None:
             return VmBoundStatus("unverified")
@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Use --vm-lab-only on a disposable VM, never on the family PC")
     try:
         observation = observe_vm_bound_once()
-    except (OSError, ValueError, RuntimeError, PermissionError):
+    except (OSError, ValueError, RuntimeError, PermissionError, TypeError):
         print("VM READ ONLY: unavailable; no charge, no lock")
         return 2
     if observation.state != "observed":
