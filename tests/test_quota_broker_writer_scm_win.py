@@ -120,6 +120,7 @@ class WriterVmScmLifecycleTests(unittest.TestCase):
              patch.object(self.mod.ServiceOwnedQuotaRuntime,
                           "from_service_authenticator", return_value=object()) as factory, \
              patch.object(self.mod, "ServiceOwnedScmHost", Host):
+            storage.return_value.get_setting.return_value = "vm-service-only"
             instance.SvcDoRun()
             token.assert_called_once_with(registry_path=VM_WRITER_REGISTRY_PATH)
             config.assert_called_once()
@@ -164,6 +165,24 @@ class WriterVmScmLifecycleTests(unittest.TestCase):
             instance._serve_bound_vm_read_loop("S-1-5-21-1-2-3-1001")
         self.assertIsNone(instance._bound_failure)
         instance._host.request_stop.assert_not_called()
+
+    def test_unpromoted_vm_ledger_refuses_service_before_camera_or_billing(self):
+        instance, status = self.fake()
+        with patch.object(self.mod, "_require_expected_service_sid"), \
+             patch.object(self.mod, "read_hklm_writer_vm_config",
+                          return_value=(Path("synthetic.sqlite3"),
+                                        "S-1-5-21-1-2-3-1001",
+                                        Path("models"))), \
+             patch.object(self.mod, "assert_protected_vm_ledger_acl"), \
+             patch.object(self.mod, "Storage") as storage, \
+             patch.object(self.mod, "FaceAuthenticator") as camera, \
+             patch.object(self.mod, "servicemanager"):
+            storage.return_value.get_setting.return_value = None
+            with self.assertRaises(PermissionError):
+                instance.SvcDoRun()
+        camera.assert_not_called()
+        storage.return_value.close.assert_called_once()
+        self.assertNotIn(self.mod.win32service.SERVICE_RUNNING, status)
 
     def test_wrong_service_principal_blocks_sqlite_access(self):
         instance, status = self.fake()
