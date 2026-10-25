@@ -176,6 +176,7 @@ class OfflineVmCutoverTests(unittest.TestCase):
                     "UPDATE daily_usage SET seconds=seconds+2 WHERE person_id=?",
                     (self.people[0],)
                 )
+                writer.commit()  # closing() alone rolls back uncommitted writes
             return snapshot
 
         with patch("facekids.quota_vm_cutover.create_vm_snapshot", side_effect=race):
