@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import re
 from typing import Callable
 
 from .ipc_json import parse_local_json
@@ -50,7 +51,7 @@ def handle_bound_read(
         if (type(raw) is not bytes or
                 not 0 < len(raw) <= MAX_BOUND_REQUEST_BYTES or
                 type(verified_client_sid) is not str or
-                not verified_client_sid.startswith("S-1-")):
+                re.fullmatch(r"S-1-[0-9]+(?:-[0-9]+){1,14}", verified_client_sid) is None):
             return {"status": "DENY"}
         request = parse_local_json(raw, max_bytes=MAX_BOUND_REQUEST_BYTES)
         if (type(request) is not dict or
