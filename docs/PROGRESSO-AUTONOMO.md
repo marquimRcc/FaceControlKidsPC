@@ -4,6 +4,57 @@
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
 > A `main` nao deve ser alterada nem mesclada sem ordem explicita.
 
+## Ciclo P0-1 a P0-5 — hardening da branch de segurança (25/10/2026)
+
+**Branch:** `fix/facekids-ipc-security-hardening-20261024` — [PR #4](https://github.com/marquimRcc/FaceControlKidsPC/pull/4) em draft;
+`main` intocada. A implementação anterior de P0-1 a P0-5 de VM
+foi conferida no HEAD `3f17b02c`, com workflows Windows/Ubuntu
+e Credential Provider aprovados antes desta rodada.
+
+- **P0-1:** contrato `FACEKIDS_BOUND_QUOTA_V1` agora rejeita strings SID
+  malformadas antes de chamar o leitor do saldo associado à lease facial
+  do serviço SCM. Identificação do cliente continua sendo do token Windows,
+  nunca dos campos JSON.
+- **P0-2:** o observador read-only infantil devolve `unavailable` para
+  `TypeError` do cliente, sem expor cobrança, troca de rosto, bloqueio
+  ou acesso direto a SQLite. Não houve ativação do modo na instalação familiar.
+- **P0-3:** teste simultâneo de quatro conexões SQLite reais no mesmo
+  recibo de 32 dígitos: um débito e três replays sem cobrança. Reinício
+  simulado mantém a deduplicação e recusa o escritor legado após a promoção.
+- **P0-4:** a promoção compara schema e conteúdo de TODAS as tabelas
+  SQLite, incluindo valores, configurações, embeddings e recibos, após
+  o backup WAL-aware e dentro de `BEGIN IMMEDIATE`. Antes, contava
+  apenas quatro tabelas e perdia `UPDATE` sem alteração na contagem.
+  Rollback requer owner `vm-service-only` e rejeita symlink no caminho
+  solicitado e estágio de restauração pendente sem criar novo undo.
+- **P0-5:** teste negativo de desconexão WTS, tempo avançado e
+  reinicialização do host: sem lease facial antiga, débito zero até um
+  novo evento de desbloqueio do SCM e nova identificação simulada.
+
+**Correções rastreáveis:**
+- [b17d3520](https://github.com/marquimRcc/FaceControlKidsPC/commit/b17d3520023d404f6cab4074cfbb85ea496380a5) e [40d5931e](https://github.com/marquimRcc/FaceControlKidsPC/commit/40d5931e0b113f04e587c2f4292fc29e66cde53e): comparação integral e gates de rollback;
+- [45d5b107](https://github.com/marquimRcc/FaceControlKidsPC/commit/45d5b1075ac46242872e5e2cd73ff59c10505f43) e [ee03ed63](https://github.com/marquimRcc/FaceControlKidsPC/commit/ee03ed63aeeed49fc7fdb815cabc3202dd9562e6): testes negativos e correção do teste de corrida;
+- [320029cc](https://github.com/marquimRcc/FaceControlKidsPC/commit/320029cc19f994f1add7231f12284e1fc9bf7011), [a3659902](https://github.com/marquimRcc/FaceControlKidsPC/commit/a3659902150bd21fc2018a0ea387307aea59c44d): validações de IPC/agente;
+- [392c50b2](https://github.com/marquimRcc/FaceControlKidsPC/commit/392c50b2d801d8327d2944a1ae9f7e22af28b13e) e [300db35b](https://github.com/marquimRcc/FaceControlKidsPC/commit/300db35b6a49cab7a6e09dce5d15906f3a310b28): concorrência e reinício.
+
+**Evidências:** 6 testes isolados do comparador SQLite passaram localmente;
+o GitHub Actions do `300db35b` passou nos 2 jobs Windows/Ubuntu
+([Unit tests](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40208065120))
+e nos 2 jobs C++/Credential Provider
+([Native](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40208065101)).
+O workflow Windows inclui smoke de SCM SYSTEM, ACL e cutover sintético.
+Um teste novo inicialmente falhou: o mutador de teste fechava uma conexão
+sem commit; corrigido em `ee03ed63`; só os resultados do HEAD final
+são usados como aceite automatizado.
+
+**Não homologado:** webcam e liveness reais, SYSTEM/Sessão 0/Winlogon,
+snapshot externo e recuperação administrativa em VM interativa, instalação
+familiar, migração do banco produtivo, bloqueio por IPC e compatibilidade
+com alterações recentes da `main`. O PR permanece draft, sem merge.
+Não instalar no computador da família.
+
+---
+
 ## Fases 1 e 2 — progresso pós-P0-42 (20/10/2026)
 
 Pedido: concluir a Fase 1 e, sem solicitar nova autorização,
