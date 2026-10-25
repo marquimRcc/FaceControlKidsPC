@@ -3,6 +3,24 @@
 **Branch:** `feature/parent-dashboard-ui-20261025`  
 **PR:** [#5](https://github.com/marquimRcc/FaceControlKidsPC/pull/5) — draft, baseado em `handoff/facekids-auto-unlock-stabilization-20261021`.
 
+## Novidade — três temas de cores
+
+No canto superior direito do Painel dos Pais, **Tema das cores**, escolha uma das opções:
+
+- **Atual**: preserva exatamente as cores clássicas do painel (Catppuccin-like, azul/ciano e roxo).
+- **Claro**: fundo claro, cartões brancos e texto de alto contraste para ambientes iluminados.
+- **Escuro**: fundo grafite/azul-escuro e acentos mais suaves, diferente do tema Atual.
+
+A troca é **imediata, sem reiniciar**, redesenhando os cartões e a navegação. A busca e as edições ainda não salvas do horário ficam preservadas; só a preferência visual é salva. A opção será restaurada na próxima abertura, a partir de `%LOCALAPPDATA%\\FaceKids\\parent-ui-preferences.json`, **fora do banco compartilhado com a conta Filhos**. Arquivos de configuração inválidos são ignorados e o tema Atual é escolhido.
+
+A mudança de tema **não** altera fotos, embeddings, quotas, horários de uso, PIN, Credential Provider ou instalações do Windows.
+
+### Testes do seletor
+
+- `tests/test_ui_theme.py`: paletas, conservação exata da opção Atual, persistência atômica, valores inválidos e recuperação de preferência corrompida.
+- `tests/test_parent_theme_live.py`: simula mudanças Atual → Claro → Escuro → Atual sem criar janela, verifica estado de campos ainda não salvos e ausência de alterações no banco.
+- `scripts/ci_parent_theme_tk_smoke.py`: em runner GitHub-hosted Windows, tenta abrir Tk real com três perfis sintéticos e seleciona cada cor pelo próprio menu. Se o runner não oferecer uma sessão gráfica, registra `SKIP` e ainda será necessário verificar visualmente numa VM/desktop de teste.
+
 ## O que mudou
 
 Modernizamos a aplicação que **já abre** pelo launcher `abrir-facekids.bat`, sem criar um segundo sistema. A janela principal continua em `facekids/admin_dashboard.py`, Tkinter padrão, sem novas bibliotecas gráficas.
