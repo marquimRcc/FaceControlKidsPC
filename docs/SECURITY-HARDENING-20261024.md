@@ -288,3 +288,46 @@ Commits adicionais (branch somente, PR #4 permanece draft):
 - Nenhuma operacao de instalacao/registro COM, migracao de SQLite,
   icacls, Win+L ou webcam foi executada no computador familiar.
 - PR #4 permanece draft e nao mesclado.
+
+
+## Ciclo — broker Windows de laboratorio e diagnostico shadow (24/10/2026)
+
+**Etapas solicitadas 1 a 7 e 11: progresso executado sem modificar Windows domestico**
+
+| Etapa | Codigo / status |
+| --- | --- |
+| 1. Windows Service | Host Windows experimental de UMA requisicao criado, mas NAO registrado no SCM nem instalado; servico privilegiado permanente fica bloqueado ate VM |
+| 2. IPC | Contrato `FACEKIDS_QUOTA_V1` estritamente read-only; host de pipe local com SDDL explicita, sem clientes remotos e primeira instancia protegida |
+| 3. Tokens/SID | Servidor de lab extrai SID por `ImpersonateNamedPipeClient` e compara com mapeamento de teste; negacao de SID estranho coberta em CI Windows |
+| 4. SQLite | `ReadOnlyQuotaView` em `mode=ro`; snapshot WAL-consistente, preserva bonus e perfis, so permite arquivos NOVOS no laboratorio |
+| 5. ACLs | Planejador e auditoria read-only ja existentes; migracao NTFS efetiva AINDA NAO executada; falta service-owned ledger/VM |
+| 6. FilhosAgent | Opt-in `FACEKIDS_QUOTA_BROKER_SHADOW=1` e `FACEKIDS_QUOTA_LAB_SUFFIX` (apenas telemetry); debito/lock seguem legacy |
+| 7. Recuperacao | Restauracao de snapshot sintetico e verificacao de saldos anteriores; rollback COM/tarefas/Winlogon AINDA NAO validado |
+| 11. CI | Python Windows/Ubuntu, pipe Windows sintetico, build nativo CP/host e C++ completo executados sem alterar login |
+
+### Commits de implementacao
+
+- `e080eec8`, `ee5324e8`: protocolo read-only e testes anti-cliente malicioso.
+- `e9588868`, `2f939643`, `c734e845`: backup SQLite WAL-consistente e ensaio de restauracao em arquivo novo.
+- `d76cf88c`, `11038518`, `aba9238f`: host Windows de pipe de laboratorio com token SID e abertura read-only do ledger.
+- `14ddf52d`, `fd8ef240`: leitura sem escrita e roundtrip real de pipe sintetico sob Windows.
+- `8e7065d0`, `5707a162`: fechamentos explicitos SQLite no Windows; corrigidos dois erros de cleanup CI.
+- `4fe450b3`, `8cdc66a4`: cliente lab read-only reutilizavel e exercitado no runner Windows.
+- `f481f926`, `f2fd2048`: CLI de uma requisicao com gate `--vm-lab-only` e testes de caminho/SID.
+- `14f73189`, `9969fe2b`, `d42aaa4c`: shadow diagnostics no agente com comparacao de saldo, sem autoridade sobre logon, tempo ou bloqueio.
+
+### Evidencia GitHub Actions
+
+Para o ultimo commit funcional `d42aaa4cb61a802c7593a7618321303cd7b0403e`:
+- **Unit tests** `40146304213`: Windows SUCCESS e Ubuntu SUCCESS.
+- **Credential Provider compile and host checks** `40146304210`: build real SUCCESS e compile-and-host SUCCESS.
+- Os commits posteriores alteram somente a documentacao; verificar HEAD exato antes de qualquer revisao/merge.
+
+### Limites honestos / nao instalar no PC
+
+- Host `quota_broker_transport_win` so atende laboratorio: 1 pedido, IO sincronico, nao ha SCM, WTS privilegiado, servico ativo ou isolamento real da familia.
+- O cliente lab nao verifica SID do servidor, logo NUNCA deve autorizar bloqueio, quota nem logon. O modo shadow e somente logs.
+- SQLite legado ainda pode ser modificado pela conta Filhos; o agente ainda o escreve diretamente. A protecao de dados executaveis/ACLs precisa ser ensaiada em VM restauravel.
+- Scripts de instalacao existentes NAO foram executados nesta rodada. Sem mudanca em tarefa agendada, regsvr32, registro, ACL, cameras ou fotos.
+- Passagem para servico real requer testes de impersonacao e autenticidade do servidor em VM, timeouts/cancelamento robustos, serializacao exclusiva do ledger, backup/restauracao de COM e Winlogon, anti-spoof e validacao Win+L supervisionada.
+- PR #4 segue **draft**, com base handoff e sem merge em main.
