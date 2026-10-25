@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import closing
 import ctypes
 import os
+import secrets
 from pathlib import Path
 import shutil
 import site
@@ -82,6 +83,10 @@ def main() -> int:
     import pywintypes
     import win32service
     import win32serviceutil
+    import win32net
+    import win32netcon
+    import win32security
+    import win32con
     import winerror
 
     if _registry_exists(REGISTRY_PATH):
@@ -97,7 +102,23 @@ def main() -> int:
     pth = None
     policy_created = False
     service_creation_attempted = False
+    child_user = "FKSCM" + uuid.uuid4().hex[:12]
+    child_password = "A9!" + secrets.token_urlsafe(25)
+    child_created = False
+    child_token = None
+    child_impersonating = False
     try:
+        win32net.NetUserAdd(None, 1, {
+            "name": child_user, "password": child_password,
+            "priv": win32netcon.USER_PRIV_USER,
+            "flags": win32netcon.UF_SCRIPT | win32netcon.UF_NORMAL_ACCOUNT,
+        })
+        child_created = True
+        child_sid = win32security.ConvertSidToStringSid(
+            win32security.LookupAccountName(None, child_user)[0]
+        )
+        if child_sid == _current_user_sid():
+            raise AssertionError("Synthetic child SID must differ from runner admin")
         root.mkdir()
         db = root / "fixture.sqlite3"
         store = Storage(db)
@@ -112,7 +133,7 @@ def main() -> int:
             policy_created = True
             winreg.SetValueEx(key, "LabOnly", 0, winreg.REG_DWORD, 1)
             winreg.SetValueEx(key, "Database", 0, winreg.REG_SZ, str(db))
-            winreg.SetValueEx(key, "ClientSid", 0, winreg.REG_SZ, _current_user_sid())
+            winreg.SetValueEx(key, "ClientSid", 0, winreg.REG_SZ, child_sid)
             winreg.SetValueEx(key, "ChildId", 0, winreg.REG_DWORD, child_id)
             winreg.SetValueEx(key, "PipeSuffix", 0, winreg.REG_SZ, suffix)
             winreg.SetValueEx(key, "ServiceSid", 0, winreg.REG_SZ, "S-1-5-18")
@@ -139,20 +160,45 @@ def main() -> int:
         _await_state(SERVICE_NAME, win32service.SERVICE_RUNNING)
 
         pipe = r"\\.\pipe\FaceKidsQuotaBrokerLab-" + suffix
-        balance = query_lab_balance(pipe)
+        denied = query_lab_balance(pipe)
+        if denied != {"status": "DENY"}:
+            raise AssertionError("Lab service accepted unauthorized runner account")
+
+        child_token = win32security.LogonUser(
+            child_user, ".", child_password,
+            win32con.LOGON32_LOGON_INTERACTIVE,
+            win32con.LOGON32_PROVIDER_DEFAULT,
+        )
+        win32security.ImpersonateLoggedOnUser(child_token)
+        child_impersonating = True
+        try:
+            balance = query_lab_balance(pipe)
+        finally:
+            win32security.RevertToSelf()
+            child_impersonating = False
         if balance.get("status") != "OK" or balance.get("remaining_seconds") != 60:
-            raise AssertionError("Real SCM lab service failed synthetic read-only query")
+            raise AssertionError("Real SCM service denied the authorized child token")
         with closing(sqlite3.connect(db)) as verify:
             if verify.execute("SELECT count(*) FROM daily_usage").fetchone()[0] != 0:
                 raise AssertionError("SCM lab service must never debit a quota")
 
         win32serviceutil.StopService(SERVICE_NAME)
         _await_state(SERVICE_NAME, win32service.SERVICE_STOPPED)
-        print("PASS: disposable SCM install/start/pipe/stop; quota remains unchanged")
+        print("PASS: disposable SCM under SYSTEM; child token accepted, admin denied; quota unchanged")
         return 0
     finally:
         # Cleanup is mandatory even when install/start/pipe checks fail.
         cleanup_errors = []
+        if child_impersonating:
+            try:
+                win32security.RevertToSelf()
+            except Exception as exc:
+                cleanup_errors.append("Impersonation:" + type(exc).__name__)
+        if child_token is not None:
+            try:
+                child_token.Close()
+            except Exception as exc:
+                cleanup_errors.append("ChildToken:" + type(exc).__name__)
         if service_creation_attempted and _query_state(SERVICE_NAME) is not None:
             try:
                 import win32serviceutil
@@ -180,6 +226,11 @@ def main() -> int:
                 shutil.rmtree(root)
             except Exception as exc:
                 cleanup_errors.append(f"Fixture: {type(exc).__name__}")
+        if child_created:
+            try:
+                win32net.NetUserDel(None, child_user)
+            except Exception as exc:
+                cleanup_errors.append("ChildUser:" + type(exc).__name__)
         if cleanup_errors:
             raise RuntimeError("CI SCM cleanup failed: " + ", ".join(cleanup_errors))
 
