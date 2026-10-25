@@ -7,6 +7,7 @@ and real SCM installation are tested by separate Windows-only CI steps.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 import sqlite3
@@ -114,7 +115,9 @@ def run_synthetic_acceptance() -> dict[str, object]:
             assert receipt_count == 3, receipt_count
 
             # SQLite .backup is WAL-consistent; restore a disposable fixture.
-            with sqlite3.connect(backup_path) as backup:
+            # sqlite3 Connection's context manager commits but does NOT close
+            # the OS handle. Explicit closing is mandatory for Windows rollback.
+            with closing(sqlite3.connect(backup_path)) as backup:
                 store.db.backup(backup)
             assert tick(123) == 2
             assert store.used(child_ids[2], DAY) == 4
@@ -122,8 +125,8 @@ def run_synthetic_acceptance() -> dict[str, object]:
             store.close()
 
         # No active SQLite connections at the cutover boundary.
-        with sqlite3.connect(backup_path) as restored_source:
-            with sqlite3.connect(database) as target:
+        with closing(sqlite3.connect(backup_path)) as restored_source:
+            with closing(sqlite3.connect(database)) as target:
                 restored_source.backup(target)
         reopened = Storage(database)
         try:
