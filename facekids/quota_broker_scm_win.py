@@ -160,7 +160,10 @@ class FaceKidsQuotaLabService(_ServiceBase):
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self._stop_signal.set()
-        self._wts_locks.reset()
+        # SCM test harnesses may construct a partial service instance.
+        locks = getattr(self, "_wts_locks", None)
+        if locks is not None:
+            locks.reset()
         if self._supervisor is not None:
             self._supervisor.request_stop()
 
