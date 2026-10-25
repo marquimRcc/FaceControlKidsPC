@@ -149,6 +149,30 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m scripts.ci_acl_child_token_smoke
           if ($LASTEXITCODE -ne 0) { throw 'Unprivileged child token ACL test failed' }
+      - name: Hosted Windows VM — synthetic service-owned SQLite cutover with real child token
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_quota_migration_windows
+          if ($LASTEXITCODE -ne 0) { throw 'Disposable SQLite migration and ACL rollback failed' }
+      - name: Windows VM preflight must fail closed before real Winlogon testing
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Testar-Preflight-VM-FaceKids.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) { throw "VM preflight syntax invalid" }
+          $report = & $script | ConvertFrom-Json
+          if ($report.ReadyForFamilyInstallation -or $report.WritesPerformed -ne 0 -or
+              $report.ExternalSnapshotTested -or $report.CredentialProviderWinlogonTested) {
+            throw 'Read-only preflight must never certify manual Winlogon or snapshot restore'
+          }
       - name: Disposable Windows ACL and rollback rehearsal
         if: runner.os == 'Windows'
         shell: pwsh
