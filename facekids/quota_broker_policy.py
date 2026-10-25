@@ -79,6 +79,18 @@ class ServiceOwnedQuotaBroker:
         )
         return BrokerTick(child_id, 0.0, remaining, False, "verified")
 
+    def verified_lease_child(self, *, session_id: int) -> int | None:
+        """Read a *currently held* service-only face lease, without SQLite IO.
+
+        The external caller must still verify WTS token/lock under the same
+        service state lock. This never accepts an IPC-selected child.
+        """
+        lease = self._lease
+        if (lease is None or type(session_id) is not int or
+                lease.session_id != session_id):
+            return None
+        return lease.child_id
+
     def end_verified_session(self) -> None:
         self._lease = None
 
