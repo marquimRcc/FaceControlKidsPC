@@ -115,6 +115,35 @@ class TestAuthService(unittest.TestCase):
             self.assertEqual(data["child_name"], "Filho Smoke")
             self.assertGreater(data["remaining"], 0)
 
+    def test_privileged_recognition_has_no_legacy_event_or_avatar_side_effects(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "synthetic.sqlite3"
+            store = Storage(db)
+            try:
+                child = store.add_person("Synthetic", 120)
+                features = np.ones(128, dtype=np.float32)
+                store.add_embedding(child, features)
+            finally:
+                store.close()
+            recognizer = MagicMock()
+            recognizer.faces.return_value = [[10, 10, 70, 70]]
+            recognizer.features.return_value = features
+            recognizer.identify.return_value = (child, 0.95)
+            video = MagicMock()
+            video.isOpened.return_value = True
+            video.read.return_value = (True, np.zeros((100, 100, 3), dtype=np.uint8))
+            auth = FaceAuthenticator(Path(td), db, recognizer=recognizer)
+            with patch("cv2.VideoCapture", return_value=video), \\
+                 patch("facekids.auth_service.save_child_photo") as save_avatar, \\
+                 patch("facekids.auth_service.Path.write_text") as write_event:
+                status, data = auth.evaluate(timeout_seconds=1.0,
+                                             persist_unlock_metadata=False)
+            self.assertEqual(status, "ALLOW")
+            self.assertEqual(data["child_id"], child)
+            save_avatar.assert_not_called()
+            write_event.assert_not_called()
+            video.release.assert_called_once()
+
     def test_session_zero_and_camera_probe(self):
         from facekids.auth_service import is_session_zero_or_system, probe_camera_access
         # Em plataformas nao-Windows, deve retornar False
