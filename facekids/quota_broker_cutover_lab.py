@@ -35,11 +35,14 @@ def rehearse_offline_cutover(
     literally named 'facekids-quota-lab'. WAL/SHM presence is a hard failure.
     Backup is retained; preview and staging files are deleted.
     """
-    root = Path(lab_root).resolve(strict=True)
+    requested_root = Path(lab_root)
+    if requested_root.is_symlink():
+        raise ValueError("Symlink lab roots are not permitted")
+    root = requested_root.resolve(strict=True)
     candidate = Path(source)
     src = candidate.resolve(strict=True)
     if (root.name.casefold() != "facekids-quota-lab"
-            or not root.is_dir() or root.is_symlink()
+            or not root.is_dir()
             or candidate.is_symlink() or src.parent != root or not src.is_file()):
         raise ValueError("Cutover rehearsal requires a direct lab-only SQLite fixture")
     production = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")).resolve(strict=False) / "FaceKids"
