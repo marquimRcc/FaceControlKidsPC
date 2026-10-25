@@ -39,6 +39,7 @@ from .unlock_event import validated_unlock_event, enrolled_display_name
 from .ipc_reply import validated_pipe_allow
 from .ipc_json import parse_local_json
 from .quota_broker_shadow import QuotaBrokerShadowProbe, compare_shadow_balance
+from .quota_agent_accounting import LegacyLedgerQuota
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -474,6 +475,7 @@ def run_agent():
     db_path = child_pilot_database()
     store = Storage(db_path)
     tracker = QuotaTracker(store)
+    quota_accounting = LegacyLedgerQuota(store)  # Legacy default; never install VM bridge here.
 
     cid, cname, unlock_ts = read_last_unlock_child()
     if cid is not None:
@@ -633,8 +635,10 @@ def run_agent():
 
                 # Se o delta for razoavel (entre 0.5s e 15s, evitando picos apos hibernacao)
                 if tracker.current_child_id is not None and 0.5 <= delta <= 15.0:
-                    store.charge(tracker.current_child_id, delta, today)
-                    rem = store.remaining(tracker.current_child_id, today)
+                    tick = quota_accounting.active_tick(
+                        child_id=tracker.current_child_id, seconds=delta, day=today
+                    )
+                    rem = tick.remaining_seconds
                     if shadow_probe is not None:
                         # Ignore the response except for non-authoritative logging.
                         diagnostic = shadow_probe.take_result()
@@ -645,8 +649,12 @@ def run_agent():
                         shadow_probe.trigger_if_due()
                     tracker.update_balance(rem)
 
-                    # Verifica avisos e bloqueio automatico
-                    locked = tracker.check_notifications_and_lock(rem)
+                    # Only a quota source explicitly authorized for enforcement
+                    # may initiate Windows locking. The read-only LAB broker
+                    # does NOT satisfy this contract and cannot replace the
+                    # legacy source via a child-provided env flag or IPC packet.
+                    locked = (tracker.check_notifications_and_lock(rem)
+                              if tick.may_enforce_lock else False)
                     if locked:
                         # Se bloqueou, aguarda um pouco para estabilizar o lock
                         time.sleep(5.0)
