@@ -141,6 +141,16 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m scripts.ci_scm_lab_smoke
           if ($LASTEXITCODE -ne 0) { throw 'Disposable Windows SCM integration failed' }
+      - name: Hosted Windows VM — real SCM-owned writer with protected synthetic quotas
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_scm_writer_vm_smoke
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Disposable Windows SCM writer/child ACL integration failed'
+          }
       - name: Hosted Windows VM — real synthetic child token NTFS isolation
         if: runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 3
