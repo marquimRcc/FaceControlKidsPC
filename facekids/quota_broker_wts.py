@@ -126,7 +126,13 @@ class VerifiedWtsQuotaWorker:
         if state is None or state.token_sid != self._expected_sid:
             self._broker.end_verified_session()
             return BrokerTick(None, 0.0, 0.0, False, "wts-unverified")
+        if not state.connected or not self._locks.is_unlocked(state.session_id):
+            # A child may change while Windows is locked or the console is
+            # disconnected. Never reuse the previous facial identity lease.
+            # No untrusted agent message can renew the binding.
+            self._broker.end_verified_session()
+            return BrokerTick(None, 0.0, 0.0, False, "wts-inactive")
         return self._broker.observe(
             observed_wts_session_id=state.session_id,
-            observed_console_active=(state.connected and self._locks.is_unlocked(state.session_id)),
+            observed_console_active=True,
         )
