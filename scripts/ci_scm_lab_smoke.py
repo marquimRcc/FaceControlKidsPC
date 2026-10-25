@@ -191,7 +191,7 @@ def main() -> int:
                 )
             balance = {
                 "status": "OK" if observation.status == "observed" else "DENY",
-                "remaining_seconds": observation.remaining_seconds,
+                "remaining_seconds": observation.balance_seconds,
             }
             if observation.charged_locally or observation.may_enforce_lock:
                 raise AssertionError("Untrusted broker reply became charging/locking authority")
