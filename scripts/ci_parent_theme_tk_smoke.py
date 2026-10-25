@@ -101,3 +101,6 @@ def main() -> int:
             finally:
                 if app is not None and app.winfo_exists():
                     app.destroy()
+
+if __name__ == "__main__":
+    raise SystemExit(main())
