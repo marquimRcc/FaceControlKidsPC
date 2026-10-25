@@ -24,6 +24,7 @@ from facekids.quota_broker_writer_scm_win import (
     assert_protected_vm_ledger_acl,
 )
 from facekids.storage import Storage
+from facekids.quota_broker_bound_client_win import query_current_bound_vm_balance
 from scripts.ci_scm_lab_smoke import (
     _await_state, _query_state, _registry_exists, _require_ephemeral_host,
 )
@@ -190,9 +191,22 @@ def main() -> int:
                     raise AssertionError("Child token may update trusted SCM policy")
             except PermissionError:
                 pass
+
+            # The child Windows token may query the real SCM writer's bound
+            # pipe but cannot choose a child or fabricate a valid face lease.
+            # This distinguishes a real DENY from an unavailable pipe.
+            observed = query_current_bound_vm_balance()
+            if observed is not None:
+                raise AssertionError("SCM published quota without face binding")
         finally:
             win32security.RevertToSelf()
             impersonating = False
+
+        # The administrative token must also be refused by the bound
+        # endpoint even though it can inspect services for diagnosis.
+        admin_observation = query_current_bound_vm_balance()
+        if admin_observation is not None:
+            raise AssertionError("SCM bound quota leaked to admin principal")
 
         # No WTS_SESSION_UNLOCK was dispatched and no face embeddings
         # exist. An actual SCM worker must not invent such evidence.
@@ -211,7 +225,8 @@ def main() -> int:
         win32serviceutil.StopService(VM_WRITER_SERVICE_NAME)
         _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_STOPPED)
         print("PASS: real SCM SYSTEM quota writer started/stopped in ephemeral VM, "
-              "child ACL+HKLM denied, 3 profiles and 0 unauthorized debits")
+              "child ACL+HKLM denied, bound Named Pipe denies unknown faces, "
+              "3 profiles and 0 unauthorized debits")
         return 0
     finally:
         problems = []
