@@ -137,7 +137,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          python scripts/ci_scm_lab_smoke.py
+          python -m scripts.ci_scm_lab_smoke
           if ($LASTEXITCODE -ne 0) { throw 'Disposable Windows SCM integration failed' }
       - name: Disposable Windows ACL and rollback rehearsal
         if: runner.os == 'Windows'
