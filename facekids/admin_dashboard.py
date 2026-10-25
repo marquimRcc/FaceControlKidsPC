@@ -94,9 +94,9 @@ class ProgramsConfigDialog(tk.Toplevel):
             "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
             "programs": [
                 {
-                    "name": "Brave - YouTube Kids",
+                    "name": "Brave",
                     "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                    "arguments": "--new-window https://www.youtubekids.com",
+                    "arguments": "",
                     "enabled": True,
                 }
             ],
@@ -803,23 +803,36 @@ class AdminDashboard(tk.Tk):
         main_container.pack(fill=tk.BOTH, expand=True)
 
         self.canvas = tk.Canvas(main_container, bg=BG_MAIN, highlightthickness=0)
-        self.scrollbar = tk.Scrollbar(main_container, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.scrollbar = ttk.Scrollbar(main_container, orient=tk.VERTICAL, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
         self.cards_frame = tk.Frame(self.canvas, bg=BG_MAIN)
         self.canvas_window = self.canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
 
-        self.cards_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
-        )
-        self.canvas.bind(
-            "<Configure>",
-            lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width),
-        )
+        def _update_scrollregion(event=None):
+            self.cards_frame.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        def _resize_canvas(event):
+            self.canvas.itemconfig(self.canvas_window, width=event.width)
+            _update_scrollregion()
+
+        self.cards_frame.bind("<Configure>", _update_scrollregion)
+        self.canvas.bind("<Configure>", _resize_canvas)
+
+        # Scrollbar DEVE ser empacotada antes do Canvas para garantir alocacao correta
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        def _on_mousewheel(event):
+            try:
+                if self.canvas.winfo_exists():
+                    # Windows event.delta e tipicamente +/- 120
+                    self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass
+
+        self.bind_all("<MouseWheel>", _on_mousewheel)
 
     def _change_theme(self, selected: str) -> None:
         """Apply immediately, rebuilding only presentation widgets.
@@ -962,6 +975,9 @@ class AdminDashboard(tk.Tk):
                 bonus_sec=child.bonus_minutes * 60,
                 rem_sec=child.remaining_seconds,
             )
+
+        self.cards_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _create_child_card(
         self,

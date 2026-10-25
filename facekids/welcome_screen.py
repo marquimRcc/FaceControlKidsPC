@@ -31,15 +31,71 @@ LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 logger = logging.getLogger("FaceKidsWelcome")
 
 
+def is_process_running(exe_name: str) -> bool:
+    """Verifica se um processo com o nome do executavel esta ativo no sistema."""
+    if not exe_name:
+        return False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            TH32CS_SNAPPROCESS = 0x00000002
+
+            class PROCESSENTRY32W(ctypes.Structure):
+                _fields_ = [
+                    ("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_void_p),
+                    ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_wchar * 260),
+                ]
+
+            kernel32 = ctypes.windll.kernel32
+            h_snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if h_snap == ctypes.c_void_p(-1).value:
+                return False
+            try:
+                pe = PROCESSENTRY32W()
+                pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+                if not kernel32.Process32FirstW(h_snap, ctypes.byref(pe)):
+                    return False
+                target = exe_name.lower()
+                while True:
+                    if pe.szExeFile.lower() == target:
+                        return True
+                    if not kernel32.Process32NextW(h_snap, ctypes.byref(pe)):
+                        break
+                return False
+            finally:
+                kernel32.CloseHandle(h_snap)
+        except Exception:
+            return False
+    else:
+        try:
+            target = exe_name.lower()
+            for pid_dir in Path("/proc").glob("[0-9]*"):
+                comm_file = pid_dir / "comm"
+                if comm_file.exists() and comm_file.read_text().strip().lower() == target:
+                    return True
+        except Exception:
+            pass
+        return False
+
+
 def default_programs_config() -> dict:
     return {
         "enabled": True,
         "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
         "programs": [
             {
-                "name": "Brave - YouTube Kids",
+                "name": "Brave",
                 "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                "arguments": "--new-window https://www.youtubekids.com",
+                "arguments": "",
                 "enabled": True,
             }
         ],
@@ -58,6 +114,18 @@ def load_programs_config() -> dict:
 
     try:
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        changed = False
+        for prog in data.get("programs", []):
+            if "youtubekids.com" in prog.get("arguments", "").lower():
+                prog["arguments"] = ""
+                if "youtube" in prog.get("name", "").lower():
+                    prog["name"] = "Brave"
+                changed = True
+        if changed:
+            try:
+                CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
         return data
     except Exception:
         return default_config
@@ -121,6 +189,10 @@ def launch_configured_programs():
             continue
         if not Path(exe).is_file():
             logger.warning("Programa configurado nao encontrado: %s", exe)
+            continue
+        exe_name = Path(exe).name
+        if is_process_running(exe_name):
+            logger.info("Programa '%s' ja esta em execucao. Nenhuma nova aba/janela sera aberta.", exe_name)
             continue
         try:
             import shlex
@@ -311,14 +383,14 @@ class WelcomeWindow:
         else:
             time_icon_text = "⏱️  Aguardando identificação facial..."
 
-        time_icon_label = tk.Label(
+        self.time_icon_label = tk.Label(
             quota_box,
             text=time_icon_text,
             font=("Segoe UI", 11, "bold"),
             fg=self.accent_cyan,
             bg=self.bg_box,
         )
-        time_icon_label.pack(pady=(10, 6))
+        self.time_icon_label.pack(pady=(10, 6))
 
         # Barra de progresso visual (quota base: 2h = 7200s)
         total_seconds = 7200
@@ -336,7 +408,7 @@ class WelcomeWindow:
 
         start_btn = tk.Button(
             btn_frame,
-            text="🚀  Começar Agora",
+            text="✓  OK, Entendi",
             font=("Segoe UI", 11, "bold"),
             bg=self.accent_blue,
             fg="#0B0B12",
@@ -350,15 +422,19 @@ class WelcomeWindow:
         )
         start_btn.pack(fill=tk.X)
 
-        # 5. Dica de uso
+        # 5. Dica de uso informativa (o tempo ja esta contando)
         hint_label = tk.Label(
             container,
-            text="Clique em 'Começar Agora' ou no ✕ acima para usar o PC.",
+            text="⏱️ Seu tempo já começou a contar! Esta tela fechará em instantes ou clique em OK.",
             font=("Segoe UI", 9),
             fg=self.text_sub,
             bg=self.bg_card,
         )
         hint_label.pack(pady=(8, 10))
+
+        # Auto-fechamento em 8 segundos e contagem regressiva ao vivo
+        self._auto_close_job = self.root.after(8000, self.dismiss)
+        self._tick_countdown()
 
     def _start_drag(self, event):
         self._drag_start_x = event.x
@@ -376,7 +452,31 @@ class WelcomeWindow:
         initial = self.child_name[0].upper() if self.child_name else "F"
         canvas.create_text(45, 45, text=initial, font=("Segoe UI", 32, "bold"), fill=self.accent_cyan)
 
+    def _tick_countdown(self):
+        if self.child_id is not None and self.remaining_seconds > 0:
+            self.remaining_seconds -= 1
+            time_str = format_remaining_time(self.remaining_seconds)
+            try:
+                if hasattr(self, "time_icon_label") and self.time_icon_label.winfo_exists():
+                    self.time_icon_label.config(text=f"⏱️  Tempo disponível hoje: {time_str}")
+            except Exception:
+                pass
+        try:
+            self._timer_job = self.root.after(1000, self._tick_countdown)
+        except Exception:
+            pass
+
     def dismiss(self):
+        if hasattr(self, "_auto_close_job"):
+            try:
+                self.root.after_cancel(self._auto_close_job)
+            except Exception:
+                pass
+        if hasattr(self, "_timer_job"):
+            try:
+                self.root.after_cancel(self._timer_job)
+            except Exception:
+                pass
         try:
             self.root.destroy()
         except Exception:

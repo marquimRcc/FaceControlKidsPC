@@ -181,9 +181,9 @@ $programsConfig = @{
     description = 'Lista de programas a inicializar automaticamente apos o desbloqueio facial'
     programs = @(
         @{
-            name = 'Brave - YouTube Kids'
+            name = 'Brave'
             executable = $brave
-            arguments = '--new-window https://www.youtubekids.com'
+            arguments = ''
             enabled = $true
         }
     )
