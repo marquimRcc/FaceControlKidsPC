@@ -66,6 +66,35 @@ class RuntimeIntegrationTest(unittest.TestCase):
         n = self.store.db.execute("SELECT COUNT(*) FROM quota_tick_receipts").fetchone()[0]
         self.assertEqual(n, 3)
 
+    def test_actual_face_authenticator_is_called_only_locally_without_metadata(self):
+        from unittest.mock import patch
+        from facekids.auth_service import FaceAuthenticator
+
+        auth = FaceAuthenticator(Path(self.tmp.name), Path(self.tmp.name) / "ledger.sqlite3")
+        fake_reply = (
+            "ALLOW", {"child_id": self.people[0], "user": "Filhos"}
+        )
+        with patch.object(auth, "evaluate", return_value=fake_reply) as evaluate:
+            runtime = ServiceOwnedQuotaRuntime.from_service_authenticator(
+                self.store, expected_windows_sid=self.sid,
+                authenticator=auth, observe_wts=lambda: self.snapshot,
+                monotonic=lambda: self.now, today=lambda: date(2026, 10, 24),
+            )
+            try:
+                runtime.on_service_session_change(8, (42,))
+                self.assertTrue(runtime.bind_from_service_camera().accepted)
+                evaluate.assert_called_once_with(persist_unlock_metadata=False)
+                self.now += 3
+                self.assertEqual(runtime.service_tick().charged_seconds, 3)
+            finally:
+                runtime.stop()
+        with self.assertRaises(ValueError):
+            ServiceOwnedQuotaRuntime.from_service_authenticator(
+                self.store, expected_windows_sid=self.sid,
+                authenticator=lambda: fake_reply,
+                observe_wts=lambda: self.snapshot,
+            )
+
     def test_child_ipc_cannot_send_debit_or_set_enrollment(self):
         self.runtime.on_service_session_change(8, (42,))
         for body in (
