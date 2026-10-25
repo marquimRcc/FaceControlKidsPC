@@ -136,6 +136,15 @@ class VerifiedWtsQuotaWorker:
             console_active=True,
         )
 
+    def verified_child_for_current_console(self) -> int | None:
+        """Service-owned read-only check of SID, WTS and SCM Win+L state."""
+        state = self._observed()
+        if (state is None or not state.connected or
+                state.token_sid != self._expected_sid or
+                not self._locks.is_unlocked(state.session_id)):
+            return None
+        return self._broker.verified_lease_child(session_id=state.session_id)
+
     def observe_service_tick(self) -> BrokerTick:
         """Never accept client-supplied elapsed seconds, child ID or lock state."""
         state = self._observed()
