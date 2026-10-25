@@ -52,6 +52,36 @@ class MigrationSnapshotTests(unittest.TestCase):
                         create_vm_snapshot(src, dst, lab_root=root)
             self.assertEqual(len(list(root.glob("*.facekids-incomplete"))), 0)
 
+    def test_restore_in_disposable_lab_keeps_original_ledger_independent(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            original = root / "original.sqlite3"
+            source = Storage(original)
+            cid = source.add_person("Child", 10)
+            day = "2026-10-24"
+            source.charge(cid, 60, day)
+            snapshot = create_vm_snapshot(original, root / "backup.sqlite3", lab_root=root)
+            # The original is deliberately changed after the backup.
+            source.charge(cid, 120, day)
+            self.assertEqual(source.used(cid, day), 180)
+            source.close()
+            restored = create_vm_snapshot(
+                snapshot.output, root / "restored.sqlite3", lab_root=root
+            )
+            with sqlite3.connect(restored.output) as check:
+                usage = check.execute(
+                    "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                    (cid, day),
+                ).fetchone()[0]
+                self.assertEqual(usage, 60)
+            with sqlite3.connect(original) as current:
+                self.assertEqual(
+                    current.execute("SELECT seconds FROM daily_usage").fetchone()[0],
+                    180,
+                )
+            self.assertEqual(restored.children, 1)
+            self.assertEqual(restored.ledger_rows, 1)
+
     def test_does_not_replace_corrupt_database(self):
         with TemporaryDirectory() as td:
             root = Path(td)
