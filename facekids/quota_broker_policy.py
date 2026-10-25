@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date
 import math
 import time
+import uuid
 from typing import Callable, Optional
 
 from .quota_broker_clock import ServerObservedQuotaClock
@@ -39,10 +40,12 @@ class ServiceOwnedQuotaBroker:
         *,
         monotonic: Callable[[], float] = time.monotonic,
         today: Callable[[], date] = date.today,
+        new_receipt_id: Callable[[], str] = lambda: uuid.uuid4().hex,
     ) -> None:
         self._store = store
         self._mono = monotonic
         self._today = today
+        self._new_receipt_id = new_receipt_id
         self._lease: Optional[ServerObservedQuotaClock] = None
 
     def _now(self) -> float:
@@ -104,7 +107,11 @@ class ServiceOwnedQuotaBroker:
             return BrokerTick(lease.child_id, 0.0, self._store.remaining(lease.child_id, day), True, "curfew")
         # A single BEGIN IMMEDIATE transaction caps debit even if another
         # broker process is writing. The legacy Filhos agent is unchanged.
-        charged = self._store.charge_up_to_available(lease.child_id, delta, day) if delta > 0 else 0.0
+        # Only the service mints receipt IDs; a Filhos IPC message must never
+        # provide one. The insert and debit commit atomically in SQLite.
+        charged = self._store.charge_capped_once(
+            self._new_receipt_id(), lease.child_id, delta, day
+        ) if delta > 0 else 0.0
         remaining = self._store.remaining(lease.child_id, day)
         locked = remaining <= 0
         if locked:
