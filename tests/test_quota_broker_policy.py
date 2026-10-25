@@ -46,6 +46,39 @@ class ServiceOwnedQuotaBrokerTests(unittest.TestCase):
             observed_console_active=active,
         )
 
+    def test_service_generated_receipts_persist_and_prevent_reuse(self):
+        from unittest.mock import patch
+        receipt = "0" * 32
+        broker = ServiceOwnedQuotaBroker(
+            self.storage,
+            monotonic=self.clock,
+            today=lambda: date(2026, 10, 24),
+            new_receipt_id=lambda: receipt,
+        )
+        self.assertEqual(
+            broker.start_verified_session(
+                child_id=self.first, session_id=42, console_active=True
+            ).reason, "verified"
+        )
+        self.clock.now = 103
+        self.assertEqual(broker.observe(
+            observed_wts_session_id=42, observed_console_active=True
+        ).charged_seconds, 3.0)
+        self.assertEqual(self.storage.used(self.first, self.day), 3.0)
+        row = self.storage.db.execute(
+            "SELECT charged_seconds FROM quota_tick_receipts WHERE event_id=?",
+            (receipt,)
+        ).fetchone()
+        self.assertEqual(row, (3.0,))
+        # A second debit with the same receipt ID but different interval must
+        # fail closed, never write or silently charge a second interval.
+        self.clock.now = 106
+        with self.assertRaises(ValueError):
+            broker.observe(
+                observed_wts_session_id=42, observed_console_active=True
+            )
+        self.assertEqual(self.storage.used(self.first, self.day), 3.0)
+
     def test_charge_only_service_elapsed_time_and_child(self):
         self.assertEqual(self.activate().reason, "verified")
         self.assertEqual(self.tick(104).charged_seconds, 4)
