@@ -5,6 +5,8 @@ from tempfile import TemporaryDirectory
 import sqlite3
 import numpy as np
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 
 from facekids.quota_vm_cutover import (
@@ -205,6 +207,29 @@ class OfflineVmCutoverTests(unittest.TestCase):
             )
         self.assertFalse(self.undo.exists())
         self.assertEqual(stale.read_bytes(), b"incomplete prior attempt")
+
+    def test_concurrent_service_receipt_replay_is_exactly_once(self):
+        """Four independent SQLite connections contend for the same receipt."""
+        self.promote()
+        gate = Barrier(4)
+        def submit_receipt(_):
+            with closing(Storage(self.db)) as writer:
+                gate.wait(timeout=6)
+                return writer.charge_capped_once(
+                    "d" * 32, self.people[1], 11, self.day
+                )
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            charged = list(pool.map(submit_receipt, range(4)))
+        self.assertEqual(sorted(charged), [0, 0, 0, 11])
+        with closing(Storage(self.db)) as after_restart:
+            self.assertEqual(after_restart.used(self.people[1], self.day), 11)
+            self.assertEqual(
+                after_restart.charge_capped_once(
+                    "d" * 32, self.people[1], 11, self.day
+                ), 0
+            )
+            with self.assertRaises(PermissionError):
+                after_restart.charge(self.people[1], 1, self.day)
 
 
 if __name__ == "__main__":
