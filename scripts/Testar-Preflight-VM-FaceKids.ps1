@@ -15,13 +15,13 @@ $manufacturer = if ($hostInfo) { [string]$hostInfo.Manufacturer } else { '' }
 $model = if ($hostInfo) { [string]$hostInfo.Model } else { '' }
 $looksVirtual = ($manufacturer + ' ' + $model) -match '(Hyper-V|Virtual Machine|VMware|VirtualBox|QEMU|KVM|Xen|Parallels)'
 $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-$isWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+$runningOnWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 $expectedDll = Join-Path $env:ProgramData 'FaceKids\FaceKidsCredentialProvider.dll'
 $expectedDb = Join-Path $env:ProgramData 'FaceKids\criancas.sqlite3'
 
 [pscustomobject]@{
     Mode = 'ReadOnlyWinlogonVmPreflight'
-    WindowsDetected = [bool]$isWindows
+    WindowsDetected = [bool]$runningOnWindows
     GuestModelLooksVirtual = [bool]$looksVirtual
     OperatingSystem = if ($osInfo) { [string]$osInfo.Caption } else { $null }
     ExpectedCredentialProviderDllPresent = [bool](Test-Path -LiteralPath $expectedDll)
