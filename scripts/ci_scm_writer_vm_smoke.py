@@ -278,7 +278,7 @@ def main() -> int:
                 _query_state(VM_WRITER_SERVICE_NAME) == win32service.SERVICE_STOPPED
             ),
         )
-        if restored != undo:
+        if not restored.samefile(undo):
             raise AssertionError("Rollback did not preserve pre-restore image")
         with closing(Storage(database)) as restored_store:
             if restored_store.get_setting(OWNER_KEY) is not None:
