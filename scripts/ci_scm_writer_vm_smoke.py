@@ -25,6 +25,10 @@ from facekids.quota_broker_writer_scm_win import (
 )
 from facekids.storage import Storage
 from facekids.quota_broker_bound_client_win import query_current_bound_vm_balance
+from facekids.filhos_bound_vm_agent import observe_vm_bound_once
+from facekids.quota_vm_cutover import (
+    OWNER_KEY, SERVICE_ONLY, promote_vm_lab_writer, restore_vm_lab_offline,
+)
 from scripts.ci_scm_lab_smoke import (
     _await_state, _query_state, _registry_exists, _require_ephemeral_host,
 )
@@ -95,9 +99,32 @@ def main() -> int:
         finally:
             store.close()
 
+        config = {
+            "VmLabOnly": 1, "WriterEnabled": 1,
+            "Database": str(database), "ChildSid": child_sid,
+            "Models": str(models), "ServiceSid": "S-1-5-18",
+        }
+        backup = lab_root / "before-service-cutover.sqlite3"
+        undo = lab_root / "before-rollback.sqlite3"
+        # Service not registered yet and this is an isolated, disposable VM.
+        promote_vm_lab_writer(
+            config, backup_path=backup, offline_gate=lambda: (
+                _query_state(VM_WRITER_SERVICE_NAME) is None
+            )
+        )
+        with closing(Storage(database)) as check:
+            if check.get_setting(OWNER_KEY) != SERVICE_ONLY:
+                raise AssertionError("Offline synthetic writer ownership not promoted")
+            try:
+                check.charge(1, 5, "2026-10-25")
+            except PermissionError:
+                pass
+            else:
+                raise AssertionError("Legacy agent could still charge service-owned ledger")
+
         for path in (root_parent, lab_root, models):
             _protect(path, directory=True)
-        for path in (database, sample_model):
+        for path in (database, sample_model, backup):
             _protect(path)
         assert_protected_vm_ledger_acl(database, models, child_sid)
 
@@ -198,6 +225,10 @@ def main() -> int:
             observed = query_current_bound_vm_balance()
             if observed is not None:
                 raise AssertionError("SCM published quota without face binding")
+            agent_view = observe_vm_bound_once()
+            if (agent_view.state != "unverified" or agent_view.child_id is not None
+                    or agent_view.may_enforce_lock or agent_view.charged_locally):
+                raise AssertionError("VM read-only child agent became authoritative")
         finally:
             win32security.RevertToSelf()
             impersonating = False
@@ -222,11 +253,41 @@ def main() -> int:
         if (count, charges, children) != (0, 0, 3):
             raise AssertionError("VM writer charged without a trusted face/unlock event")
 
+        # Stop and RESTART in the same protected, service-owned fixture.
+        # Restart must begin unbound and cannot issue a debit by itself.
         win32serviceutil.StopService(VM_WRITER_SERVICE_NAME)
         _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_STOPPED)
-        print("PASS: real SCM SYSTEM quota writer started/stopped in ephemeral VM, "
-              "child ACL+HKLM denied, bound Named Pipe denies unknown faces, "
-              "3 profiles and 0 unauthorized debits")
+        win32serviceutil.StartService(VM_WRITER_SERVICE_NAME)
+        _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_RUNNING)
+        win32security.ImpersonateLoggedOnUser(token)
+        impersonating = True
+        try:
+            restarted = observe_vm_bound_once()
+            if restarted.state != "unverified":
+                raise AssertionError("Restart reactivated a stale facial lease")
+        finally:
+            win32security.RevertToSelf()
+            impersonating = False
+        win32serviceutil.StopService(VM_WRITER_SERVICE_NAME)
+        _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_STOPPED)
+
+        # An offline rollback is tested only AFTER the SCM writer has stopped.
+        restored = restore_vm_lab_offline(
+            config, backup_path=backup, preserved_current_path=undo,
+            offline_gate=lambda: (
+                _query_state(VM_WRITER_SERVICE_NAME) == win32service.SERVICE_STOPPED
+            ),
+        )
+        if restored != undo:
+            raise AssertionError("Rollback did not preserve pre-restore image")
+        with closing(Storage(database)) as restored_store:
+            if restored_store.get_setting(OWNER_KEY) is not None:
+                raise AssertionError("Rollback did not restore legacy owner")
+            if len(restored_store.people()) != 3:
+                raise AssertionError("Rollback lost synthetic profiles")
+        print("PASS: real SCM SYSTEM quota writer restarted fail-closed, "
+              "VM child read-only, legacy double-charge rejected, "
+              "WAL rollback restored 3 synthetic children and 0 unauthorized debits")
         return 0
     finally:
         problems = []
