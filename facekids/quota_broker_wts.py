@@ -51,6 +51,25 @@ class WtsLockTracker:
         else:
             raise ValueError("Unexpected SCM session event")
 
+    def record_windows_scm_notification(self, event_code: int, payload: tuple[int]) -> None:
+        """Consume real pywin32 SvcOtherEx session change payloads.
+
+        SCM passes the session ID in a one-element tuple; no child IPC can
+        invoke this code through the quota broker's read-only wire protocol.
+        """
+        event_names = {
+            1: "connect", 2: "disconnect", 3: "connect",
+            4: "disconnect", 5: "logon", 6: "logoff",
+            7: "lock", 8: "unlock", 9: "disconnect",
+            10: "logon", 11: "logoff",
+        }
+        if type(event_code) is not int or event_code not in event_names:
+            raise ValueError("Invalid Windows WTS control event")
+        if (type(payload) is not tuple or len(payload) != 1
+                or type(payload[0]) is not int):
+            raise ValueError("Invalid SCM WTS notification payload")
+        self.record_scm_event(event=event_names[event_code], session_id=payload[0])
+
     def is_unlocked(self, session_id: int) -> bool:
         return type(session_id) is int and self._unlocked.get(session_id) is True
 
