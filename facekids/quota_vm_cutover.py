@@ -16,6 +16,7 @@ import sqlite3
 from typing import Callable, Mapping
 
 from .quota_broker_migration import SnapshotResult, create_vm_snapshot
+from .quota_vm_snapshot_guard import assert_snapshot_matches
 from .quota_broker_writer_scm_win import validate_vm_writer_config
 
 OWNER_KEY = "quota_writer_owner"
@@ -39,9 +40,14 @@ def _validate_paths(
 ) -> tuple[Path, Path]:
     database, _sid, _models = validate_vm_writer_config(config)
     root = next(p for p in database.parents if p.name.casefold() == "facekids-quota-lab")
-    item = Path(path).resolve(strict=must_exist)
+    requested = Path(path)
+    # resolve() hides a symlink at the requested leaf. Reject it BEFORE
+    # resolving, including dangling links (Windows reparse-point safety).
+    if requested.is_symlink():
+        raise ValueError("Symlink VM recovery path is forbidden")
+    item = requested.resolve(strict=must_exist)
     if (item == database or not item.is_relative_to(root) or
-            item.parent != root or item.is_symlink()):
+            item.parent != root):
         raise ValueError("VM recovery file must be distinct and inside lab root")
     return database, item
 
@@ -79,15 +85,11 @@ def promote_vm_lab_writer(
                 with closing(sqlite3.connect(
                     backup.as_uri() + "?mode=ro", uri=True
                 )) as copy:
-                    for table in ("people", "daily_usage", "daily_bonus", "embeddings"):
-                        live = db.execute(
-                            f"SELECT COUNT(*) FROM {table}"
-                        ).fetchone()[0]
-                        snap = copy.execute(
-                            f"SELECT COUNT(*) FROM {table}"
-                        ).fetchone()[0]
-                        if live != snap:
-                            raise RuntimeError("Fixture changed after backup")
+                    # Table counts cannot detect an UPDATE that preserves the
+                    # number of rows (balance, embedding, receipt, settings).
+                    # Compare every table and schema while holding the writer
+                    # transaction, before flipping the owner setting.
+                    assert_snapshot_matches(db, copy)
                     if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                         raise ValueError("Cutover ledger not intact")
                 db.execute(
@@ -126,13 +128,23 @@ def restore_vm_lab_offline(
         ).fetchone() is not None:
             raise ValueError("Rollback snapshot was already service-owned")
 
+    # Do not restore a ledger whose owner was changed or already rolled
+    # back. Never overwrite a new writer's data or a manual recovery.
+    with closing(sqlite3.connect(
+        database.as_uri() + "?mode=ro", uri=True
+    )) as live_owner:
+        owner = live_owner.execute(
+            "SELECT value FROM settings WHERE key=?", (OWNER_KEY,)
+        ).fetchone()
+        if owner != (SERVICE_ONLY,):
+            raise PermissionError("VM ledger is not exclusively service-owned")
     root = database.parent
-    recovery = create_vm_snapshot(
-        database, preserved, lab_root=root
-    )
     prepared = database.with_name("writer-restore-prepared.sqlite3")
     if prepared.exists():
         raise FileExistsError("Incomplete restore; operator inspection required")
+    recovery = create_vm_snapshot(
+        database, preserved, lab_root=root
+    )
     try:
         create_vm_snapshot(backup, prepared, lab_root=root)
         _require_offline(offline_gate)
