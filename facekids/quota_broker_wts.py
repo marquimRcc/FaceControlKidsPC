@@ -119,6 +119,10 @@ class VerifiedWtsQuotaWorker:
             return None
         return value if type(value) is WtsSnapshot else None
 
+    def end_trusted_face_binding(self) -> None:
+        """Revoke any previous child identity after failed recognition."""
+        self._broker.end_verified_session()
+
     def start_trusted_face_binding(self, *, enrolled_child_id: int, session_id: int) -> BrokerTick:
         """Only a privileged recognized-face callback may call this method."""
         state = self._observed()
