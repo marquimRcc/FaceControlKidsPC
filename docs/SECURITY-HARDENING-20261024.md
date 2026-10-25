@@ -406,3 +406,41 @@ Status não resolvido:
   LogonUI, registro COM, webcam ou PC da família.
 - PR #4 segue draft até que uma VM e testes Win+L supervisionados
   comprovem recuperação e operação.
+
+
+## Atualização — SCM Windows real em runner temporário (24/10/2026)
+
+**Esta seção substitui o bloqueio anterior de que o SCM nunca foi iniciado
+em laboratório:** houve início real e consulta bem-sucedida em runner Windows
+hospedado pelo GitHub; o bloqueio agora é o *SCM no Windows doméstico/VM
+equivalente*, ainda não avaliado.
+
+- `23a3614b`, `140c445c`, `d99becb1`: script de integração real
+  de SCM com guarda de ambiente para GitHub-hosted Windows, criação
+  de SQLite exclusivamente sintético, registro temporário de serviço,
+  início como SYSTEM, consulta read-only, parada e remoção em finally.
+  CI `40148637510` SUCCESS (Windows e Ubuntu).
+- `fe5832ed`, `9f6070f5`, `bfc96210`: usuário Windows infantil local
+  sintético criado e removido no runner, ACL real de arquivos
+  protegidos e cache com token não administrativo. CI
+  `40148877387` SUCCESS (Windows e Ubuntu).
+- `8aa849a9`: integração SCM + usuário sintético: SID do admin
+  **não** autorizado no pipe, SID da criança fictícia **autorizado**,
+  sem débito de quota. CI `40149075585` SUCCESS, C++ `40149075498`
+  SUCCESS.
+- `1b48535b`: recusa explícita de escrita na política HKLM pelo
+  token infantil sintético; consultar o CI desta última alteração.
+
+### Escopo não implementado / próxima prioridade
+
+1. Agente Filhos ainda escreve o SQLite legado; broker com escrita
+   privilegiada validada por eventos Windows WTS reais não implantado.
+2. As três crianças compartilham o mesmo SID Windows: identidade
+   individual ainda depende de reconhecimento facial **autenticado**,
+   e não de mensagens declarativas do agente.
+3. Migração real de binários, ACLs, SQLite (com backups de dados reais)
+   e recuperação de Winlogon **não** executadas.
+4. Liveness, webcam real, Win+L e três perfis físicos são testes
+   obrigatórios antes de homologar a versão doméstica.
+5. PR #4 continua draft, sem merge. Nenhum script de instalação familiar,
+   regsvr32, tarefa de logon, senha, foto ou banco de criança real alterado.
