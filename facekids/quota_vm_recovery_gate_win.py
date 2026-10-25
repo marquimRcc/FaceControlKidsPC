@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Callable
 
 from .quota_vm_policy_constants import VM_WRITER_SERVICE_NAME
 from .quota_broker_writer_scm_win import (
@@ -26,8 +25,8 @@ def require_recovery_preconditions(
     registered_service_state: int, acl_is_protected: bool,
 ) -> bool:
     """Pure policy evaluation for testing. No caller-submitted 'ready' bool."""
-    if (type(expected_database) is not Path or
-            type(configured_database) is not Path or
+    if (not isinstance(expected_database, Path) or
+            not isinstance(configured_database, Path) or
             expected_database != configured_database):
         raise PermissionError("Recovery DB differs from protected VM configuration")
     if type(registered_service_state) is not int or registered_service_state != SCM_STOPPED:
