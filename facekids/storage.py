@@ -141,6 +141,22 @@ class Storage:
         row = self.db.execute("SELECT seconds FROM daily_usage WHERE person_id=? AND day=?", (person_id,day)).fetchone()
         return float(row[0]) if row else 0.0
 
+    def _require_quota_writer(self, *, service_receipt: bool) -> None:
+        """Defense in depth for the VM cutover, checked inside BEGIN IMMEDIATE.
+
+        This is NOT a credential boundary: only NTFS preventing a child from
+        editing SQLite/WAL/SHM can provide that security. This gate prevents
+        accidentally running the two application writers after cutover.
+        """
+        row = self.db.execute(
+            "SELECT value FROM settings WHERE key='quota_writer_owner'"
+        ).fetchone()
+        value = row[0] if row is not None else None
+        if value is not None and value != "vm-service-only":
+            raise PermissionError("Unknown quota writer owner; fail closed")
+        if value == "vm-service-only" and not service_receipt:
+            raise PermissionError("Legacy debit forbidden: SCM owns VM ledger")
+
     def charge(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
         # Never persist NaN/Inf, strings or negative clock differences in the ledger.
         # This guard does not authenticate the caller or make local SQLite tamperproof.
@@ -155,6 +171,8 @@ class Storage:
         except (TypeError, ValueError):
             raise ValueError("Dia inválido") from None
         with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=False)
             self.db.execute("""
                 INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
                 ON CONFLICT(person_id,day) DO UPDATE SET seconds = seconds + excluded.seconds
@@ -185,6 +203,7 @@ class Storage:
 
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=False)
             row = self.db.execute(
                 "SELECT daily_limit_seconds FROM people WHERE id=?", (person_id,)
             ).fetchone()
@@ -236,6 +255,7 @@ class Storage:
 
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=True)
             self.db.execute("""
                 CREATE TABLE IF NOT EXISTS quota_tick_receipts (
                     event_id TEXT PRIMARY KEY,
