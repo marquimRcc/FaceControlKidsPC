@@ -22,6 +22,7 @@ from typing import Mapping
 
 from .auth_service import FaceAuthenticator
 from .quota_broker_scm_host import ServiceOwnedScmHost
+from .quota_broker_bound_transport_win import serve_one_bound_vm_request
 from .quota_broker_scm_win import (
     _ServiceBase, _require_expected_service_sid, _sid_is_valid,
 )
@@ -193,6 +194,8 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
         super().__init__(args)
         self._stop_signal = threading.Event()
         self._host: ServiceOwnedScmHost | None = None
+        self._bound_thread: threading.Thread | None = None
+        self._bound_failure: BaseException | None = None
 
     def GetAcceptedControls(self):
         return super().GetAcceptedControls() | win32service.SERVICE_ACCEPT_SESSIONCHANGE
@@ -215,6 +218,31 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
         if host is not None:
             host.request_stop()
 
+    def _serve_bound_vm_read_loop(self, expected_child_sid: str) -> None:
+        """One read-only child-facing endpoint, owned by the privileged SCM.
+
+        Database access stays exclusively in the quota-tick thread. Any
+        unexpected transport failure revokes the lease and stops the service.
+        """
+        try:
+            while not self._stop_signal.is_set():
+                host = self._host
+                if host is None:
+                    raise RuntimeError("SCM runtime missing")
+                serve_one_bound_vm_request(
+                    expected_child_sid=expected_child_sid,
+                    bound_reader=lambda sid: host.read_bound_balance(
+                        verified_client_sid=sid
+                    ),
+                    stop_event=self._stop_signal,
+                    timeout_seconds=1.0,
+                )
+        except BaseException as exc:
+            self._bound_failure = exc
+            self._stop_signal.set()
+            if self._host is not None:
+                self._host.request_stop()
+
     def SvcDoRun(self):
         store: Storage | None = None
         try:
@@ -232,8 +260,16 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
                 observe_wts=observe_console_from_system,
             )
             self._host = ServiceOwnedScmHost(runtime, stop_event=self._stop_signal)
+            self._bound_thread = threading.Thread(
+                target=self._serve_bound_vm_read_loop,
+                args=(child_sid,), daemon=True,
+                name="FaceKidsVmBoundReadOnly",
+            )
+            self._bound_thread.start()
             self.ReportServiceStatus(win32service.SERVICE_RUNNING)
             self._host.run()
+            if self._bound_failure is not None:
+                raise RuntimeError("VM bound read-only pipe terminated unexpectedly")
         except Exception as exc:
             # No file names, SIDs or child identity in event log.
             if servicemanager is not None:
@@ -242,8 +278,13 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
                 )
             raise
         finally:
+            self._stop_signal.set()
             if self._host is not None:
                 self._host.request_stop()
+            if self._bound_thread is not None:
+                self._bound_thread.join(timeout=3.0)
+                if self._bound_thread.is_alive():
+                    raise RuntimeError("Cannot stop bound pipe before closing quota ledger")
             if store is not None:
                 store.close()
 
