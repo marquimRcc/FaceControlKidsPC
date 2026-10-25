@@ -16,6 +16,8 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      - name: Integrated isolated acceptance - three child quotas, WTS and WAL rollback
+        run: python -m scripts.ci_quota_isolated_acceptance
       - name: Portable JSON envelope guard (C++17, isolated)
         if: runner.os == 'Linux'
         shell: bash
