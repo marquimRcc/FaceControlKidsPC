@@ -1,5 +1,6 @@
 """Complete synthetic service-owned recognition -> WTS -> SQLite flow."""
 from datetime import date
+import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -65,6 +66,79 @@ class RuntimeIntegrationTest(unittest.TestCase):
         )
         n = self.store.db.execute("SELECT COUNT(*) FROM quota_tick_receipts").fetchone()[0]
         self.assertEqual(n, 3)
+
+    def test_lock_event_processes_during_blocked_camera_and_revokes_result(self):
+        """SCM LOCK must not wait for a slow camera in another thread."""
+        camera_entered = threading.Event()
+        release_camera = threading.Event()
+        errors = []
+        outcomes = []
+        runtime = ServiceOwnedQuotaRuntime(
+            self.store, expected_windows_sid=self.sid,
+            observe_wts=lambda: self.snapshot,
+            capture_face_locally=lambda: self._wait_for_camera(
+                camera_entered, release_camera),
+            monotonic=lambda: self.now,
+            today=lambda: date(2026, 10, 24),
+        )
+        worker = threading.Thread(
+            target=lambda: outcomes.append(runtime.bind_from_service_camera()),
+            daemon=True,
+        )
+        locker = threading.Thread(
+            target=lambda: (
+                runtime.on_service_session_change(7, (42,)),
+                errors.append("delivered"),
+            ),
+            daemon=True,
+        )
+        try:
+            runtime.on_service_session_change(8, (42,))
+            worker.start()
+            self.assertTrue(camera_entered.wait(2), "Camera did not start")
+            locker.start()
+            self.assertTrue(self._await_delivered(errors),
+                            "SCM callback was blocked waiting for the camera")
+        finally:
+            release_camera.set()
+            worker.join(timeout=3)
+            locker.join(timeout=3)
+            runtime.stop()
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(locker.is_alive())
+        self.assertEqual(len(outcomes), 1)
+        self.assertEqual(outcomes[0].reason, "session-changed-during-capture")
+        self.now += 7
+        self.assertEqual(runtime.service_tick().charged_seconds, 0)
+        self.assertEqual(self.store.used(self.people[0], "2026-10-24"), 0)
+
+    def _wait_for_camera(self, entered, release):
+        entered.set()
+        if not release.wait(3):
+            raise TimeoutError("Synthetic camera held too long")
+        return "ALLOW", {"child_id": self.people[0], "user": "Filhos"}
+
+    @staticmethod
+    def _await_delivered(values):
+        # Event.wait is simpler for signaling, but this also checks the
+        # state update without requiring the camera thread to complete.
+        import time
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            if values:
+                return True
+            time.sleep(0.005)
+        return False
+
+    def test_duplicate_unlock_event_requires_fresh_face(self):
+        self.runtime.on_service_session_change(8, (42,))
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        self.now += 3
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 3)
+        self.runtime.on_service_session_change(8, (42,))
+        self.now += 3
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
 
     def test_actual_face_authenticator_is_called_only_locally_without_metadata(self):
         from unittest.mock import patch
