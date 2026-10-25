@@ -129,6 +129,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Optional pywin32 dependency installation failed' }
           python -c "import win32serviceutil; from facekids.quota_broker_scm_win import FaceKidsQuotaLabService; assert issubclass(FaceKidsQuotaLabService, win32serviceutil.ServiceFramework); print('SCM wrapper loaded: no service registered')"
           if ($LASTEXITCODE -ne 0) { throw 'SCM wrapper failed import or subclass verification' }
+          python -m unittest discover -s tests -p test_quota_broker_scm_lifecycle.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'SCM mocked start/stop tests failed' }
       - name: Disposable Windows ACL and rollback rehearsal
         if: runner.os == 'Windows'
         shell: pwsh
