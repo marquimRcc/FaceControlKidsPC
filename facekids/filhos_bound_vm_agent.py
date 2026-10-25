@@ -13,7 +13,7 @@ import os
 from typing import Callable
 
 from .quota_broker_bound_protocol import BoundBalance
-from .quota_broker_writer_scm_win import VM_WRITER_REGISTRY_PATH
+from .quota_vm_policy_constants import VM_WRITER_REGISTRY_PATH
 
 
 @dataclass(frozen=True, slots=True)
