@@ -28,13 +28,44 @@ from .quota_broker_transport_win import (
 BOUND_VM_PIPE = r"\\.\pipe\FaceKidsQuotaWriterBoundVmOnly"
 
 
-def serve_one_bound_vm_request(
+def _process_bound_connection(
+    *, kernel, advapi, pipe, expected_child_sid: str,
+    bound_reader: Callable[[str], BoundBalance | None],
+    stop_event: threading.Event, deadline: float,
+) -> bool:
+    """Consume at most one read-only request on an already connected pipe."""
+    raw = ctypes.create_string_buffer(257)
+    received_ok, length = _pipe_io(
+        kernel, pipe, "read", buffer=raw, count=257,
+        stop_event=stop_event, deadline=deadline,
+    )
+    if not received_ok or not 0 < length <= 256:
+        return False
+    sid = _impersonated_client_sid(pipe, kernel, advapi)
+    if sid != expected_child_sid:
+        response: dict[str, object] = {"status": "DENY"}
+    else:
+        response = handle_bound_read(
+            raw.raw[:length], verified_client_sid=sid,
+            read_bound=bound_reader,
+        )
+    payload = (json.dumps(
+        response, separators=(",", ":"), allow_nan=False
+    ) + "\n").encode("ascii")
+    out = ctypes.create_string_buffer(payload)
+    ok, sent = _pipe_io(
+        kernel, pipe, "write", buffer=out, count=len(payload),
+        stop_event=stop_event, deadline=deadline,
+    )
+    return bool(ok and sent == len(payload))
+
+
+def _serve_bound_vm_pipe(
     *, expected_child_sid: str,
     bound_reader: Callable[[str], BoundBalance | None],
     stop_event: threading.Event,
-    timeout_seconds: float = 1.0,
+    timeout_seconds: float, max_exchanges: int | None,
 ) -> bool:
-    """One bounded, authenticated read-only exchange in a disposable VM."""
     if os.name != "nt":
         raise RuntimeError("Windows-only bound quota pipe")
     if (type(expected_child_sid) is not str or
@@ -43,13 +74,16 @@ def serve_one_bound_vm_request(
             not callable(bound_reader) or
             not isinstance(stop_event, threading.Event) or
             type(timeout_seconds) not in (float, int) or
-            not 0.2 <= timeout_seconds <= 5):
+            not 0.2 <= timeout_seconds <= 5 or
+            max_exchanges not in (None, 1)):
         raise ValueError("Invalid protected VM bound pipe configuration")
     if stop_event.is_set():
         return False
     kernel, advapi = _configure_windows_api()
-    # No Everyone/Interactive Users ACE: explicit Windows SID of the shared
-    # Filhos account, plus SYSTEM/Administrators for diagnostics.
+    # Create a SINGLE instance for the service lifecycle. Repeatedly
+    # closing and recreating a FIRST_PIPE_INSTANCE pipe exposes a race:
+    # a previous client still holding its handle makes CreateNamedPipe fail.
+    # Reusing the same server handle avoids that race and name takeover.
     sddl = (
         "D:P(A;;GA;;;SY)(A;;GA;;;BA)"
         f"(A;;GRGW;;;{expected_child_sid})"
@@ -74,38 +108,61 @@ def serve_one_bound_vm_request(
         if not pipe or pipe == invalid:
             raise RuntimeError("Cannot claim first instance of VM bound pipe")
         try:
-            deadline = time.monotonic() + float(timeout_seconds)
-            connected, _ = _pipe_io(
-                kernel, pipe, "connect", stop_event=stop_event, deadline=deadline
-            )
-            if not connected:
-                return False
-            raw = ctypes.create_string_buffer(257)
-            received_ok, length = _pipe_io(
-                kernel, pipe, "read", buffer=raw, count=257,
-                stop_event=stop_event, deadline=deadline
-            )
-            if not received_ok or not 0 < length <= 256:
-                return False
-            sid = _impersonated_client_sid(pipe, kernel, advapi)
-            if sid != expected_child_sid:
-                response: dict[str, object] = {"status": "DENY"}
-            else:
-                response = handle_bound_read(
-                    raw.raw[:length], verified_client_sid=sid,
-                    read_bound=bound_reader,
-                )
-            payload = (json.dumps(
-                response, separators=(",", ":"), allow_nan=False
-            ) + "\n").encode("ascii")
-            out = ctypes.create_string_buffer(payload)
-            ok, sent = _pipe_io(
-                kernel, pipe, "write", buffer=out, count=len(payload),
-                stop_event=stop_event, deadline=deadline,
-            )
-            return bool(ok and sent == len(payload))
+            while not stop_event.is_set():
+                deadline = time.monotonic() + float(timeout_seconds)
+                connected = False
+                try:
+                    connected, _ = _pipe_io(
+                        kernel, pipe, "connect",
+                        stop_event=stop_event, deadline=deadline,
+                    )
+                    if not connected:
+                        if max_exchanges == 1:
+                            return False
+                        continue
+                    success = _process_bound_connection(
+                        kernel=kernel, advapi=advapi, pipe=pipe,
+                        expected_child_sid=expected_child_sid,
+                        bound_reader=bound_reader, stop_event=stop_event,
+                        deadline=deadline,
+                    )
+                    if max_exchanges == 1:
+                        return success
+                finally:
+                    # Disconnect the client but retain the server instance.
+                    # _pipe_io reaps overlapped requests before this returns.
+                    if connected:
+                        kernel.DisconnectNamedPipe(pipe)
+            return False
         finally:
-            kernel.DisconnectNamedPipe(pipe)
             kernel.CloseHandle(pipe)
     finally:
         kernel.LocalFree(descriptor)
+
+
+def serve_one_bound_vm_request(
+    *, expected_child_sid: str,
+    bound_reader: Callable[[str], BoundBalance | None],
+    stop_event: threading.Event,
+    timeout_seconds: float = 1.0,
+) -> bool:
+    """One bounded read-only exchange in a disposable unit test."""
+    return _serve_bound_vm_pipe(
+        expected_child_sid=expected_child_sid,
+        bound_reader=bound_reader, stop_event=stop_event,
+        timeout_seconds=timeout_seconds, max_exchanges=1,
+    )
+
+
+def serve_bound_vm_requests(
+    *, expected_child_sid: str,
+    bound_reader: Callable[[str], BoundBalance | None],
+    stop_event: threading.Event,
+    timeout_seconds: float = 1.0,
+) -> None:
+    """Service lifecycle: retain the first pipe instance across all clients."""
+    _serve_bound_vm_pipe(
+        expected_child_sid=expected_child_sid,
+        bound_reader=bound_reader, stop_event=stop_event,
+        timeout_seconds=timeout_seconds, max_exchanges=None,
+    )
