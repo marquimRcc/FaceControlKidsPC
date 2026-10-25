@@ -18,10 +18,10 @@ Também foi acrescentado um adaptador `BrokerLabReadOnlyQuota` de **observação
 
 ## Fortalecimento do Named Pipe de leitura
 
-- O cliente busca o **PID real da outra ponta** com `GetNamedPipeServerProcessId`, consulta seu `TOKEN_USER` por API do Windows e exige `S-1-5-18` (LocalSystem) **antes de escrever a requisição**.
-- Um pipe servido por um processo comum no runner é recusado. O pipe real SCM iniciado sob SYSTEM é aceito em ensaio separado.
+- O cliente busca o **PID real da outra ponta** com `GetNamedPipeServerProcessId` e confere esse PID contra o serviço **exato** `FaceKidsQuotaLabOnly` em execução, consultando a identidade `LocalSystem` registrada no SCM com `QueryServiceStatusEx` e `QueryServiceConfigW` **antes de escrever a requisição**. A consulta direta de token SYSTEM pode falhar para usuário padrão e não é utilizada no cliente principal.
+- Um pipe servido por um processo comum no runner é recusado; o pipe real SCM iniciado sob SYSTEM precisa corresponder ao PID e à conta do serviço cadastrado.
 - Repostas fora do contrato, campos extras (`child_id`, `elapsed_seconds`), tempos NaN/infinito/negativos, contraditórios (saldo zero + permitido) e falhas de transporte não autorizam ações.
-- Essa validação é **apenas defesa adicional**. SID SYSTEM isoladamente **não basta** para confiar nos valores, porque falta vincular o endpoint a um serviço SCM específico com configuração protegida e um identificador facial atual. O cliente de laboratório não deve controlar `LockWorkStation` ou login Windows.
+- Essa validação é **apenas defesa adicional**. PID/nome/conta SCM isoladamente **não bastam** para confiar nos valores, porque falta vincular o endpoint a um serviço SCM específico com configuração protegida e um identificador facial atual. O cliente de laboratório não deve controlar `LockWorkStation` ou login Windows.
 
 ## Comprovação automatizada
 
@@ -32,7 +32,7 @@ Também foi acrescentado um adaptador `BrokerLabReadOnlyQuota` de **observação
 - consulta feita por `ReadOnlyQuotaView` sem alterar os saldos;
 - auditoria de que o loop legado usa `LegacyLedgerQuota` em vez de `store.charge` inline.
 
-`tests/test_quota_broker_transport_win.py`: processo comum recusado pela inspeção do token do Named Pipe; transporte unitário do pipe testado com bypass controlado de **teste apenas**.
+`tests/test_quota_broker_transport_win.py`: processo comum recusado pela inspeção do token do Named Pipe; transporte unitário do pipe testado com bypass de **teste apenas** para a verificação por SCM. O teste de SCM real exige PID e conta registrados.
 
 `scripts/ci_scm_lab_smoke.py`: conta Windows sintética usa a consulta do adaptador no Named Pipe **real** do serviço `FaceKidsQuotaLabOnly` sob SYSTEM. O administrador é recusado pela ACL/mapeamento e nenhuma cobrança ocorre.
 
