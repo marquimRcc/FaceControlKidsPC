@@ -140,6 +140,31 @@ class WriterVmScmLifecycleTests(unittest.TestCase):
         self.assertEqual(instance._host.on_scm_session_change.call_count, 2)
         instance._host.on_scm_session_change.assert_any_call(7, (23,))
 
+    def test_pipe_failure_revokes_lease_and_requests_service_stop(self):
+        instance, _ = self.fake()
+        instance._host = MagicMock()
+        instance._bound_failure = None
+        with patch.object(self.mod, "serve_bound_vm_requests",
+                          side_effect=OSError("synthetic pipe failure")):
+            instance._serve_bound_vm_read_loop("S-1-5-21-1-2-3-1001")
+        self.assertTrue(instance._stop_signal.is_set())
+        self.assertIsInstance(instance._bound_failure, OSError)
+        instance._host.request_stop.assert_called_once()
+
+    def test_normal_pipe_stop_does_not_report_unexpected_failure(self):
+        instance, _ = self.fake()
+        instance._host = MagicMock()
+        instance._bound_failure = None
+        def stop_after_first_callback(**kwargs):
+            self.assertEqual(kwargs["expected_child_sid"], "S-1-5-21-1-2-3-1001")
+            self.assertIs(kwargs["stop_event"], instance._stop_signal)
+            kwargs["stop_event"].set()
+        with patch.object(self.mod, "serve_bound_vm_requests",
+                          side_effect=stop_after_first_callback):
+            instance._serve_bound_vm_read_loop("S-1-5-21-1-2-3-1001")
+        self.assertIsNone(instance._bound_failure)
+        instance._host.request_stop.assert_not_called()
+
     def test_wrong_service_principal_blocks_sqlite_access(self):
         instance, status = self.fake()
         with patch.object(self.mod, "_require_expected_service_sid",
