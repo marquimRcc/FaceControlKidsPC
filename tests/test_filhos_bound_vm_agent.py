@@ -29,7 +29,7 @@ class BoundVmAgentTests(unittest.TestCase):
                 self.assertIn(observed.state, {"invalid", "unverified"})
                 self.assertIsNone(observed.child_id)
                 self.assertFalse(observed.may_enforce_lock)
-        for exception in (OSError(), PermissionError(), TimeoutError(), ValueError()):
+        for exception in (OSError(), PermissionError(), TimeoutError(), ValueError(), TypeError()):
             with self.subTest(exception=exception):
                 def fail():
                     raise exception
