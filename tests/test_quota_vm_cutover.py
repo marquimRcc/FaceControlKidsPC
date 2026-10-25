@@ -3,6 +3,7 @@ from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import sqlite3
+import numpy as np
 import unittest
 
 from facekids.quota_vm_cutover import (
@@ -27,6 +28,8 @@ class OfflineVmCutoverTests(unittest.TestCase):
         self.store.set_setting(LAB_MARKER_KEY, LAB_MARKER_VALUE)
         self.day = "2026-10-25"
         self.store.charge(self.people[0], 3, self.day)
+        self.store.add_bonus(self.people[2], 2, self.day)
+        self.store.add_embedding(self.people[2], np.arange(32, dtype=np.float32))
         self.store.close()
         self.backup = self.root / "before-cutover.sqlite3"
         self.undo = self.root / "before-rollback.sqlite3"
@@ -87,6 +90,13 @@ class OfflineVmCutoverTests(unittest.TestCase):
             self.assertIsNone(restored.get_setting(OWNER_KEY))
             self.assertEqual([restored.used(x, self.day) for x in self.people],
                              [3, 0, 0])
+            self.assertEqual(restored.bonus(self.people[2], self.day), 120)
+            self.assertEqual(restored.enrollment_count(self.people[2]), 1)
+            vectors = restored.embeddings()
+            self.assertEqual(vectors[0][0], self.people[2])
+            np.testing.assert_array_equal(
+                vectors[0][1], np.arange(32, dtype=np.float32)
+            )
             restored.charge(self.people[0], 1, self.day)
             self.assertEqual(restored.used(self.people[0], self.day), 4)
         with closing(sqlite3.connect(self.undo)) as pre:
