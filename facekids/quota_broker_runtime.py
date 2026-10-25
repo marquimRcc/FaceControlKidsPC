@@ -43,6 +43,33 @@ class ServiceOwnedQuotaRuntime:
             recognize_locally=capture_face_locally,
         )
 
+    @classmethod
+    def from_service_authenticator(
+        cls, store: Storage, *,
+        expected_windows_sid: str,
+        authenticator: object,
+        observe_wts: Callable[[], WtsSnapshot | None],
+        monotonic: Callable[[], float] = time.monotonic,
+        today: Callable[[], date] = date.today,
+    ) -> "ServiceOwnedQuotaRuntime":
+        """Connect actual FaceAuthenticator in-process, without legacy JSON.
+
+        Does not make camera recognition spoof-resistant. A privileged SCM
+        host must protect its code, verify session/token and perform VM
+        hardware testing before enabling any billing.
+        """
+        from .auth_service import FaceAuthenticator
+        if not isinstance(authenticator, FaceAuthenticator):
+            raise ValueError("Service-owned FaceAuthenticator instance required")
+        return cls(
+            store, expected_windows_sid=expected_windows_sid,
+            observe_wts=observe_wts,
+            capture_face_locally=lambda: authenticator.evaluate(
+                persist_unlock_metadata=False
+            ),
+            monotonic=monotonic, today=today,
+        )
+
     def on_service_session_change(self, code: int, payload: tuple[int]) -> None:
         with self._lock:
             try:
