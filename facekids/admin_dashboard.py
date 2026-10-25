@@ -1066,7 +1066,7 @@ class AdminDashboard(tk.Tk):
 
         tk.Label(
             avatar_col,
-            text="Foto da\\nboas-vindas",
+            text="Foto da\nboas-vindas",
             font=("Segoe UI", 8, "bold"),
             fg=TEXT_SUB,
             bg=BG_CARD,
