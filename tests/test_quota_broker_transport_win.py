@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from facekids.storage import Storage
 from facekids.quota_broker_client_win import query_lab_balance
+from facekids.quota_broker_peer_win import require_system_pipe_server
 from facekids.quota_broker_transport_win import LAB_PIPE_PREFIX, serve_one_lab_request
 
 
@@ -82,6 +83,11 @@ class LabBrokerWindowsTests(unittest.TestCase):
                 handle = k.CreateFileW(pipe, 0xC0000000, 0, None, 3, 0, None)
                 self.assertNotIn(handle, (None, 0, ctypes.c_void_p(-1).value))
                 try:
+                    # The fixture server is this ordinary CI process, not
+                    # LocalSystem. Peer check MUST reject it before a response
+                    # could be accepted for screen-time enforcement.
+                    with self.assertRaises(PermissionError):
+                        require_system_pipe_server(int(handle))
                     request = b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}'
                     sent = wintypes.DWORD()
                     buf = ctypes.create_string_buffer(request)
