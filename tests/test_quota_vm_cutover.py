@@ -5,12 +5,14 @@ from tempfile import TemporaryDirectory
 import sqlite3
 import numpy as np
 import unittest
+from unittest.mock import patch
 
 from facekids.quota_vm_cutover import (
     OWNER_KEY, SERVICE_ONLY, promote_vm_lab_writer, restore_vm_lab_offline
 )
 from facekids.quota_broker_writer_scm_win import LAB_MARKER_KEY, LAB_MARKER_VALUE
 from facekids.storage import Storage
+from facekids.quota_broker_migration import create_vm_snapshot
 
 
 class OfflineVmCutoverTests(unittest.TestCase):
@@ -162,6 +164,47 @@ class OfflineVmCutoverTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 restarted.charge(self.people[0], 5, self.day)
             self.assertEqual(restarted.used(self.people[0], self.day), 12)
+
+    def test_equal_count_balance_mutation_between_snapshot_and_cutover_fails(self):
+        """A concurrent UPDATE must not make rollback silently lose charges."""
+        def race(source, target, *, lab_root):
+            snapshot = create_vm_snapshot(source, target, lab_root=lab_root)
+            with closing(sqlite3.connect(self.db)) as writer:
+                writer.execute(
+                    "UPDATE daily_usage SET seconds=seconds+2 WHERE person_id=?",
+                    (self.people[0],)
+                )
+            return snapshot
+
+        with patch("facekids.quota_vm_cutover.create_vm_snapshot", side_effect=race):
+            with self.assertRaisesRegex(RuntimeError, "content changed"):
+                self.promote()
+        self.assertTrue(self.backup.exists())
+        with closing(Storage(self.db)) as active:
+            self.assertIsNone(active.get_setting(OWNER_KEY))
+            self.assertEqual(active.used(self.people[0], self.day), 5)
+
+    def test_rollback_requires_service_owned_database(self):
+        """Never roll back a different ledger just because backup is valid."""
+        create_vm_snapshot(self.db, self.backup, lab_root=self.root)
+        with self.assertRaisesRegex(PermissionError, "not exclusively service-owned"):
+            restore_vm_lab_offline(
+                self.config, backup_path=self.backup,
+                preserved_current_path=self.undo, offline_gate=lambda: True,
+            )
+        self.assertFalse(self.undo.exists())
+
+    def test_stale_restore_staging_does_not_create_new_undo_image(self):
+        self.promote()
+        stale = self.root / "writer-restore-prepared.sqlite3"
+        stale.write_bytes(b"incomplete prior attempt")
+        with self.assertRaises(FileExistsError):
+            restore_vm_lab_offline(
+                self.config, backup_path=self.backup,
+                preserved_current_path=self.undo, offline_gate=lambda: True,
+            )
+        self.assertFalse(self.undo.exists())
+        self.assertEqual(stale.read_bytes(), b"incomplete prior attempt")
 
 
 if __name__ == "__main__":
