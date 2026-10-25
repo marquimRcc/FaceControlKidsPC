@@ -120,6 +120,27 @@ jobs:
           } finally {
             Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
           }
+      - name: Disposable Windows ACL and rollback rehearsal
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = (Resolve-Path 'scripts/Testar-ACL-Rollback-Broker-Lab.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "ACL rollback lab syntax error: $($parseErrors[0].Message)"
+          }
+          $result = & $path | ConvertFrom-Json
+          if (-not $result.OriginalAclRestored -or
+              -not $result.BroadUsersWriteAceAbsent -or
+              -not $result.SyntheticFileBytesUnchanged -or
+              $result.ProductionPathsTouched -or
+              $result.ChildEffectiveTokenTested) {
+            throw 'Disposable ACL rollback safety contract failed'
+          }
       - name: Windows-only pilot launcher parse and three-child status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
