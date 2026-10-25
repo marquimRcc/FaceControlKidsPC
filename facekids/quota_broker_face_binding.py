@@ -42,6 +42,7 @@ class PrivilegedLocalFaceBinder:
         epoch = self._locks.revision
         if (before is None or not before.connected or
                 not self._locks.is_unlocked(before.session_id)):
+            self._worker.end_trusted_face_binding()
             return FaceBindingOutcome(False, "session-unverified")
         try:
             # This callback MUST invoke FaceAuthenticator.evaluate in the
