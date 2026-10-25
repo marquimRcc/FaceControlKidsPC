@@ -99,8 +99,15 @@ def main() -> int:
                 print("PASS: actual Tk menu switched all three palettes and persisted choice")
                 return 0
             finally:
-                if app is not None and app.winfo_exists():
-                    app.destroy()
+                # Tk.destroy() does not close arbitrary SQLite connections.
+                # Windows refuses deletion while the fixture handle remains open.
+                if app is not None:
+                    try:
+                        if hasattr(app, "store"):
+                            app.store.close()
+                    finally:
+                        if app.winfo_exists():
+                            app.destroy()
 
 if __name__ == "__main__":
     raise SystemExit(main())
