@@ -139,7 +139,8 @@ class FaceAuthenticator:
             self._recognizer = Recognizer(self.models_dir)
         return self._recognizer
 
-    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5) -> Tuple[str, dict]:
+    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5,
+                 *, persist_unlock_metadata: bool = True) -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
             return "ERROR", {"message": "Banco de dados nao encontrado"}
@@ -241,28 +242,30 @@ class FaceAuthenticator:
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
 
             # Salva foto recortada de avatar da crianca reconhecida
-            if best_frame is not None:
+            if persist_unlock_metadata and best_frame is not None:
                 try:
                     save_child_photo(best_candidate, best_frame, best_face_box)
                 except Exception as e:
                     logger.warning("Falha ao salvar avatar do filho: %s", e)
 
-            # Grava ultimo evento de desbloqueio para a tela de boas-vindas
-            try:
-                unlock_data = {
-                    "child_id": best_candidate,
-                    "child_name": child_name,
-                    "remaining_seconds": remaining_seconds,
-                    "timestamp": time.time(),
-                }
-                unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
-                unlock_path.parent.mkdir(parents=True, exist_ok=True)
-                unlock_path.write_text(
-                    json.dumps(unlock_data, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-            except Exception as e:
-                logger.warning("Falha ao salvar last_unlock.json: %s", e)
+            # Somente o fluxo legado grava o evento (sem autoridade) e avatar.
+            # Um serviço privilegiado NÃO deve persistir last_unlock.json.
+            if persist_unlock_metadata:
+                try:
+                    unlock_data = {
+                        "child_id": best_candidate,
+                        "child_name": child_name,
+                        "remaining_seconds": remaining_seconds,
+                        "timestamp": time.time(),
+                    }
+                    unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
+                    unlock_path.parent.mkdir(parents=True, exist_ok=True)
+                    unlock_path.write_text(
+                        json.dumps(unlock_data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                except Exception as e:
+                    logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
             return "ALLOW", {
                 "child_id": best_candidate,
