@@ -114,6 +114,58 @@ class LabBrokerWindowsTests(unittest.TestCase):
     def test_sid_not_in_protected_mapping_is_denied(self):
         self.assertEqual(self._exercise_pipe({"S-1-5-18": 1}), {"status": "DENY"})
 
+    def test_no_client_timeout_releases_pipe_without_hanging(self):
+        from facekids.quota_broker_transport_win import serve_one_lab_request
+        with TemporaryDirectory() as td:
+            root = Path(td) / "facekids-quota-lab"
+            root.mkdir()
+            db = root / "fixture.sqlite3"
+            storage = Storage(db)
+            storage.add_person("Child", 1)
+            storage.close()
+            start = time.monotonic()
+            served = serve_one_lab_request(
+                pipe_name=LAB_PIPE_PREFIX + uuid.uuid4().hex,
+                data_path=db,
+                enrolled_child_by_sid={self._current_sid(): 1},
+                timeout_seconds=0.35,
+            )
+            self.assertFalse(served)
+            self.assertLess(time.monotonic() - start, 4.0)
+
+    def test_stop_event_interrupts_pending_connect_and_closes_handle(self):
+        from facekids.quota_broker_transport_win import serve_one_lab_request
+        with TemporaryDirectory() as td:
+            root = Path(td) / "facekids-quota-lab"
+            root.mkdir()
+            db = root / "fixture.sqlite3"
+            storage = Storage(db)
+            storage.add_person("Child", 1)
+            storage.close()
+            stop = threading.Event()
+            errors = []
+            result = []
+            pipe = LAB_PIPE_PREFIX + uuid.uuid4().hex
+
+            def server():
+                try:
+                    result.append(serve_one_lab_request(
+                        pipe_name=pipe, data_path=db,
+                        enrolled_child_by_sid={self._current_sid(): 1},
+                        stop_event=stop, timeout_seconds=10.0,
+                    ))
+                except Exception as exc:
+                    errors.append(exc)
+
+            worker = threading.Thread(target=server, daemon=True)
+            worker.start()
+            time.sleep(0.2)
+            stop.set()
+            worker.join(timeout=4.0)
+            self.assertFalse(worker.is_alive(), "Pending pipe must cancel on stop")
+            self.assertEqual(errors, [])
+            self.assertEqual(result, [False])
+
     def test_no_host_on_wrong_platform_or_without_lab_path(self):
         # Pure preflight runs before any OS resource is opened.
         with self.assertRaises(ValueError):
