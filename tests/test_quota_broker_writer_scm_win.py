@@ -1,4 +1,5 @@
 """Strict configuration and SCM lifecycle for VM-only quota writer."""
+from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -56,8 +57,9 @@ class WriterVmConfigTests(unittest.TestCase):
         self.assertEqual(VM_WRITER_SERVICE_NAME, "FaceKidsQuotaWriterVmOnly")
 
     def test_unmarked_or_non_sqlite_fixture_fails_closed(self):
-        with sqlite3.connect(self.db) as db:
-            db.execute("DELETE FROM settings WHERE key=?", (LAB_MARKER_KEY,))
+        with closing(sqlite3.connect(self.db)) as db:
+            with db:
+                db.execute("DELETE FROM settings WHERE key=?", (LAB_MARKER_KEY,))
         with self.assertRaises(PermissionError):
             validate_vm_writer_config(self.config)
         self.db.write_bytes(b"not a database")
