@@ -58,10 +58,19 @@ def read_hklm_lab_configuration() -> tuple[str, Path, dict[str, int]]:
         raise RuntimeError("Windows SCM only")
     import winreg
 
+    expected_types = {
+        "LabOnly": winreg.REG_DWORD,
+        "Database": winreg.REG_SZ,
+        "ClientSid": winreg.REG_SZ,
+        "ChildId": winreg.REG_DWORD,
+        "PipeSuffix": winreg.REG_SZ,
+    }
     with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REGISTRY_PATH, 0, winreg.KEY_READ) as key:
         vals = {}
-        for name in ("LabOnly", "Database", "ClientSid", "ChildId", "PipeSuffix"):
-            value, _type = winreg.QueryValueEx(key, name)
+        for name, required_type in expected_types.items():
+            value, actual_type = winreg.QueryValueEx(key, name)
+            if actual_type != required_type:
+                raise ValueError("Invalid HKLM lab registry value type")
             vals[name] = value
     return validate_service_registry_config(vals)
 
