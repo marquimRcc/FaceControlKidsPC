@@ -21,6 +21,7 @@ import uuid
 import winreg
 
 from facekids.quota_broker_client_win import query_lab_balance
+from facekids.quota_agent_accounting import BrokerLabReadOnlyQuota
 from facekids.quota_broker_scm_win import (
     REGISTRY_PATH, SERVICE_NAME, FaceKidsQuotaLabService,
 )
@@ -180,7 +181,18 @@ def main() -> int:
                     raise AssertionError("Synthetic child may modify SCM HKLM policy")
             except PermissionError:
                 pass
-            balance = query_lab_balance(pipe)
+            # Exercise the future agent's non-authoritative, read-only
+            # integration over the REAL isolated SCM Named Pipe. The service
+            # validates the caller's token SID; the child never opens SQLite.
+            observation = BrokerLabReadOnlyQuota(
+                lambda: query_lab_balance(pipe)
+            ).observe()
+            balance = {
+                "status": "OK" if observation.status == "observed" else "DENY",
+                "remaining_seconds": observation.remaining_seconds,
+            }
+            if observation.charged_locally or observation.may_enforce_lock:
+                raise AssertionError("Untrusted broker reply became charging/locking authority")
         finally:
             win32security.RevertToSelf()
             child_impersonating = False
