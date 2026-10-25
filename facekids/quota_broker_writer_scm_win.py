@@ -252,6 +252,11 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
             if self._stop_signal.is_set():
                 return
             store = Storage(db_path)
+            # A synthetic fixture marker is necessary but insufficient:
+            # refuse to start an SCM debit writer before the offline,
+            # WAL-backed service-only ownership cutover was committed.
+            if store.get_setting("quota_writer_owner") != "vm-service-only":
+                raise PermissionError("VM ledger not promoted to exclusive SCM ownership")
             auth = FaceAuthenticator(models, db_path)
             runtime = ServiceOwnedQuotaRuntime.from_service_authenticator(
                 store, expected_windows_sid=child_sid,
