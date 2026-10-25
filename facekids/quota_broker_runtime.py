@@ -41,6 +41,7 @@ class ServiceOwnedQuotaRuntime:
         self._face = PrivilegedLocalFaceBinder(
             worker=self._worker, locks=self._locks,
             recognize_locally=capture_face_locally,
+            state_lock=self._lock,
         )
 
     @classmethod
@@ -78,14 +79,14 @@ class ServiceOwnedQuotaRuntime:
                 self._locks.reset()
                 self._worker.end_trusted_face_binding()
                 raise
-            # Revoke on every lock/transition: no previous child's face
-            # authorization survives a lock, logon, logout or disconnect.
-            if code != 8:  # only WTS_SESSION_UNLOCK; unlocking still requires face
-                self._worker.end_trusted_face_binding()
+            # Every SCM event, including a duplicate unlock, invalidates
+            # previous leases and any in-flight camera capture generation.
+            self._worker.end_trusted_face_binding()
 
     def bind_from_service_camera(self) -> FaceBindingOutcome:
-        with self._lock:
-            return self._face.recognize_and_bind()
+        # Face capture is deliberately outside the SCM-event lock. The
+        # binder rechecks WTS/SCM revision under the same lock at commit.
+        return self._face.recognize_and_bind()
 
     def service_tick(self) -> BrokerTick:
         with self._lock:
