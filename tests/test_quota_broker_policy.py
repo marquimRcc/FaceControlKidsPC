@@ -70,9 +70,14 @@ class ServiceOwnedQuotaBrokerTests(unittest.TestCase):
             (receipt,)
         ).fetchone()
         self.assertEqual(row, (3.0,))
-        # A second debit with the same receipt ID but different interval must
-        # fail closed, never write or silently charge a second interval.
+        # Identical replay is idempotent and charges zero. Reuse with a
+        # DIFFERENT interval must fail closed instead of double-charging.
         self.clock.now = 106
+        self.assertEqual(broker.observe(
+            observed_wts_session_id=42, observed_console_active=True
+        ).charged_seconds, 0.0)
+        self.assertEqual(self.storage.used(self.first, self.day), 3.0)
+        self.clock.now = 110
         with self.assertRaises(ValueError):
             broker.observe(
                 observed_wts_session_id=42, observed_console_active=True
