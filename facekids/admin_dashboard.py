@@ -33,7 +33,7 @@ from .avatar_utils import (
     AVATAR_DIR,
 )
 from .storage import Storage
-from .parent_ui_state import filter_children, load_overview, screen_time_label
+from .parent_ui_state import filter_children, load_overview, screen_time_label, validate_schedule
 from .children_pilot import child_pilot_database, windows_token_user
 
 logger = logging.getLogger("FaceKidsAdmin")
@@ -742,6 +742,39 @@ class AdminDashboard(tk.Tk):
             tk.Label(tile, textvariable=value, bg=BG_CARD, fg=accent,
                      font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(3, 0))
 
+        # Global allowed-hours editor, embedded beside the quotas.
+        schedule_row = tk.Frame(overview_bar, bg=BG_BOX, padx=12, pady=9,
+                                highlightthickness=1, highlightbackground=BORDER_DEFAULT)
+        schedule_row.pack(fill=tk.X, pady=(10, 0))
+        tk.Label(schedule_row, text="Horário permitido (todos os filhos)",
+                 bg=BG_BOX, fg=TEXT_TITLE, font=("Segoe UI", 10, "bold")).pack(
+                     side=tk.LEFT, padx=(0, 14))
+        self.schedule_enabled_var = tk.BooleanVar(value=False)
+        self.schedule_start_var = tk.StringVar(value="08:00")
+        self.schedule_end_var = tk.StringVar(value="20:00")
+        self._schedule_loaded = None
+        tk.Checkbutton(
+            schedule_row, text="Ativo", variable=self.schedule_enabled_var,
+            bg=BG_BOX, fg=TEXT_SUB, selectcolor=BG_CARD,
+            activebackground=BG_BOX, activeforeground=TEXT_TITLE,
+        ).pack(side=tk.LEFT, padx=(0, 12))
+        for caption, var in (("Das", self.schedule_start_var),
+                             ("até", self.schedule_end_var)):
+            tk.Label(schedule_row, text=caption, bg=BG_BOX, fg=TEXT_SUB,
+                     font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 5))
+            tk.Entry(
+                schedule_row, textvariable=var, width=6, justify="center",
+                bg=BG_CARD, fg=TEXT_TITLE, insertbackground=TEXT_TITLE,
+                font=("Segoe UI", 10), relief=tk.FLAT,
+                highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            ).pack(side=tk.LEFT, padx=(0, 10), ipady=3)
+        tk.Button(
+            schedule_row, text="Salvar horário", command=self._save_inline_schedule,
+            bg=ACCENT_PURPLE, fg=BG_MAIN, activebackground=ACCENT_CYAN,
+            activeforeground=BG_MAIN, relief=tk.FLAT, cursor="hand2",
+            font=("Segoe UI", 9, "bold"), padx=10, pady=4,
+        ).pack(side=tk.LEFT, padx=(2, 0))
+
         self.data_source_var = tk.StringVar(value="")
         tk.Label(overview_bar, textvariable=self.data_source_var, bg=BG_MAIN,
                  fg=TEXT_SUB, anchor="w", font=("Segoe UI", 9),
@@ -770,6 +803,24 @@ class AdminDashboard(tk.Tk):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+    def _save_inline_schedule(self):
+        """Apply global hours only on deliberate parent action, never during refresh."""
+        try:
+            enabled, start, end = validate_schedule(
+                self.schedule_enabled_var.get(),
+                self.schedule_start_var.get(),
+                self.schedule_end_var.get(),
+            )
+            self.store.set_curfew_config(enabled, start, end)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Horário inválido", str(exc), parent=self)
+            return
+        self._schedule_loaded = (enabled, start, end)
+        self.status_text.set(
+            f"Horário {'ativado' if enabled else 'desativado'} • {start} às {end}"
+        )
+        self.refresh()
+
     def refresh(self):
         """Re-render UI from read-only view models; never change quota in refresh."""
         for widget in self.cards_frame.winfo_children():
@@ -777,6 +828,22 @@ class AdminDashboard(tk.Tk):
         self.avatar_images.clear()
 
         overview = load_overview(self.store)
+        actual_schedule = (
+            overview.schedule_enabled,
+            overview.schedule_start,
+            overview.schedule_end,
+        )
+        edited_schedule = (
+            self.schedule_enabled_var.get(),
+            self.schedule_start_var.get(),
+            self.schedule_end_var.get(),
+        )
+        # Preserve partially edited fields during search/filter refresh.
+        if self._schedule_loaded is None or edited_schedule == self._schedule_loaded:
+            self.schedule_enabled_var.set(overview.schedule_enabled)
+            self.schedule_start_var.set(overview.schedule_start)
+            self.schedule_end_var.set(overview.schedule_end)
+            self._schedule_loaded = actual_schedule
         visible = filter_children(overview.children, self.search_var.get())
         self.total_var.set(str(overview.total_children))
         self.enrolled_var.set(
