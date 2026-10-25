@@ -31,14 +31,21 @@ LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 logger = logging.getLogger("FaceKidsWelcome")
 
 
-def is_process_running(exe_name: str) -> bool:
-    """Verifica se um processo com o nome do executavel esta ativo no sistema."""
+def is_process_running_in_current_session(exe_name: str) -> bool:
+    """Verifica se um processo com o nome do executavel esta ativo NA MESMA SESSAO do Windows."""
     if not exe_name:
         return False
     if sys.platform == "win32":
         try:
             import ctypes
             from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+
+            my_pid = kernel32.GetCurrentProcessId()
+            my_session = wintypes.DWORD()
+            if not kernel32.ProcessIdToSessionId(my_pid, ctypes.byref(my_session)):
+                return False
+
             TH32CS_SNAPPROCESS = 0x00000002
 
             class PROCESSENTRY32W(ctypes.Structure):
@@ -55,7 +62,6 @@ def is_process_running(exe_name: str) -> bool:
                     ("szExeFile", ctypes.c_wchar * 260),
                 ]
 
-            kernel32 = ctypes.windll.kernel32
             h_snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
             if h_snap == ctypes.c_void_p(-1).value:
                 return False
@@ -65,9 +71,12 @@ def is_process_running(exe_name: str) -> bool:
                 if not kernel32.Process32FirstW(h_snap, ctypes.byref(pe)):
                     return False
                 target = exe_name.lower()
+                proc_session = wintypes.DWORD()
                 while True:
                     if pe.szExeFile.lower() == target:
-                        return True
+                        if kernel32.ProcessIdToSessionId(pe.th32ProcessID, ctypes.byref(proc_session)):
+                            if proc_session.value == my_session.value:
+                                return True
                     if not kernel32.Process32NextW(h_snap, ctypes.byref(pe)):
                         break
                 return False
@@ -191,8 +200,8 @@ def launch_configured_programs():
             logger.warning("Programa configurado nao encontrado: %s", exe)
             continue
         exe_name = Path(exe).name
-        if is_process_running(exe_name):
-            logger.info("Programa '%s' ja esta em execucao. Nenhuma nova aba/janela sera aberta.", exe_name)
+        if is_process_running_in_current_session(exe_name):
+            logger.info("Programa '%s' ja esta em execucao na sessao atual. Nenhuma nova aba/janela sera aberta.", exe_name)
             continue
         try:
             import shlex
@@ -433,7 +442,7 @@ class WelcomeWindow:
         hint_label.pack(pady=(8, 10))
 
         # Auto-fechamento em 8 segundos e contagem regressiva ao vivo
-        self._auto_close_job = self.root.after(8000, self.dismiss)
+        self._auto_close_job = self.root.after(5000, self.dismiss)
         self._tick_countdown()
 
     def _start_drag(self, event):
@@ -467,16 +476,18 @@ class WelcomeWindow:
             pass
 
     def dismiss(self):
-        if hasattr(self, "_auto_close_job"):
+        if hasattr(self, "_auto_close_job") and self._auto_close_job:
             try:
                 self.root.after_cancel(self._auto_close_job)
             except Exception:
                 pass
-        if hasattr(self, "_timer_job"):
+            self._auto_close_job = None
+        if hasattr(self, "_timer_job") and self._timer_job:
             try:
                 self.root.after_cancel(self._timer_job)
             except Exception:
                 pass
+            self._timer_job = None
         try:
             self.root.destroy()
         except Exception:
@@ -489,14 +500,35 @@ def show_welcome():
     if not is_active_console_user_filhos():
         logger.info("Tela de boas-vindas ignorada: sessao de console ativa nao e 'Filhos'.")
         return
-    child_id, child_name, remaining_seconds = get_current_child_info()
-    # Abre o conteudo infantil apenas depois de um reconhecimento facial valido.
-    # A janela de boas-vindas permanece topmost e aparece sobre o navegador.
-    if child_id is not None:
-        launch_configured_programs()
-    root = tk.Tk()
-    app = WelcomeWindow(root, child_id, child_name, remaining_seconds)
-    root.mainloop()
+
+    # Mutex de sessao para impedir janelas sobrepostas
+    h_mutex = None
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            h_mutex = kernel32.CreateMutexW(None, False, "Local\\FaceKidsWelcomeScreenWindow")
+            if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+                logger.info("Outra janela de boas-vindas ja esta aberta nesta sessao; encerrando instancia duplicada.")
+                return
+        except Exception:
+            pass
+
+    try:
+        child_id, child_name, remaining_seconds = get_current_child_info()
+        # Abre o conteudo infantil apenas depois de um reconhecimento facial valido.
+        # A janela de boas-vindas permanece topmost e aparece sobre o navegador.
+        if child_id is not None:
+            launch_configured_programs()
+        root = tk.Tk()
+        app = WelcomeWindow(root, child_id, child_name, remaining_seconds)
+        root.mainloop()
+    finally:
+        if h_mutex and sys.platform == "win32":
+            try:
+                kernel32.CloseHandle(h_mutex)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

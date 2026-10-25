@@ -146,9 +146,32 @@ def is_welcome_screen_running() -> bool:
         return False
 
 
+_welcome_proc: Optional[subprocess.Popen] = None
+_welcome_lock = threading.Lock()
+
+
+def dismiss_welcome_screen():
+    """Encerra qualquer janela de boas-vindas aberta se o PC for bloqueado ou se uma nova abrir."""
+    global _welcome_proc
+    with _welcome_lock:
+        if _welcome_proc is not None:
+            try:
+                if _welcome_proc.poll() is None:
+                    _welcome_proc.terminate()
+                    try:
+                        _welcome_proc.wait(timeout=0.6)
+                    except Exception:
+                        _welcome_proc.kill()
+            except Exception as e:
+                logger.debug("Erro ao encerrar welcome_screen anterior: %s", e)
+            _welcome_proc = None
+
+
 def trigger_welcome_screen():
-    """Dispara a tela de boas-vindas no Desktop da conta Filhos."""
+    """Dispara a tela de boas-vindas no Desktop da conta Filhos (apenas 1 instancia)."""
+    global _welcome_proc
     logger.info("Disparando tela de boas-vindas no Desktop dos Filhos...")
+    dismiss_welcome_screen()
     try:
         root_dir = Path(__file__).resolve().parent.parent
         pyw = root_dir / ".venv" / "Scripts" / "pythonw.exe"
@@ -157,12 +180,13 @@ def trigger_welcome_screen():
 
         env = os.environ.copy()
         env["PYTHONPATH"] = str(root_dir)
-        subprocess.Popen(
-            [str(pyw), "-m", "facekids.welcome_screen"],
-            cwd=str(root_dir),
-            env=env,
-        )
-        logger.info("Tela de boas-vindas iniciada com sucesso.")
+        with _welcome_lock:
+            _welcome_proc = subprocess.Popen(
+                [str(pyw), "-m", "facekids.welcome_screen"],
+                cwd=str(root_dir),
+                env=env,
+            )
+        logger.info("Tela de boas-vindas iniciada com sucesso (PID %d).", _welcome_proc.pid)
     except Exception as e:
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
@@ -554,6 +578,8 @@ def run_agent():
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
+            if state is SessionState.LOCKED:
+                dismiss_welcome_screen()
 
             # Se em modo UNIDENTIFIED e sessao ativa, verifica resultado e agenda identificacao em background
             if tracker.current_child_id is None and state is SessionState.ACTIVE:

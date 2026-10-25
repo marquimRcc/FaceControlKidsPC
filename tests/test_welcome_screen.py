@@ -44,17 +44,32 @@ class TestWelcomeScreen(unittest.TestCase):
         self.assertEqual(program["arguments"], "")
 
     def test_launch_configured_programs_skips_running_process(self):
-        with patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
+        with patch.dict(os.environ, {"USERNAME": "Filhos", "FACEKIDS_TEST_ACTIVE_USER": "filhos"}), \
+             patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
              patch.object(welcome_screen, "load_programs_config", return_value={
                  "enabled": True,
                  "programs": [{"executable": "C:\\Windows\\notepad.exe", "arguments": "", "enabled": True}]
              }), \
              patch("pathlib.Path.is_file", return_value=True), \
-             patch.object(welcome_screen, "is_process_running", return_value=True), \
+             patch.object(welcome_screen, "is_process_running_in_current_session", return_value=True), \
              patch("subprocess.Popen") as mock_popen:
             welcome_screen._programs_launched = False
             welcome_screen.launch_configured_programs()
             mock_popen.assert_not_called()
+
+    def test_launch_configured_programs_runs_when_not_in_session(self):
+        with patch.dict(os.environ, {"USERNAME": "Filhos", "FACEKIDS_TEST_ACTIVE_USER": "filhos"}), \
+             patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
+             patch.object(welcome_screen, "load_programs_config", return_value={
+                 "enabled": True,
+                 "programs": [{"executable": "C:\\Windows\\notepad.exe", "arguments": "", "enabled": True}]
+             }), \
+             patch("pathlib.Path.is_file", return_value=True), \
+             patch.object(welcome_screen, "is_process_running_in_current_session", return_value=False), \
+             patch("subprocess.Popen") as mock_popen:
+            welcome_screen._programs_launched = False
+            welcome_screen.launch_configured_programs()
+            mock_popen.assert_called_once_with(["C:\\Windows\\notepad.exe"], shell=False)
 
     def test_programs_only_launch_for_identified_child(self):
         fake_root = Mock()
