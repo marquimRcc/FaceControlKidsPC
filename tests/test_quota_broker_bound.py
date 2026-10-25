@@ -79,6 +79,14 @@ class BoundBalanceProtocolTests(unittest.TestCase):
         ):
             with self.subTest(case=case), self.assertRaises(ValueError):
                 validate_bound_reply(case)
+        calls = []
+        for invalid_sid in ("S-1-bad", "S-1-", "S-1-5", "S-1-5-21-xyz-1", "S-1-5-21\\n", "", None):
+            with self.subTest(invalid_sid=invalid_sid):
+                self.assertEqual(handle_bound_read(
+                    self.request, verified_client_sid=invalid_sid,
+                    read_bound=lambda sid: calls.append(sid),
+                ), {"status": "DENY"})
+        self.assertEqual(calls, [], "Malformed token SID must never reach quota reader")
         self.assertEqual(handle_bound_read(
             self.request, verified_client_sid="forged-user",
             read_bound=lambda _: BoundBalance(1, 200, True)
