@@ -26,9 +26,12 @@ class ParentDashboardEntrypointTests(unittest.TestCase):
         self.assertEqual(validate_schedule(True, "08:00", "20:00"),
                          (True, "08:00", "20:00"))
 
-    def test_no_graphical_window_is_created_by_import(self):
-        # Deliberately does not construct Tk root or start hardware/logon.
-        self.assertEqual(admin_dashboard.ParentPanel.__name__, "ParentPanel") if hasattr(admin_dashboard, "ParentPanel") else self.assertIsNotNone(admin_dashboard.AdminDashboard)
+    def test_import_smoke_does_not_require_a_display(self):
+        # Only inspect class and module; do not instantiate a Tk root.
+        self.assertEqual(admin_dashboard.AdminDashboard.__module__,
+                         "facekids.admin_dashboard")
+        self.assertTrue(callable(filter_children))
+        self.assertTrue(callable(load_overview))
 
 
 if __name__ == "__main__":
