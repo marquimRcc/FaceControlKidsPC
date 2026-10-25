@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .quota_broker_protocol import VerifiedClient, handle_broker_read
-from .storage import Storage
+from .quota_broker_read_store import ReadOnlyQuotaView
 
 LAB_PIPE_PREFIX = r"\\.\pipe\FaceKidsQuotaBrokerLab-"
 PIPE_ACCESS_DUPLEX = 0x00000003
@@ -154,6 +154,12 @@ def serve_one_lab_request(
         if (type(sid) is not str or not sid.startswith("S-1-")
                 or type(child_id) is not int or child_id <= 0):
             raise ValueError("Invalid protected SID-to-enrollment map")
+    # Prevent accidental wiring to the installed family database.
+    # A VM host must run with a separate fixture database located in a
+    # named lab directory; creation/permission changes are NOT performed.
+    database_path = Path(data_path).resolve(strict=True)
+    if "facekids-quota-lab" not in [part.casefold() for part in database_path.parts]:
+        raise ValueError("Quota lab host refuses database outside facekids-quota-lab")
     kernel, advapi = _configure_windows_api()
 
     descriptor = ctypes.c_void_p()
@@ -184,8 +190,12 @@ def serve_one_lab_request(
             sid = _impersonated_client_sid(pipe, kernel, advapi) if ok else None
             child = enrolled_child_by_sid.get(sid, 0) if sid else 0
             identity = VerifiedClient(sid or "", sid if child else "", child)
-            result = handle_broker_read(raw.raw[:read.value], identity,
-                                        Storage(Path(data_path))) if ok and sid else {"status": "DENY"}
+            # This host NEVER opens the SQLite ledger for writing.
+            if ok and sid and child:
+                with ReadOnlyQuotaView(Path(data_path)) as view:
+                    result = handle_broker_read(raw.raw[:read.value], identity, view)
+            else:
+                result = {"status": "DENY"}
             encoded = (json.dumps(result, separators=(",", ":"), allow_nan=False) + "\n").encode("ascii")
             sent = wintypes.DWORD()
             out = ctypes.create_string_buffer(encoded)
