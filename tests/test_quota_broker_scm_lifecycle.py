@@ -48,11 +48,14 @@ class QuotaScmLifecycleTests(unittest.TestCase):
             def request_stop(self):
                 self.stop_requested = True
 
-        with patch.object(self.mod, "read_hklm_lab_configuration",
-                          return_value=fake_config) as policy, patch.object(
+        with patch.object(self.mod, "_require_expected_service_sid") as principal, patch.object(
+            self.mod, "read_hklm_lab_configuration",
+            return_value=fake_config
+        ) as policy, patch.object(
             self.mod, "QuotaLabSupervisor", StubSupervisor
         ):
             instance.SvcDoRun()
+            principal.assert_called_once_with()
             policy.assert_called_once_with()
             self.assertTrue(observed["ran"])
             self.assertIs(observed["stop_event"], instance._stop_signal)
@@ -72,10 +75,28 @@ class QuotaScmLifecycleTests(unittest.TestCase):
         self.assertTrue(instance._stop_signal.is_set())
         self.assertEqual(status, [self.mod.win32service.SERVICE_STOP_PENDING])
 
+    def test_unexpected_service_user_sid_denies_before_config_or_pipe(self):
+        instance, status = self.make_fake_instance()
+        with patch.object(self.mod, "_require_expected_service_sid",
+                          side_effect=PermissionError("mismatch")), patch.object(
+            self.mod, "read_hklm_lab_configuration"
+        ) as policy, patch.object(
+            self.mod, "QuotaLabSupervisor"
+        ) as supervisor, patch.object(
+            self.mod.servicemanager, "LogErrorMsg"
+        ):
+            with self.assertRaises(PermissionError):
+                instance.SvcDoRun()
+            policy.assert_not_called()
+            supervisor.assert_not_called()
+        self.assertNotIn(self.mod.win32service.SERVICE_RUNNING, status)
+
     def test_missing_registry_policy_never_reports_running(self):
         instance, status = self.make_fake_instance()
-        with patch.object(self.mod, "read_hklm_lab_configuration",
-                          side_effect=PermissionError("synthetic")), patch.object(
+        with patch.object(self.mod, "_require_expected_service_sid"), patch.object(
+            self.mod, "read_hklm_lab_configuration",
+            side_effect=PermissionError("synthetic")
+        ), patch.object(
             self.mod.servicemanager, "LogErrorMsg"
         ) as logger:
             with self.assertRaises(PermissionError):
