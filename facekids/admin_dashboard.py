@@ -34,6 +34,7 @@ from .avatar_utils import (
 )
 from .storage import Storage
 from .parent_ui_state import filter_children, load_overview, screen_time_label, validate_schedule
+from .ui_theme import THEMES, load_theme, save_theme, theme_palette
 from .children_pilot import child_pilot_database, windows_token_user
 
 logger = logging.getLogger("FaceKidsAdmin")
@@ -42,25 +43,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT_DIR / "models"
 PROGRAMS_FILE = Path("C:/ProgramData/FaceKids/programas_inicializar.json")
 
-# Paleta Moderna Escura (Alinhada com Catppuccin Mocha / Welcome Screen)
-BG_MAIN = "#0F0F17"
-BG_HEADER = "#181825"
-BG_CARD = "#181825"
-BG_BOX = "#1E1E2E"
-BG_BOX_HOVER = "#252538"
-BORDER_DEFAULT = "#313244"
-BORDER_ACCENT = "#38BDF8"
+# The classic palette is unchanged. Theme changes rebuild Tk widgets with
+# these active module-level roles, including existing dialogs and card canvases.
+def _activate_theme(name: str) -> None:
+    globals().update(theme_palette(name))
 
-TEXT_TITLE = "#CDD6F4"
-TEXT_SUB = "#A6ADC8"
-TEXT_MUTED = "#6C7086"
 
-ACCENT_BLUE = "#38BDF8"
-ACCENT_CYAN = "#89DCEB"
-ACCENT_GREEN = "#A6E3A1"
-ACCENT_YELLOW = "#F9E2AF"
-ACCENT_RED = "#F38BA8"
-ACCENT_PURPLE = "#CBA6F7"
+_activate_theme("Atual")
 
 
 def is_admin_account() -> bool:
@@ -197,7 +186,7 @@ class ProgramsConfigDialog(tk.Toplevel):
             text="💾 Salvar Alterações",
             font=("Segoe UI", 9, "bold"),
             bg=ACCENT_BLUE,
-            fg="#0B0B12",
+            fg=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=14,
@@ -238,7 +227,7 @@ class ProgramsConfigDialog(tk.Toplevel):
                 variable=var,
                 command=_toggle,
                 bg=BG_BOX,
-                selectcolor="#11111B",
+                selectcolor=BG_FIELD,
                 activebackground=BG_BOX,
             )
             cb.pack(side=tk.LEFT)
@@ -357,7 +346,7 @@ class WeeklyUsageDialog(tk.Toplevel):
                 tk.Label(row, text=day_str, font=("Segoe UI", 9), fg=TEXT_TITLE, bg=BG_BOX, width=12, anchor="w").pack(side=tk.LEFT)
 
                 pct = min(1.0, sec / 7200.0)
-                bar_c = tk.Canvas(row, height=8, bg="#11111B", highlightthickness=0)
+                bar_c = tk.Canvas(row, height=8, bg=BG_FIELD, highlightthickness=0)
                 bar_c.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
 
                 fill_w = int(220 * pct)
@@ -399,14 +388,14 @@ class CurfewConfigDialog(tk.Toplevel):
         r1 = tk.Frame(box, bg=BG_BOX)
         r1.pack(fill=tk.X, pady=4)
         tk.Label(r1, text="Liberar acesso a partir das:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.start_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_CYAN, justify="center")
+        self.start_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=8, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, justify="center")
         self.start_entry.insert(0, start_val)
         self.start_entry.pack(side=tk.RIGHT)
 
         r2 = tk.Frame(box, bg=BG_BOX)
         r2.pack(fill=tk.X, pady=4)
         tk.Label(r2, text="Encerrar acesso (bloquear) às:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.end_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=8, bg="#11111B", fg=ACCENT_RED, justify="center")
+        self.end_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=8, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_RED, justify="center")
         self.end_entry.insert(0, end_val)
         self.end_entry.pack(side=tk.RIGHT)
 
@@ -425,7 +414,7 @@ class CurfewConfigDialog(tk.Toplevel):
 
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
         btn_bar.pack(fill=tk.X)
-        save_btn = tk.Button(btn_bar, text="💾 Salvar Horário", font=("Segoe UI", 9, "bold"), bg=ACCENT_PURPLE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=16, pady=6, command=self._save)
+        save_btn = tk.Button(btn_bar, text="💾 Salvar Horário", font=("Segoe UI", 9, "bold"), bg=ACCENT_PURPLE, fg=TEXT_ON_ACCENT, relief=tk.FLAT, cursor="hand2", padx=16, pady=6, command=self._save)
         save_btn.pack(side=tk.RIGHT)
 
     def _save(self):
@@ -476,13 +465,13 @@ class PinConfigDialog(tk.Toplevel):
         r1 = tk.Frame(box, bg=BG_BOX)
         r1.pack(fill=tk.X, pady=4)
         tk.Label(r1, text="Novo PIN (4 a 8 números):", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.pin_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.pin_entry = tk.Entry(r1, font=("Segoe UI", 10, "bold"), width=10, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, show="*", justify="center")
         self.pin_entry.pack(side=tk.RIGHT)
 
         r2 = tk.Frame(box, bg=BG_BOX)
         r2.pack(fill=tk.X, pady=4)
         tk.Label(r2, text="Confirmar Novo PIN:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_BOX).pack(side=tk.LEFT)
-        self.confirm_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=10, bg="#11111B", fg=ACCENT_CYAN, show="*", justify="center")
+        self.confirm_entry = tk.Entry(r2, font=("Segoe UI", 10, "bold"), width=10, bg=BG_FIELD, insertbackground=TEXT_TITLE, fg=ACCENT_CYAN, show="*", justify="center")
         self.confirm_entry.pack(side=tk.RIGHT)
 
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
@@ -492,7 +481,7 @@ class PinConfigDialog(tk.Toplevel):
             rem_btn = tk.Button(btn_bar, text="🗑️ Desativar PIN", font=("Segoe UI", 9), bg=BG_BOX, fg=ACCENT_RED, relief=tk.FLAT, cursor="hand2", padx=10, pady=5, command=self._remove_pin)
             rem_btn.pack(side=tk.LEFT)
 
-        save_btn = tk.Button(btn_bar, text="💾 Salvar PIN", font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg="#0B0B12", relief=tk.FLAT, cursor="hand2", padx=14, pady=5, command=self._save_pin)
+        save_btn = tk.Button(btn_bar, text="💾 Salvar PIN", font=("Segoe UI", 9, "bold"), bg=ACCENT_BLUE, fg=TEXT_ON_ACCENT, relief=tk.FLAT, cursor="hand2", padx=14, pady=5, command=self._save_pin)
         save_btn.pack(side=tk.RIGHT)
 
     def _save_pin(self):
@@ -531,6 +520,9 @@ class AdminDashboard(tk.Tk):
             )
             self.destroy()
             sys.exit(1)
+
+        self.theme_name = load_theme()
+        _activate_theme(self.theme_name)
 
         self.title("FaceControl Kids — Painel de Controle dos Pais")
         self.geometry("1180x780")
@@ -580,6 +572,31 @@ class AdminDashboard(tk.Tk):
             bg=BG_HEADER,
         )
         app_sub.pack(anchor="w")
+
+        # Three user-selectable palettes; persist only in the parent profile,
+        # never in the shared child SQLite or the Windows authentication path.
+        selector = tk.Frame(header, bg=BG_HEADER, padx=18, pady=12)
+        selector.pack(side=tk.RIGHT)
+        tk.Label(
+            selector, text="Tema das cores", bg=BG_HEADER, fg=TEXT_SUB,
+            font=("Segoe UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 9))
+        self.theme_var = tk.StringVar(value=self.theme_name)
+        chooser = tk.OptionMenu(
+            selector, self.theme_var, *THEMES.keys(), command=self._change_theme
+        )
+        chooser.configure(
+            bg=BG_BOX, fg=TEXT_TITLE, activebackground=BG_BOX_HOVER,
+            activeforeground=TEXT_TITLE, relief=tk.FLAT, bd=0,
+            highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            cursor="hand2", font=("Segoe UI", 10, "bold"),
+            width=8, padx=7, pady=5,
+        )
+        chooser["menu"].configure(
+            bg=BG_BOX, fg=TEXT_TITLE, activebackground=BG_BOX_HOVER,
+            activeforeground=TEXT_TITLE, font=("Segoe UI", 10),
+        )
+        chooser.pack(side=tk.LEFT)
 
         # Botoes Superiores
         # Navigation lives below the brand header, so all actions remain visible
@@ -672,9 +689,9 @@ class AdminDashboard(tk.Tk):
             text="➕ Nova Criança",
             font=("Segoe UI", 9, "bold"),
             bg=ACCENT_BLUE,
-            fg="#0B0B12",
+            fg=TEXT_ON_ACCENT,
             activebackground=ACCENT_CYAN,
-            activeforeground="#0B0B12",
+            activeforeground=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=10,
@@ -802,6 +819,56 @@ class AdminDashboard(tk.Tk):
 
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def _change_theme(self, selected: str) -> None:
+        """Apply immediately, rebuilding only presentation widgets.
+
+        The enrollment subprocess, database connection, Windows session and
+        authentication remain untouched. Changing a theme never asks for a
+        second PIN or silently applies unsaved quota/schedule changes.
+        """
+        if selected == self.theme_name:
+            return
+        try:
+            save_theme(selected)
+        except (OSError, ValueError) as exc:
+            self.theme_var.set(self.theme_name)
+            messagebox.showerror(
+                "Tema não salvo",
+                f"Não foi possível salvar a preferência: {exc}", parent=self
+            )
+            return
+
+        search = self.search_var.get()
+        schedule_fields = (
+            self.schedule_enabled_var.get(),
+            self.schedule_start_var.get(),
+            self.schedule_end_var.get(),
+            self._schedule_loaded,
+        )
+
+        self.theme_name = selected
+        _activate_theme(selected)
+        self.withdraw()
+        try:
+            # Existing modal dialogs use grab_set(), so the user cannot change
+            # the theme from the main window while one is open.
+            for widget in self.winfo_children():
+                if not isinstance(widget, tk.Toplevel):
+                    widget.destroy()
+            self.avatar_images.clear()
+            self.configure(bg=BG_MAIN)
+            self._build_ui()
+            enabled, start, end, previous_loaded = schedule_fields
+            self._schedule_loaded = previous_loaded
+            self.schedule_enabled_var.set(enabled)
+            self.schedule_start_var.set(start)
+            self.schedule_end_var.set(end)
+            self.search_var.set(search)
+            self.refresh()
+            self.status_text.set(f"Tema {selected} aplicado e salvo.")
+        finally:
+            self.deiconify()
 
     def _save_inline_schedule(self):
         """Apply global hours only on deliberate parent action, never during refresh."""
@@ -1081,7 +1148,7 @@ class AdminDashboard(tk.Tk):
         # Barra visual de progresso
         total_quota_sec = max(1, (limit_min * 60) + bonus_sec)
         pct = max(0.0, min(1.0, rem_sec / total_quota_sec))
-        bar_canvas = tk.Canvas(quota_box, height=6, bg="#11111B", highlightthickness=0)
+        bar_canvas = tk.Canvas(quota_box, height=6, bg=BG_FIELD, highlightthickness=0)
         bar_canvas.pack(fill=tk.X, pady=(2, 10))
 
         def _draw_bar(evt, c=bar_canvas, p=pct):
@@ -1111,8 +1178,8 @@ class AdminDashboard(tk.Tk):
                 controls_row,
                 text=label,
                 font=("Segoe UI", 8, "bold" if limit_min == m else "normal"),
-                bg=ACCENT_BLUE if limit_min == m else "#11111B",
-                fg="#0B0B12" if limit_min == m else TEXT_TITLE,
+                bg=ACCENT_BLUE if limit_min == m else BG_FIELD,
+                fg=TEXT_ON_ACCENT if limit_min == m else TEXT_TITLE,
                 relief=tk.FLAT,
                 cursor="hand2",
                 padx=6,
@@ -1125,7 +1192,7 @@ class AdminDashboard(tk.Tk):
             controls_row,
             text="Outro...",
             font=("Segoe UI", 8),
-            bg="#11111B",
+            bg=BG_FIELD,
             fg=TEXT_SUB,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1152,7 +1219,7 @@ class AdminDashboard(tk.Tk):
                 bonus_frame,
                 text=f"+{b_min}m",
                 font=("Segoe UI", 8, "bold"),
-                bg="#11111B",
+                bg=BG_FIELD,
                 fg=ACCENT_YELLOW,
                 relief=tk.FLAT,
                 cursor="hand2",
@@ -1169,7 +1236,7 @@ class AdminDashboard(tk.Tk):
             textvariable=custom_bonus_var,
             font=("Segoe UI", 8, "bold"),
             width=4,
-            bg="#11111B",
+            bg=BG_FIELD,
             fg=ACCENT_YELLOW,
             insertbackground=ACCENT_YELLOW,
             highlightbackground=BORDER_DEFAULT,
@@ -1206,9 +1273,9 @@ class AdminDashboard(tk.Tk):
             text="+",
             font=("Segoe UI", 8, "bold"),
             bg=ACCENT_YELLOW,
-            fg="#0B0B12",
-            activebackground="#FFF0BA",
-            activeforeground="#0B0B12",
+            fg=TEXT_ON_ACCENT,
+            activebackground=YELLOW_HOVER,
+            activeforeground=TEXT_ON_ACCENT,
             relief=tk.FLAT,
             cursor="hand2",
             padx=6,
