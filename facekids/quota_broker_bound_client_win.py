@@ -20,7 +20,7 @@ from .quota_broker_bound_protocol import (
 from .quota_broker_bound_transport_win import BOUND_VM_PIPE
 from .quota_broker_peer_win import require_registered_system_service_pipe
 from .quota_broker_transport_win import _pipe_io, FILE_FLAG_OVERLAPPED
-from .quota_broker_writer_scm_win import VM_WRITER_SERVICE_NAME
+from .quota_vm_policy_constants import VM_WRITER_SERVICE_NAME
 
 
 def query_current_bound_vm_balance() -> BoundBalance | None:
