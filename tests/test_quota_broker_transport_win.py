@@ -11,6 +11,7 @@ import threading
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 from facekids.storage import Storage
 from facekids.quota_broker_client_win import query_lab_balance
@@ -107,9 +108,16 @@ class LabBrokerWindowsTests(unittest.TestCase):
         )
 
     def test_reusable_read_only_client_round_trip(self):
-        self.assertEqual(
-            self._exercise_pipe({self._current_sid(): 1}, via_client=True)["remaining_seconds"], 60,
-        )
+        # In-process unit fixture runs as the CI account, not SYSTEM.
+        # Bypass ONLY the peer attestation here to exercise wire encoding;
+        # the actual SYSTEM token check is exercised end-to-end by the
+        # disposable real Windows SCM service smoke.
+        with patch("facekids.quota_broker_client_win.require_system_pipe_server",
+                   return_value=1234) as peer:
+            self.assertEqual(
+                self._exercise_pipe({self._current_sid(): 1}, via_client=True)["remaining_seconds"], 60,
+            )
+            peer.assert_called_once()
 
     def test_sid_not_in_protected_mapping_is_denied(self):
         self.assertEqual(self._exercise_pipe({"S-1-5-18": 1}), {"status": "DENY"})
