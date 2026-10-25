@@ -133,9 +133,9 @@ class TestAuthService(unittest.TestCase):
             video.isOpened.return_value = True
             video.read.return_value = (True, np.zeros((100, 100, 3), dtype=np.uint8))
             auth = FaceAuthenticator(Path(td), db, recognizer=recognizer)
-            with patch("cv2.VideoCapture", return_value=video), \\
-                 patch("facekids.auth_service.save_child_photo") as save_avatar, \\
-                 patch("facekids.auth_service.Path.write_text") as write_event:
+            with (patch("cv2.VideoCapture", return_value=video),
+                  patch("facekids.auth_service.save_child_photo") as save_avatar,
+                  patch("facekids.auth_service.Path.write_text") as write_event):
                 status, data = auth.evaluate(timeout_seconds=1.0,
                                              persist_unlock_metadata=False)
             self.assertEqual(status, "ALLOW")
