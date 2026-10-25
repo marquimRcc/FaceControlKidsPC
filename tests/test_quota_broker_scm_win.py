@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from facekids.quota_broker_scm_win import (
     SERVICE_NAME, FaceKidsQuotaLabService, validate_service_registry_config,
+    _validate_service_user_sid,
 )
 
 
@@ -32,6 +33,19 @@ class ServiceLabConfigTests(unittest.TestCase):
             self.assertEqual(mapping, {"S-1-5-21-1-2-3-1001": 1})
             self.assertEqual(database.read_bytes(), b"synthetic")
             self.assertEqual(SERVICE_NAME, "FaceKidsQuotaLabOnly")
+
+    def test_service_process_sid_is_strictly_required(self):
+        _validate_service_user_sid("S-1-5-18", "S-1-5-18")
+        for actual, expected in (
+            ("S-1-5-18", "S-1-5-21-1-2-3-1001"),
+            ("Filhos", "Filhos"),
+            ("S-1-5-18", ""),
+            ("S-1-5-18\\n", "S-1-5-18"),
+            (None, "S-1-5-18"),
+            (True, True),
+        ):
+            with self.subTest(actual=actual, expected=expected), self.assertRaises(PermissionError):
+                _validate_service_user_sid(actual, expected)
 
     def test_missing_or_forged_policy_is_rejected(self):
         with TemporaryDirectory() as td:
