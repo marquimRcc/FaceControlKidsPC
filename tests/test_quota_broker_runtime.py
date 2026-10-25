@@ -1,0 +1,101 @@
+"""Complete synthetic service-owned recognition -> WTS -> SQLite flow."""
+from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+from facekids.quota_broker_protocol import VerifiedClient, handle_broker_read
+from facekids.quota_broker_runtime import ServiceOwnedQuotaRuntime
+from facekids.quota_broker_wts import WtsSnapshot
+from facekids.storage import Storage
+
+
+class RuntimeIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory(prefix="synthetic-facekids-runtime-")
+        self.store = Storage(Path(self.tmp.name) / "ledger.sqlite3")
+        self.people = [self.store.add_person("Synthetic " + str(i), 2)
+                       for i in range(1, 4)]
+        self.sid = "S-1-5-21-10-20-30-1001"
+        self.snapshot = WtsSnapshot(42, self.sid, True)
+        self.now = 100.0
+        self.selected = self.people[0]
+        self.runtime = ServiceOwnedQuotaRuntime(
+            self.store, expected_windows_sid=self.sid,
+            observe_wts=lambda: self.snapshot,
+            capture_face_locally=lambda: ("ALLOW", {
+                "child_id": self.selected, "user": "Filhos"
+            }),
+            monotonic=lambda: self.now,
+            today=lambda: date(2026, 10, 24),
+        )
+
+    def tearDown(self):
+        self.runtime.stop()
+        self.store.close()
+        self.tmp.cleanup()
+
+    def test_three_profile_quota_and_lock_reidentification(self):
+        self.assertFalse(self.runtime.bind_from_service_camera().accepted)
+        self.runtime.on_service_session_change(8, (42,))
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        self.now = 104
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 4)
+
+        self.runtime.on_service_session_change(7, (42,))  # Win+L
+        self.selected = self.people[1]  # A different child may approach
+        self.now = 106
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+        self.runtime.on_service_session_change(8, (42,))
+        self.now = 109
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        self.now = 112
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 3)
+
+        self.runtime.on_service_session_change(7, (42,))
+        self.runtime.on_service_session_change(8, (42,))
+        self.selected = self.people[2]
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        self.now = 114
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 2)
+        self.assertEqual(
+            [self.store.used(pid, "2026-10-24") for pid in self.people],
+            [4, 3, 2],
+        )
+        n = self.store.db.execute("SELECT COUNT(*) FROM quota_tick_receipts").fetchone()[0]
+        self.assertEqual(n, 3)
+
+    def test_child_ipc_cannot_send_debit_or_set_enrollment(self):
+        self.runtime.on_service_session_change(8, (42,))
+        for body in (
+            b'{"version":"FACEKIDS_QUOTA_V1","action":"CHARGE"}',
+            b'{"version":"FACEKIDS_QUOTA_V1","action":"SET_CHILD","child_id":2}',
+        ):
+            response = handle_broker_read(
+                body, VerifiedClient(self.sid, self.sid, self.people[0]),
+                self.store,
+            )
+            self.assertEqual(response["status"], "DENY")
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+
+    def test_invalid_scm_control_clears_lease(self):
+        self.runtime.on_service_session_change(8, (42,))
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        with self.assertRaises(ValueError):
+            self.runtime.on_service_session_change(999, (42,))
+        self.now += 5
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+
+    def test_sid_change_cannot_continue_verified_lease(self):
+        self.runtime.on_service_session_change(8, (42,))
+        self.assertTrue(self.runtime.bind_from_service_camera().accepted)
+        self.snapshot = WtsSnapshot(42, "S-1-5-18", True)
+        self.now += 5
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+        self.snapshot = WtsSnapshot(42, self.sid, True)
+        self.assertEqual(self.runtime.service_tick().charged_seconds, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
