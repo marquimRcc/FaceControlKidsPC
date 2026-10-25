@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 import unicodedata
 
 
@@ -112,3 +113,18 @@ def screen_time_label(seconds: float) -> str:
     minutes = max(0, int(seconds)) // 60
     hours, rest = divmod(minutes, 60)
     return f"{hours}h {rest:02d}min" if hours else f"{rest} min"
+
+
+def validate_schedule(enabled: bool, start: str, end: str) -> tuple[bool, str, str]:
+    """Strict HH:MM validation for the inline global schedule editor."""
+    if type(enabled) is not bool:
+        raise ValueError("Estado do horário inválido.")
+    pattern = r"(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+    if type(start) is not str or type(end) is not str:
+        raise ValueError("Informe horas no formato HH:MM.")
+    start, end = start.strip(), end.strip()
+    if re.fullmatch(pattern, start) is None or re.fullmatch(pattern, end) is None:
+        raise ValueError("Informe horas entre 00:00 e 23:59 no formato HH:MM.")
+    if enabled and start == end:
+        raise ValueError("Início e término devem ser diferentes.")
+    return enabled, start, end
