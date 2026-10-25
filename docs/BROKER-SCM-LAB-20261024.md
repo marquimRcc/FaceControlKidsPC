@@ -82,3 +82,34 @@ depois preparar migração controlada de binários e SQLite.
 
 PR #4 permanece draft sobre handoff; main, CP registrado, senhas,
 fotos, webcam e máquina familiar não foram alterados.
+
+
+## Próximo ciclo — política de conta SCM e ensaio de migração
+
+**Nova exigência para qualquer execução posterior do serviço na VM:**
+`HKLM\\SOFTWARE\\FaceControlKidsPC\\QuotaBrokerLabService\\ServiceSid`,
+do tipo `REG_SZ`, deve conter o SID da **conta real do processo do serviço**.
+O broker consulta seu próprio token com Win32/pywin32 e recusa iniciar se
+o SID for diferente, inexistente ou malformado. A configuração existente
+também exige os tipos exatos `REG_DWORD` (`LabOnly`, `ChildId`) e
+`REG_SZ` (`Database`, `ClientSid`, `PipeSuffix`).
+
+`tests/test_quota_broker_scm_lifecycle.py` exercita
+`SvcDoRun`/`SvcStop` com mocks no Windows **sem instalação SCM real**.
+O CI executa esses testes depois de instalar pywin32 somente no runner.
+
+`facekids/quota_broker_cutover_lab.py` agora ensaia um *cutover* offline
+de SQLite **somente** na pasta literal `facekids-quota-lab`:
+1. exige um banco SQLite de teste fechado, sem arquivos `-wal`/`-shm`;
+2. cria backup consistente usando a API oficial SQLite;
+3. faz uma substituição temporária por cópia verificada;
+4. reverte para os **bytes originais**, mesmo após falha simulada;
+5. recusa caminhos sob `ProgramData\\FaceKids`, caminhos externos e
+   raízes do laboratório que sejam links simbólicos.
+
+Este ensaio **não é migração segura do banco doméstico**: não lida com
+writers concorrentes, WTS, a instalação COM, Winlogon ou permissões de
+acesso efetivo da conta Filhos. Nenhum desses componentes foi modificado.
+
+**Critério de saída:** os quatro jobs Windows/Ubuntu/C++ do commit exato
+da última implementação devem passar antes de dar o código por validado.
