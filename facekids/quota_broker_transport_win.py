@@ -11,6 +11,8 @@ import ctypes
 from ctypes import wintypes
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Mapping
 
@@ -20,6 +22,11 @@ from .quota_broker_read_store import ReadOnlyQuotaView
 LAB_PIPE_PREFIX = r"\\.\pipe\FaceKidsQuotaBrokerLab-"
 PIPE_ACCESS_DUPLEX = 0x00000003
 FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
+FILE_FLAG_OVERLAPPED = 0x40000000
+ERROR_IO_PENDING = 997
+ERROR_OPERATION_ABORTED = 995
+WAIT_OBJECT_0 = 0
+WAIT_TIMEOUT = 258
 PIPE_TYPE_MESSAGE = 0x00000004
 PIPE_READMODE_MESSAGE = 0x00000002
 PIPE_WAIT = 0
@@ -35,6 +42,16 @@ class SECURITY_ATTRIBUTES(ctypes.Structure):
         ("nLength", wintypes.DWORD),
         ("lpSecurityDescriptor", ctypes.c_void_p),
         ("bInheritHandle", wintypes.BOOL),
+    ]
+
+
+class OVERLAPPED(ctypes.Structure):
+    _fields_ = [
+        ("Internal", ctypes.c_void_p),
+        ("InternalHigh", ctypes.c_void_p),
+        ("Offset", wintypes.DWORD),
+        ("OffsetHigh", wintypes.DWORD),
+        ("hEvent", wintypes.HANDLE),
     ]
 
 
@@ -75,6 +92,17 @@ def _configure_windows_api():
     kernel.WriteFile.restype = wintypes.BOOL
     kernel.GetCurrentThread.argtypes = []
     kernel.GetCurrentThread.restype = wintypes.HANDLE
+    kernel.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.CreateEventW.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.GetOverlappedResult.argtypes = [
+        wintypes.HANDLE, ctypes.POINTER(OVERLAPPED),
+        ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+    ]
+    kernel.GetOverlappedResult.restype = wintypes.BOOL
+    kernel.CancelIoEx.argtypes = [wintypes.HANDLE, ctypes.POINTER(OVERLAPPED)]
+    kernel.CancelIoEx.restype = wintypes.BOOL
     kernel.LocalFree.argtypes = [ctypes.c_void_p]
     kernel.LocalFree.restype = ctypes.c_void_p
 
@@ -139,9 +167,66 @@ def _impersonated_client_sid(pipe, kernel, advapi) -> str | None:
             raise RuntimeError("Critical: failed to revert client impersonation")
 
 
+def _pipe_io(kernel, pipe, operation, *, buffer=None, count: int = 0,
+             stop_event: threading.Event | None = None,
+             deadline: float) -> tuple[bool, int]:
+    """Bounded overlapped connect/read/write with synchronous cancel cleanup.
+
+    Returns (success, bytes). A timeout/stop fails closed. OVERLAPPED and event
+    remain allocated until cancellation has been reaped by Windows.
+    """
+    event = kernel.CreateEventW(None, True, False, None)
+    if not event:
+        raise RuntimeError("Cannot create pipe IO completion event")
+    ov = OVERLAPPED()
+    ov.hEvent = event
+    transferred = wintypes.DWORD()
+    try:
+        if operation == "connect":
+            ok = kernel.ConnectNamedPipe(pipe, ctypes.byref(ov))
+            if not ok and ctypes.get_last_error() == ERROR_PIPE_CONNECTED:
+                return True, 0
+        elif operation == "read":
+            ok = kernel.ReadFile(pipe, buffer, count,
+                                 ctypes.byref(transferred), ctypes.byref(ov))
+        elif operation == "write":
+            ok = kernel.WriteFile(pipe, buffer, count,
+                                  ctypes.byref(transferred), ctypes.byref(ov))
+        else:
+            raise ValueError("Unknown pipe IO operation")
+        if ok:
+            return True, transferred.value
+        if ctypes.get_last_error() != ERROR_IO_PENDING:
+            return False, 0
+
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                break
+            left = deadline - time.monotonic()
+            if left <= 0:
+                break
+            waited = kernel.WaitForSingleObject(event, min(100, max(1, int(left * 1000))))
+            if waited == WAIT_OBJECT_0:
+                if kernel.GetOverlappedResult(pipe, ctypes.byref(ov),
+                                              ctypes.byref(transferred), False):
+                    return True, transferred.value
+                return False, 0
+            if waited != WAIT_TIMEOUT:
+                break
+
+        kernel.CancelIoEx(pipe, ctypes.byref(ov))
+        # Must reap I/O before returning: overlapped and event stay live.
+        kernel.GetOverlappedResult(pipe, ctypes.byref(ov),
+                                   ctypes.byref(transferred), True)
+        return False, 0
+    finally:
+        kernel.CloseHandle(event)
+
+
 def serve_one_lab_request(
-    *, pipe_name: str, data_path: Path, enrolled_child_by_sid: Mapping[str, int]
-) -> None:
+    *, pipe_name: str, data_path: Path, enrolled_child_by_sid: Mapping[str, int],
+    stop_event: threading.Event | None = None, timeout_seconds: float = 8.0,
+) -> bool:
     """Serve one read-only request under test credentials, without installing.
 
     Lab name is mandatory and CreateNamedPipe uses FIRST_PIPE_INSTANCE to
@@ -154,6 +239,13 @@ def serve_one_lab_request(
         if (type(sid) is not str or not sid.startswith("S-1-")
                 or type(child_id) is not int or child_id <= 0):
             raise ValueError("Invalid protected SID-to-enrollment map")
+    if (type(timeout_seconds) not in (float, int) or
+            not 0.2 <= timeout_seconds <= 30.0 or
+            stop_event is not None and not isinstance(stop_event, threading.Event)):
+        raise ValueError("Invalid bounded pipe timeout or stop signal")
+    if stop_event is not None and stop_event.is_set():
+        return False
+    deadline = time.monotonic() + float(timeout_seconds)
     # Prevent accidental wiring to the installed family database.
     # A VM host must run with a separate fixture database located in a
     # named lab directory; creation/permission changes are NOT performed.
@@ -171,7 +263,7 @@ def serve_one_lab_request(
     try:
         pipe = kernel.CreateNamedPipeW(
             pipe_name,
-            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT |
             PIPE_REJECT_REMOTE_CLIENTS,
             1, 2048, 2048, 0, ctypes.byref(sa),
@@ -180,27 +272,34 @@ def serve_one_lab_request(
         if not pipe or pipe == invalid:
             raise RuntimeError("Cannot claim first instance of lab pipe")
         try:
-            connected = kernel.ConnectNamedPipe(pipe, None)
-            if not connected and ctypes.get_last_error() != ERROR_PIPE_CONNECTED:
-                raise RuntimeError("Named-pipe client connection failed")
+            connected, _ = _pipe_io(
+                kernel, pipe, "connect", stop_event=stop_event, deadline=deadline
+            )
+            if not connected:
+                return False
             raw = ctypes.create_string_buffer(513)
-            read = wintypes.DWORD()
-            ok = kernel.ReadFile(pipe, raw, 513, ctypes.byref(read), None)
-            # ReadFile returns false for ERROR_MORE_DATA; fail closed.
-            sid = _impersonated_client_sid(pipe, kernel, advapi) if ok else None
+            ok, received = _pipe_io(
+                kernel, pipe, "read", buffer=raw, count=513,
+                stop_event=stop_event, deadline=deadline,
+            )
+            # ERROR_MORE_DATA / oversized request / canceled read -> reject.
+            if not ok or received == 0 or received > 512:
+                return False
+            sid = _impersonated_client_sid(pipe, kernel, advapi)
             child = enrolled_child_by_sid.get(sid, 0) if sid else 0
             identity = VerifiedClient(sid or "", sid if child else "", child)
-            # This host NEVER opens the SQLite ledger for writing.
-            if ok and sid and child:
+            if sid and child:
                 with ReadOnlyQuotaView(Path(data_path)) as view:
-                    result = handle_broker_read(raw.raw[:read.value], identity, view)
+                    result = handle_broker_read(raw.raw[:received], identity, view)
             else:
                 result = {"status": "DENY"}
             encoded = (json.dumps(result, separators=(",", ":"), allow_nan=False) + "\n").encode("ascii")
-            sent = wintypes.DWORD()
             out = ctypes.create_string_buffer(encoded)
-            if not kernel.WriteFile(pipe, out, len(encoded), ctypes.byref(sent), None):
-                raise RuntimeError("Failed to write lab response")
+            sent_ok, written = _pipe_io(
+                kernel, pipe, "write", buffer=out, count=len(encoded),
+                stop_event=stop_event, deadline=deadline,
+            )
+            return bool(sent_ok and written == len(encoded))
         finally:
             kernel.DisconnectNamedPipe(pipe)
             kernel.CloseHandle(pipe)
