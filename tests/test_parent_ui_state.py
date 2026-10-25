@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from facekids.parent_ui_state import (
-    filter_children, load_overview, screen_time_label
+    filter_children, load_overview, screen_time_label, validate_schedule
 )
 from facekids.storage import Storage
 
@@ -65,6 +65,23 @@ class ParentsOverviewTests(unittest.TestCase):
         disabled = load_overview(self.store, day="2026-10-25", current_time="21:00")
         self.assertFalse(disabled.outside_schedule)
         self.assertEqual(disabled.schedule_text, "Sem horário configurado")
+
+    def test_inline_schedule_rejects_malformed_and_ambiguous_values(self):
+        self.assertEqual(validate_schedule(True, " 08:00 ", "20:00"),
+                         (True, "08:00", "20:00"))
+        self.assertEqual(validate_schedule(False, "08:00", "08:00"),
+                         (False, "08:00", "08:00"))
+        for enabled, start, end in (
+            (True, "08:00", "08:00"),
+            (True, "24:00", "20:00"),
+            (True, "08:60", "20:00"),
+            (True, "8:00", "20:00"),
+            (True, "08:00", ""),
+            ("true", "08:00", "20:00"),
+        ):
+            with self.subTest(enabled=enabled, start=start, end=end):
+                with self.assertRaises(ValueError):
+                    validate_schedule(enabled, start, end)
 
     def test_formatting(self):
         self.assertEqual(screen_time_label(0), "0 min")
