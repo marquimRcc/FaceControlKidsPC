@@ -1,8 +1,8 @@
 """READ-ONLY Windows quota broker client, for explicit VM lab use only.
 
-The connected pipe server's real process token MUST be LocalSystem. This
-is only a lab defense-in-depth check; a valid SYSTEM SID alone does not prove
-a protected policy, active facial lease, or safe Windows lock decision. Never
+The connected pipe server PID must match the named running LocalSystem SCM
+service. This is a LAB defense-in-depth check; SCM provenance still does not
+prove an active facial lease or authorize a Windows lock decision. Never
 use this client for Credential Provider logon or LockWorkStation decisions.
 """
 from __future__ import annotations
@@ -16,7 +16,8 @@ from typing import Any
 
 from .ipc_json import parse_local_json
 from .quota_broker_protocol import BROKER_PROTOCOL
-from .quota_broker_peer_win import require_system_pipe_server
+from .quota_broker_peer_win import require_registered_system_service_pipe
+from .quota_broker_scm_win import SERVICE_NAME
 from .quota_broker_transport_win import LAB_PIPE_PREFIX
 
 
@@ -54,9 +55,9 @@ def query_lab_balance(pipe_name: str, *, action: str = "GET_BALANCE") -> dict[st
     if not handle or handle == ctypes.c_void_p(-1).value:
         raise OSError("Could not connect to lab broker")
     try:
-        # Verify the actual connected process token. Untrusted JSON can never
-        # attest the peer. A SYSTEM SID is still LAB defense-in-depth only.
-        require_system_pipe_server(int(handle))
+        # Pin the actual connected process PID to the registered SCM service
+        # and confirm its LocalSystem account before sending IPC data.
+        require_registered_system_service_pipe(int(handle), SERVICE_NAME)
         data = json.dumps({"version": BROKER_PROTOCOL, "action": action},
                           separators=(",", ":")).encode("ascii")
         out = ctypes.create_string_buffer(data)
