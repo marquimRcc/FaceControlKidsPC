@@ -150,7 +150,7 @@ def require_registered_system_service_pipe(handle: int, service_name: str) -> in
     The service name is supplied by trusted application code, not IPC/JSON.
     """
     from .quota_broker_scm_win import SERVICE_NAME
-    from .quota_broker_writer_scm_win import VM_WRITER_SERVICE_NAME
+    from .quota_vm_policy_constants import VM_WRITER_SERVICE_NAME
     if os.name != "nt":
         raise RuntimeError("Windows SCM service provenance required")
     if type(handle) is not int or not handle or handle == ctypes.c_void_p(-1).value:
