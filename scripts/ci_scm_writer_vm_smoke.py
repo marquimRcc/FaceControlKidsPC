@@ -100,6 +100,29 @@ def main() -> int:
             _protect(path)
         assert_protected_vm_ledger_acl(database, models, child_sid)
 
+        # Negative security audit before service installation: an accidental
+        # child-WRITE ACE on either the ledger or a model MUST block startup.
+        for asset in (database, sample_model):
+            subprocess.run(
+                ["icacls.exe", str(asset), "/grant", "*" + child_sid + ":W"],
+                check=True, stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                try:
+                    assert_protected_vm_ledger_acl(database, models, child_sid)
+                except PermissionError:
+                    pass
+                else:
+                    raise AssertionError("Writer ACL gate accepted child-write ACE")
+            finally:
+                subprocess.run(
+                    ["icacls.exe", str(asset), "/remove:g", "*" + child_sid],
+                    check=True, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE, text=True,
+                )
+            assert_protected_vm_ledger_acl(database, models, child_sid)
+
         with winreg.CreateKeyEx(
             winreg.HKEY_LOCAL_MACHINE, VM_WRITER_REGISTRY_PATH,
             0, winreg.KEY_WRITE,
