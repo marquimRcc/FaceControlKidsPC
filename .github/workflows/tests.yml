@@ -139,6 +139,14 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m scripts.ci_scm_lab_smoke
           if ($LASTEXITCODE -ne 0) { throw 'Disposable Windows SCM integration failed' }
+      - name: Hosted Windows VM — real synthetic child token NTFS isolation
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_acl_child_token_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Unprivileged child token ACL test failed' }
       - name: Disposable Windows ACL and rollback rehearsal
         if: runner.os == 'Windows'
         shell: pwsh
