@@ -112,10 +112,20 @@ def main() -> int:
                 pass
         if token is not None:
             token.Close()
+        cleanup_errors = []
         if root.exists():
-            shutil.rmtree(root)
+            try:
+                shutil.rmtree(root)
+            except Exception as exc:
+                cleanup_errors.append("fixture:" + type(exc).__name__)
         if created_user:
-            win32net.NetUserDel(None, name)
+            try:
+                win32net.NetUserDel(None, name)
+            except Exception as exc:
+                cleanup_errors.append("temporary-user:" + type(exc).__name__)
+        if cleanup_errors:
+            raise RuntimeError("Ephemeral child-token cleanup failed: " +
+                               ", ".join(cleanup_errors))
 
 
 if __name__ == "__main__":
