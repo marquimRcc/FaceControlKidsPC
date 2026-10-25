@@ -1,3 +1,4 @@
+from contextlib import closing
 """Broker's status reader cannot mutate the SQLite fixture."""
 from datetime import date
 from pathlib import Path
@@ -30,7 +31,7 @@ class BrokerReadStoreTests(unittest.TestCase):
                     view._db.execute(
                         "UPDATE daily_usage SET seconds=0 WHERE person_id=?", (cid,)
                     )
-            with sqlite3.connect(path) as check:
+            with closing(sqlite3.connect(path)) as check:
                 self.assertEqual(
                     check.execute("SELECT seconds FROM daily_usage").fetchone()[0], 10
                 )
