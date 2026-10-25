@@ -70,9 +70,15 @@ class WtsQuotaWorkerTests(unittest.TestCase):
         self.locks.record_scm_event(event="lock", session_id=42)
         self.assertEqual(self.tick(107).charged_seconds, 0)
         self.locks.record_scm_event(event="unlock", session_id=42)
-        self.assertEqual(self.tick(109).charged_seconds, 2)
+        # A new unlock alone must NEVER resume the last child's quota:
+        # the account Filhos may now be used by a different child.
+        self.assertEqual(self.tick(109).charged_seconds, 0)
+        self.assertEqual(self.start().reason, "verified")
+        self.assertEqual(self.tick(111).charged_seconds, 2)
         self.state = WtsSnapshot(42, self.sid, False)
-        self.assertEqual(self.tick(111).charged_seconds, 0)
+        self.assertEqual(self.tick(113).charged_seconds, 0)
+        self.state = WtsSnapshot(42, self.sid, True)
+        self.assertEqual(self.tick(115).charged_seconds, 0)
         self.assertEqual(self.store.used(self.first, "2026-10-24"), 4)
 
     def test_session_switch_or_token_sid_change_never_debits(self):
@@ -95,7 +101,9 @@ class WtsQuotaWorkerTests(unittest.TestCase):
         self.locks.record_scm_event(event="logon", session_id=42)
         self.assertEqual(self.tick(106).charged_seconds, 0)
         self.locks.record_scm_event(event="unlock", session_id=42)
-        self.assertEqual(self.tick(107).charged_seconds, 1)
+        self.assertEqual(self.tick(107).charged_seconds, 0)
+        self.assertEqual(self.start().reason, "verified")
+        self.assertEqual(self.tick(108).charged_seconds, 1)
         self.assertEqual(self.store.used(self.first, "2026-10-24"), 4)
 
     def test_real_scm_callback_numbers_drive_lock_state_only(self):
