@@ -69,6 +69,50 @@ class ServiceLabConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Production"):
                     validate_service_registry_config(self.config(target))
 
+    @unittest.skipUnless(os.name == "nt", "Windows registry API only")
+    def test_hklm_policy_enforces_actual_winreg_types(self):
+        import winreg
+        from facekids.quota_broker_scm_win import read_hklm_lab_configuration
+
+        with TemporaryDirectory() as td:
+            root = Path(td) / "facekids-quota-lab"
+            root.mkdir()
+            db = root / "ledger.sqlite3"
+            db.write_bytes(b"synthetic")
+            good = self.config(db)
+            type_map = {
+                "LabOnly": winreg.REG_DWORD,
+                "Database": winreg.REG_SZ,
+                "ClientSid": winreg.REG_SZ,
+                "ChildId": winreg.REG_DWORD,
+                "PipeSuffix": winreg.REG_SZ,
+            }
+            from unittest.mock import MagicMock
+            handle = MagicMock()
+            handle.__enter__.return_value = handle
+            with patch.object(winreg, "OpenKey", return_value=handle), patch.object(
+                winreg, "QueryValueEx", side_effect=lambda _handle, name:
+                (good[name], type_map[name])
+            ):
+                pipe, got_db, mapping = read_hklm_lab_configuration()
+            self.assertTrue(pipe.endswith("0123456789abcdef0123456789abcdef"))
+            self.assertEqual(got_db, db.resolve())
+            self.assertEqual(mapping, {good["ClientSid"]: 1})
+
+            # Each field: force the WRONG Windows registry type while value
+            # remains syntactically valid. Must fail before the service starts.
+            for name in type_map:
+                bad = dict(type_map)
+                bad[name] = (winreg.REG_SZ if type_map[name] == winreg.REG_DWORD
+                             else winreg.REG_EXPAND_SZ)
+                with self.subTest(name=name), patch.object(
+                    winreg, "OpenKey", return_value=handle
+                ), patch.object(
+                    winreg, "QueryValueEx", side_effect=lambda _handle, key:
+                    (good[key], bad[key])
+                ), self.assertRaises(ValueError):
+                    read_hklm_lab_configuration()
+
     def test_scm_module_never_auto_installs_or_starts_on_import(self):
         self.assertEqual(FaceKidsQuotaLabService._svc_name_, "FaceKidsQuotaLabOnly")
 
