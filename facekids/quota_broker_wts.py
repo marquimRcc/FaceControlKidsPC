@@ -37,6 +37,12 @@ class WtsLockTracker:
 
     def __init__(self) -> None:
         self._unlocked: dict[int, bool] = {}
+        self._revision = 0
+
+    @property
+    def revision(self) -> int:
+        """Monotonic service-local generation; any lock/change invalidates capture."""
+        return self._revision
 
     def record_scm_event(self, *, event: str, session_id: int) -> None:
         # This method must never be exposed through child-facing IPC.
@@ -50,6 +56,7 @@ class WtsLockTracker:
             self._unlocked[session_id] = False
         else:
             raise ValueError("Unexpected SCM session event")
+        self._revision += 1
 
     def record_windows_scm_notification(self, event_code: int, payload: tuple[int]) -> None:
         """Consume real pywin32 SvcOtherEx session change payloads.
@@ -75,6 +82,7 @@ class WtsLockTracker:
 
     def reset(self) -> None:
         self._unlocked.clear()
+        self._revision += 1
 
 
 class VerifiedWtsQuotaWorker:
@@ -99,6 +107,10 @@ class VerifiedWtsQuotaWorker:
         self._expected_sid = expected_sid
         self._snapshot = snapshot
         self._locks = locks
+
+    def observed_snapshot(self) -> WtsSnapshot | None:
+        """Service-side snapshot; never derived from a child IPC request."""
+        return self._observed()
 
     def _observed(self) -> WtsSnapshot | None:
         try:
