@@ -82,7 +82,7 @@ class OfflineVmCutoverTests(unittest.TestCase):
             self.config, backup_path=self.backup,
             preserved_current_path=self.undo, offline_gate=lambda: True
         )
-        self.assertEqual(undo_path, self.undo)
+        self.assertTrue(undo_path.samefile(self.undo))
         with closing(Storage(self.db)) as restored:
             self.assertIsNone(restored.get_setting(OWNER_KEY))
             self.assertEqual([restored.used(x, self.day) for x in self.people],
