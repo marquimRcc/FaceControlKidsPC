@@ -1,19 +1,22 @@
 """READ-ONLY Windows quota broker client, for explicit VM lab use only.
 
-This does not verify the server process owner: responses MUST NOT influence
-credential serialization, screen-time charging, or LockWorkStation until
-server identity is enforced and tested with protected Windows configuration.
+The connected pipe server's real process token MUST be LocalSystem. This
+is only a lab defense-in-depth check; a valid SYSTEM SID alone does not prove
+a protected policy, active facial lease, or safe Windows lock decision. Never
+use this client for Credential Provider logon or LockWorkStation decisions.
 """
 from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
 import json
+import math
 import os
 from typing import Any
 
 from .ipc_json import parse_local_json
 from .quota_broker_protocol import BROKER_PROTOCOL
+from .quota_broker_peer_win import require_system_pipe_server
 from .quota_broker_transport_win import LAB_PIPE_PREFIX
 
 
@@ -51,6 +54,9 @@ def query_lab_balance(pipe_name: str, *, action: str = "GET_BALANCE") -> dict[st
     if not handle or handle == ctypes.c_void_p(-1).value:
         raise OSError("Could not connect to lab broker")
     try:
+        # Verify the actual connected process token. Untrusted JSON can never
+        # attest the peer. A SYSTEM SID is still LAB defense-in-depth only.
+        require_system_pipe_server(int(handle))
         data = json.dumps({"version": BROKER_PROTOCOL, "action": action},
                           separators=(",", ":")).encode("ascii")
         out = ctypes.create_string_buffer(data)
@@ -78,7 +84,9 @@ def query_lab_balance(pipe_name: str, *, action: str = "GET_BALANCE") -> dict[st
             if set(reply) != {"status", "version", "remaining_seconds", "allowed_now"}:
                 raise ValueError("Unexpected balance reply")
             balance = reply["remaining_seconds"]
-            if type(balance) not in (int, float) or balance < 0 or type(reply["allowed_now"]) is not bool:
+            if (type(balance) not in (int, float) or not math.isfinite(balance)
+                    or balance < 0 or type(reply["allowed_now"]) is not bool
+                    or (balance == 0 and reply["allowed_now"])):
                 raise ValueError("Malformed broker balance")
         return reply
     finally:
