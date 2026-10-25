@@ -369,3 +369,40 @@ Para o ultimo commit funcional `d42aaa4cb61a802c7593a7618321303cd7b0403e`:
 - Nao existe worker confiavel que debite tempo com eventos Windows WTS reais.
   Shadow responde apenas a diagnosticos, nao muda cobranca ou bloqueio.
 - Nao tocar `main`, logon do PC, camera, fotos, tarefas nem provedor instalado.
+
+
+## 24/10/2026 — progresso no SCM e rollback offline, sem intervenção doméstica
+
+Commits funcionais desta rodada:
+- `05e2911a`, `5c64c6f6`: testes do ciclo de vida
+  `SvcDoRun/SvcStop` com pywin32 no runner Windows, **sem registrar SCM**;
+  verificam parada antes da inicialização, carregamento da política
+  e recusa de iniciar quando o registro é inválido.
+- `8312f9bc`, `4522923c`: tipos exatos de valores da política HKLM
+  para laboratório, sem acesso ou alteração a configuração real.
+- `41e0b620`, `6ca5fbc3`, `de5b9cbe`: SID obrigatório da conta do
+  **próprio processo SCM** antes da abertura do pipe ou do banco de teste;
+  mismatch faz a inicialização falhar fechada.
+- `2b430e37`, `780a65fe`, `b3e399cd`: cutover transacional de
+  ensaio em SQLite sintetico com backup, substituição temporária e
+  restauração exata dos bytes originais; testes de falha simulada,
+  origem fora do laboratório, WAL ainda aberto e raiz symlink.
+- `docs/BROKER-SCM-LAB-20261024.md`: detalhes e limites.
+
+Evidência de CI:
+- commit `de5b9cbe40dfca5af43c652452f9affcddc5d463` —
+  Unit tests run `40148204656` Windows/Ubuntu SUCCESS;
+  Credential Provider run `40148204585` dois jobs SUCCESS.
+- CI do cutover offline e documentação mais recente ainda deve ser
+  consultado separadamente; resultados anteriores não provam esse HEAD.
+
+Status não resolvido:
+- SCM NÃO registrado/iniciado em uma VM restaurável; testes SCM atuais
+  são de classe/contrato com mocks e temporários.
+- Isolamento NTFS com token infantil efetivo e serviço de quota com
+  eventos WTS reais NÃO implementados.
+- Nenhum backup nem migração dos dados infantis reais realizado.
+- Não houve ação sobre `main`, credenciais, fotos, tarefas,
+  LogonUI, registro COM, webcam ou PC da família.
+- PR #4 segue draft até que uma VM e testes Win+L supervisionados
+  comprovem recuperação e operação.
