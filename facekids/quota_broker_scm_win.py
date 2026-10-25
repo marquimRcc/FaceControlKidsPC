@@ -87,7 +87,7 @@ def _validate_service_user_sid(actual: object, expected: object) -> None:
         raise PermissionError("Unexpected quota lab service process token SID")
 
 
-def _require_expected_service_sid() -> None:
+def _require_expected_service_sid(*, registry_path: str = REGISTRY_PATH) -> None:
     """Compare this service PROCESS token with separately configured HKLM SID.
 
     ServiceSid is mandatory REG_SZ in addition to the read-only broker settings.
@@ -100,7 +100,7 @@ def _require_expected_service_sid() -> None:
     import win32con
     import win32security
 
-    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REGISTRY_PATH, 0, winreg.KEY_READ) as key:
+    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path, 0, winreg.KEY_READ) as key:
         configured, value_type = winreg.QueryValueEx(key, "ServiceSid")
     if value_type != winreg.REG_SZ or not _sid_is_valid(configured):
         raise PermissionError("Protected service SID policy is missing or invalid")
