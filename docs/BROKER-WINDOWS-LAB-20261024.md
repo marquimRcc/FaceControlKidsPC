@@ -61,8 +61,9 @@ existentes ate uma VM/snapshot validar login convencional e reversao.
 - **ACLs NTFS reais:** binarios e ledger ainda compartilham diretorio
   historicamente gravavel pela conta Filhos; nunca instalar o prototipo
   sobre esses caminhos.
-- **Integracao ao FilhosAgent:** o agente atual continua debitando SQLite
-  diretamente, sem interface com o novo broker (isso e deliberado).
+- **Integracao ao FilhosAgent:** modo opt-in de diagnostico **shadow-only**
+  implementado; o agente ainda debita o SQLite legado diretamente e
+  ignora a resposta do broker para bloqueio e autorizacao.
 - **Rollback automatico de instalacao:** ha backup/ensaio de restauracao
   somente de fixture; nao ha rollback COM/registro/tarefa comprovado.
 - **Timeout no host lab:** IO e bloqueante por simplicidade; nao executar
@@ -73,3 +74,18 @@ existentes ate uma VM/snapshot validar login convencional e reversao.
 
 O PR #4 permanece em rascunho sobre a branch handoff. Main, instalacao
 familiar, credenciais e rostos nao foram alterados.
+
+## Shadow mode — laboratorio, NUNCA como fonte de autorizacao
+
+A conta Filhos pode, exclusivamente em VM com broker lab, iniciar o agente
+com as variaveis de ambiente de teste:
+- `FACEKIDS_QUOTA_BROKER_SHADOW=1`
+- `FACEKIDS_QUOTA_LAB_SUFFIX=0123456789abcdef0123456789abcdef`
+
+O sampler roda numa thread daemon e compara periodicamente apenas os
+saldos, registrando `matched`, `diverged` ou `broker-unavailable`.
+Nao altera `QuotaTracker`, `Storage.charge` ou `lock_current_session`.
+O cliente lab NAO valida SID do servidor, portanto sua resposta jamais
+pode conceder acesso, cobrar, alterar perfis ou solicitar bloqueio.
+
+Teste unitario `tests/test_quota_broker_shadow.py` verifica esse contrato.
