@@ -98,6 +98,36 @@ class WtsQuotaWorkerTests(unittest.TestCase):
         self.assertEqual(self.tick(107).charged_seconds, 1)
         self.assertEqual(self.store.used(self.first, "2026-10-24"), 4)
 
+    def test_real_scm_callback_numbers_drive_lock_state_only(self):
+        self.locks.record_windows_scm_notification(8, (42,))  # WTS_SESSION_UNLOCK
+        self.assertTrue(self.locks.is_unlocked(42))
+        self.locks.record_windows_scm_notification(7, (42,))  # WTS_SESSION_LOCK
+        self.assertFalse(self.locks.is_unlocked(42))
+        self.locks.record_windows_scm_notification(8, (42,))
+        self.locks.record_windows_scm_notification(2, (42,))  # CONSOLE_DISCONNECT
+        self.assertFalse(self.locks.is_unlocked(42))
+        self.locks.record_windows_scm_notification(8, (42,))
+        with self.assertRaises(ValueError):
+            self.locks.record_windows_scm_notification(8, (42, "spoof"))
+        with self.assertRaises(ValueError):
+            self.locks.record_windows_scm_notification(8, [42])
+        with self.assertRaises(ValueError):
+            self.locks.record_windows_scm_notification(999, (42,))
+        self.assertTrue(self.locks.is_unlocked(42))  # invalid callback ignored
+
+    def test_unprivileged_wts_query_cannot_guess_sid_or_unlock(self):
+        from facekids.quota_broker_wts_win import observe_console_from_system
+        import os
+        snapshot = observe_console_from_system()
+        if os.name != "nt":
+            self.assertIsNone(snapshot)
+        elif snapshot is not None:
+            self.assertIsInstance(snapshot, WtsSnapshot)
+            self.assertTrue(snapshot.token_sid.startswith("S-1-"))
+        # No SCM lock notification => no trusted face binding, regardless of
+        # whether the current OS was able to return a console snapshot.
+        self.assertEqual(self.start().reason, "wts-unverified")
+
     def test_invalid_wts_state_fails_closed(self):
         for invalid in (
             lambda: WtsSnapshot(0, self.sid, True),
