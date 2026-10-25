@@ -23,6 +23,18 @@ Também foi acrescentado um adaptador `BrokerLabReadOnlyQuota` de **observação
 - Repostas fora do contrato, campos extras (`child_id`, `elapsed_seconds`), tempos NaN/infinito/negativos, contraditórios (saldo zero + permitido) e falhas de transporte não autorizam ações.
 - Essa validação é **apenas defesa adicional**. PID/nome/conta SCM isoladamente **não bastam** para confiar nos valores, porque falta vincular o endpoint a um serviço SCM específico com configuração protegida e um identificador facial atual. O cliente de laboratório não deve controlar `LockWorkStation` ou login Windows.
 
+## Protótipo executável de consulta sem escrita (VM)
+
+O módulo `facekids.filhos_quota_vm_readonly` agora fornece um ensaio concreto, **sem abrir SQLite, editar quota ou bloquear Windows**. Ele verifica primeiro a configuração protegida `HKLM\\SOFTWARE\\FaceControlKidsPC\\QuotaBrokerLabService`, exige `LabOnly=1`, confere que o SID efetivo do processo corresponde ao `ClientSid` configurado e só então consulta o Named Pipe específico. A resposta passa pelas verificações de protocolo e identidade do servidor SCM.
+
+**Somente dentro de VM descartável com o serviço de laboratório explicitamente registrado e ativo**:
+
+```powershell
+python -m facekids.filhos_quota_vm_readonly --vm-lab-only
+```
+
+Se a política/identidade/canal não existirem ou não forem válidos, retorna erro sem abrir banco, sem tentar cobrança, sem trocar perfis e sem bloquear a sessão. **Não** executar em PC familiar e **não** usar esse módulo como substituto do agente de tempo em produção: a leitura ainda não conhece a identidade facial dinâmica dos três filhos. O launcher doméstico não foi alterado para chamar esse módulo.
+
 ## Comprovação automatizada
 
 `tests/test_quota_agent_accounting.py`:
