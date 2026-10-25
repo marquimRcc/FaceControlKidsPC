@@ -22,7 +22,7 @@ from typing import Mapping
 
 from .auth_service import FaceAuthenticator
 from .quota_broker_scm_host import ServiceOwnedScmHost
-from .quota_broker_bound_transport_win import serve_one_bound_vm_request
+from .quota_broker_bound_transport_win import serve_bound_vm_requests
 from .quota_broker_scm_win import (
     _ServiceBase, _require_expected_service_sid, _sid_is_valid,
 )
@@ -225,18 +225,17 @@ class FaceKidsQuotaWriterVmService(_ServiceBase):
         unexpected transport failure revokes the lease and stops the service.
         """
         try:
-            while not self._stop_signal.is_set():
-                host = self._host
-                if host is None:
-                    raise RuntimeError("SCM runtime missing")
-                serve_one_bound_vm_request(
-                    expected_child_sid=expected_child_sid,
-                    bound_reader=lambda sid: host.read_bound_balance(
-                        verified_client_sid=sid
-                    ),
-                    stop_event=self._stop_signal,
-                    timeout_seconds=1.0,
-                )
+            host = self._host
+            if host is None:
+                raise RuntimeError("SCM runtime missing")
+            serve_bound_vm_requests(
+                expected_child_sid=expected_child_sid,
+                bound_reader=lambda sid: host.read_bound_balance(
+                    verified_client_sid=sid
+                ),
+                stop_event=self._stop_signal,
+                timeout_seconds=1.0,
+            )
         except BaseException as exc:
             self._bound_failure = exc
             self._stop_signal.set()
