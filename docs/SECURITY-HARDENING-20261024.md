@@ -331,3 +331,41 @@ Para o ultimo commit funcional `d42aaa4cb61a802c7593a7618321303cd7b0403e`:
 - Scripts de instalacao existentes NAO foram executados nesta rodada. Sem mudanca em tarefa agendada, regsvr32, registro, ACL, cameras ou fotos.
 - Passagem para servico real requer testes de impersonacao e autenticidade do servidor em VM, timeouts/cancelamento robustos, serializacao exclusiva do ledger, backup/restauracao de COM e Winlogon, anti-spoof e validacao Win+L supervisionada.
 - PR #4 segue **draft**, com base handoff e sem merge em main.
+
+
+## Ciclo seguinte — Windows SCM supervisao + ACL rollback em fixture (24/10/2026)
+
+- `c089da65`: servidor Named Pipe de laboratorio adota `FILE_FLAG_OVERLAPPED`,
+  deadline total, `CancelIoEx` e espera para liberar `OVERLAPPED` com
+  seguranca em timeout/parada, mantendo primeira instancia e clientes locais.
+- `96f88853`, `09027edd`: supervisor com signal stop, tentativas limitadas,
+  reinicio apos falha transitória e encerramento fail-closed apos erro repetido.
+- `6aea77d8`: testes Windows de encerramento sem cliente conectado e deadline.
+- `550d4f06`, `aa64924f`, `e997677b`: classe de serviço opcional baseada
+  em pywin32 e configuracao estrita de HKLM `LabOnly=1`, sem comandos para
+  instalar no SCM nem acesso ao banco familiar. Dependencia opcional
+  isolada de `requirements.txt`.
+- `fe5924fa`, `5f37c1e0`, `4211d308`, `4a7bd539`: script e teste
+  Windows de ACL e rollback SOMENTE para arquivo temporario sintetico,
+  com restauracao semantica de owner/heranca/ACE. O primeiro teste encontrou
+  diferenca de SDDL textual; a restauracao foi corrigida e o Windows CI passou.
+- `d986a70d`: CI Windows instala pywin32 apenas no runner descartavel e
+  valida que o wrapper SCM herda `ServiceFramework`, SEM registro.
+- `docs/BROKER-SCM-LAB-20261024.md`: roteiro, restricoes e bloqueios.
+
+### CI verificado
+- Commit de codigo/workflow `d986a70d314e251726565daeef1d990b50476eb3`:
+  - Unit tests `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40147534359`
+    — Windows SUCCESS e Ubuntu SUCCESS.
+  - Credential Provider `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40147534306`
+    — compilacao real SUCCESS e suite diagnostica SUCCESS.
+- Commits de documentacao posteriores geram novas execucoes; consultar
+  HEAD exato se necessario.
+
+### Ainda bloqueado para hardware domestico
+- Nenhum SCM instalado/iniciado de fato, nenhuma configuracao HKLM aplicada.
+- Ensaio de ACL foi em arquivo TEMPORARIO do runner; acesso efetivo com token
+  Filhos, migracao de SQLite da familia e rollback de COM ainda nao testados.
+- Nao existe worker confiavel que debite tempo com eventos Windows WTS reais.
+  Shadow responde apenas a diagnosticos, nao muda cobranca ou bloqueio.
+- Nao tocar `main`, logon do PC, camera, fotos, tarefas nem provedor instalado.
