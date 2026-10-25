@@ -33,6 +33,7 @@ from .avatar_utils import (
     AVATAR_DIR,
 )
 from .storage import Storage
+from .parent_ui_state import filter_children, load_overview, screen_time_label
 from .children_pilot import child_pilot_database, windows_token_user
 
 logger = logging.getLogger("FaceKidsAdmin")
@@ -439,6 +440,8 @@ class CurfewConfigDialog(tk.Toplevel):
             return
 
         self.store.set_curfew_config(self.enabled_var.get(), s, e)
+        if hasattr(self.master, "refresh"):
+            self.master.refresh()
         status_txt = f"Horário de uso configurado: {s} às {e} (Ativo: {'Sim' if self.enabled_var.get() else 'Não'})"
         messagebox.showinfo("Sucesso", status_txt, parent=self)
         self.destroy()
@@ -530,8 +533,8 @@ class AdminDashboard(tk.Tk):
             sys.exit(1)
 
         self.title("FaceControl Kids — Painel de Controle dos Pais")
-        self.geometry("1040x720")
-        self.minsize(880, 600)
+        self.geometry("1180x780")
+        self.minsize(960, 620)
         self.configure(bg=BG_MAIN)
 
         # Referencia de banco
@@ -579,8 +582,10 @@ class AdminDashboard(tk.Tk):
         app_sub.pack(anchor="w")
 
         # Botoes Superiores
-        top_btn_frame = tk.Frame(header, bg=BG_HEADER, padx=20, pady=16)
-        top_btn_frame.pack(side=tk.RIGHT)
+        # Navigation lives below the brand header, so all actions remain visible
+        # on a 960px wide laptop screen (instead of overflowing on the right).
+        top_btn_frame = tk.Frame(self, bg=BG_MAIN, padx=20, pady=10)
+        top_btn_frame.pack(fill=tk.X, side=tk.TOP)
 
         history_btn = tk.Button(
             top_btn_frame,
@@ -691,7 +696,58 @@ class AdminDashboard(tk.Tk):
             bg=BG_MAIN,
         ).pack(side=tk.LEFT)
 
-        # 3. Area Principal com Scroll para os Cards
+        # 3. Overview: four compact metrics and an always-visible search.
+        overview_bar = tk.Frame(self, bg=BG_MAIN, padx=20, pady=6)
+        overview_bar.pack(fill=tk.X)
+        overview_heading = tk.Frame(overview_bar, bg=BG_MAIN)
+        overview_heading.pack(fill=tk.X, pady=(0, 9))
+        tk.Label(overview_heading, text="Visão geral", bg=BG_MAIN, fg=TEXT_TITLE,
+                 font=("Segoe UI", 15, "bold")).pack(side=tk.LEFT)
+        self.result_counter = tk.StringVar(value="")
+        tk.Label(overview_heading, textvariable=self.result_counter, bg=BG_MAIN,
+                 fg=TEXT_MUTED, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(12, 0))
+        search_row = tk.Frame(overview_heading, bg=BG_MAIN)
+        search_row.pack(side=tk.RIGHT)
+        tk.Label(search_row, text="Buscar filho", bg=BG_MAIN, fg=TEXT_SUB,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 8))
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(
+            search_row, textvariable=self.search_var, width=23,
+            font=("Segoe UI", 10), bg=BG_BOX, fg=TEXT_TITLE,
+            insertbackground=TEXT_TITLE, relief=tk.FLAT,
+            highlightthickness=1, highlightbackground=BORDER_DEFAULT,
+            highlightcolor=ACCENT_BLUE,
+        )
+        self.search_entry.pack(side=tk.LEFT, ipady=5)
+        self.search_var.trace_add("write", lambda *_: self.refresh())
+
+        metrics_row = tk.Frame(overview_bar, bg=BG_MAIN)
+        metrics_row.pack(fill=tk.X)
+        self.total_var = tk.StringVar(value="—")
+        self.enrolled_var = tk.StringVar(value="—")
+        self.remaining_var = tk.StringVar(value="—")
+        self.schedule_var = tk.StringVar(value="—")
+        for column, (label, value, accent) in enumerate((
+            ("CRIANÇAS", self.total_var, ACCENT_CYAN),
+            ("ROSTOS CADASTRADOS", self.enrolled_var, ACCENT_GREEN),
+            ("SALDO TOTAL HOJE", self.remaining_var, ACCENT_BLUE),
+            ("HORÁRIO DE USO", self.schedule_var, ACCENT_PURPLE),
+        )):
+            tile = tk.Frame(metrics_row, bg=BG_CARD, padx=13, pady=10,
+                            highlightthickness=1, highlightbackground=BORDER_DEFAULT)
+            tile.grid(row=0, column=column, sticky="nsew", padx=(0, 9 if column < 3 else 0))
+            metrics_row.columnconfigure(column, weight=1, uniform="metrics")
+            tk.Label(tile, text=label, bg=BG_CARD, fg=TEXT_MUTED,
+                     font=("Segoe UI", 8, "bold")).pack(anchor="w")
+            tk.Label(tile, textvariable=value, bg=BG_CARD, fg=accent,
+                     font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(3, 0))
+
+        self.data_source_var = tk.StringVar(value="")
+        tk.Label(overview_bar, textvariable=self.data_source_var, bg=BG_MAIN,
+                 fg=TEXT_SUB, anchor="w", font=("Segoe UI", 9),
+                 wraplength=1080, justify="left").pack(fill=tk.X, pady=(9, 0))
+
+        # 4. Cards retain the existing enrollment, photo, bonus and quota flows.
         main_container = tk.Frame(self, bg=BG_MAIN, padx=20, pady=10)
         main_container.pack(fill=tk.BOTH, expand=True)
 
@@ -715,43 +771,61 @@ class AdminDashboard(tk.Tk):
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     def refresh(self):
-        """Atualiza os dados lendo diretamente do SQLite compartilhado."""
-        for w in self.cards_frame.winfo_children():
-            w.destroy()
-
+        """Re-render UI from read-only view models; never change quota in refresh."""
+        for widget in self.cards_frame.winfo_children():
+            widget.destroy()
         self.avatar_images.clear()
-        people = self.store.people()
 
-        if not people:
-            empty_box = tk.Frame(self.cards_frame, bg=BG_CARD, padx=30, pady=30)
-            empty_box.pack(fill=tk.X, pady=20)
-            tk.Label(
-                empty_box,
-                text="Nenhum perfil de criança encontrado no banco de dados.",
-                font=("Segoe UI", 12),
-                fg=TEXT_SUB,
-                bg=BG_CARD,
-            ).pack()
+        overview = load_overview(self.store)
+        visible = filter_children(overview.children, self.search_var.get())
+        self.total_var.set(str(overview.total_children))
+        self.enrolled_var.set(
+            f"{overview.recognized_children} de {overview.total_children}"
+        )
+        self.remaining_var.set(screen_time_label(overview.remaining_seconds))
+        self.schedule_var.set(overview.schedule_text)
+        self.result_counter.set(
+            f"{len(visible)} de {overview.total_children} exibidos"
+        )
+        if overview.outside_schedule:
+            self.schedule_var.set("Fora do horário")
+
+        shared = Path("C:/ProgramData/FaceKids/criancas.sqlite3")
+        is_shared = self.db_path.resolve() == shared.resolve()
+        self.data_source_var.set(
+            "Dados compartilhados do FaceKids • horários e saldos de hoje"
+            if is_shared else
+            "Atenção: banco local de teste. Ele pode não ser o mesmo da conta Filhos. "
+            "Não utilize estes saldos como controle de segurança."
+        )
+
+        if not visible:
+            box = tk.Frame(self.cards_frame, bg=BG_CARD, padx=30, pady=30)
+            box.pack(fill=tk.X, pady=16)
+            title = (
+                "Nenhum filho cadastrado"
+                if not overview.children else
+                "Nenhum filho corresponde à sua busca"
+            )
+            tk.Label(box, text=title, bg=BG_CARD, fg=TEXT_TITLE,
+                     font=("Segoe UI", 13, "bold")).pack(pady=(0, 6))
+            tk.Label(box, text=(
+                "Clique em '+ Nova Criança' para criar um perfil."
+                if not overview.children else
+                "Altere o termo de busca para mostrar outros perfis."
+            ), bg=BG_CARD, fg=TEXT_SUB,
+                     font=("Segoe UI", 10)).pack()
             return
 
-        today = date.today().isoformat()
-
-        # Renderizar cada crianca
-        for pid, name, limit_seconds in people:
-            samples = self.store.enrollment_count(pid)
-            used_seconds = self.store.used(pid, today)
-            bonus_seconds = self.store.bonus(pid, today)
-            rem_seconds = self.store.remaining(pid, today)
-            limit_min = limit_seconds // 60
-
+        for child in visible:
             self._create_child_card(
-                child_id=pid,
-                name=name,
-                samples=samples,
-                limit_min=limit_min,
-                used_sec=used_seconds,
-                bonus_sec=bonus_seconds,
-                rem_sec=rem_seconds,
+                child_id=child.child_id,
+                name=child.name,
+                samples=child.samples,
+                limit_min=child.limit_minutes,
+                used_sec=child.used_seconds,
+                bonus_sec=child.bonus_minutes * 60,
+                rem_sec=child.remaining_seconds,
             )
 
     def _create_child_card(
@@ -790,8 +864,12 @@ class AdminDashboard(tk.Tk):
         )
         badge.pack(side=tk.LEFT)
 
-        status_text = f"● {samples} amostras cadastradas" if samples > 0 else "○ Sem biometria cadastrada"
-        status_color = ACCENT_GREEN if samples > 0 else TEXT_MUTED
+        if samples == 0:
+            status_text, status_color = "○ Cadastro facial pendente", ACCENT_YELLOW
+        elif rem_sec <= 0:
+            status_text, status_color = "● Tempo esgotado hoje", ACCENT_RED
+        else:
+            status_text, status_color = f"● Rosto cadastrado · {samples} amostras", ACCENT_GREEN
         status_label = tk.Label(
             header_row,
             text=status_text,
