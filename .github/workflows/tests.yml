@@ -131,6 +131,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'SCM wrapper failed import or subclass verification' }
           python -m unittest discover -s tests -p test_quota_broker_scm_lifecycle.py -v
           if ($LASTEXITCODE -ne 0) { throw 'SCM mocked start/stop tests failed' }
+      - name: Hosted Windows VM — real SCM install, query, stop and rollback
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/ci_scm_lab_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Disposable Windows SCM integration failed' }
       - name: Disposable Windows ACL and rollback rehearsal
         if: runner.os == 'Windows'
         shell: pwsh
