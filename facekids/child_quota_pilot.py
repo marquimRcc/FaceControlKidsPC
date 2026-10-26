@@ -53,6 +53,18 @@ def provision_three_children(store) -> dict[int, str]:
     return {pid: name for pid, name, _ in people}
 
 
+def configured_child_profiles(store) -> dict[int, str]:
+    """Configured profiles only: supports one or more, no fixed child slots.
+
+    A missing enrollment fails closed; the caller must explicitly create the
+    first profile. The legacy three-child fixture remains for old demo tests.
+    """
+    rows = store.people()
+    if not rows:
+        raise ValueError("Cadastre pelo menos um perfil para iniciar o piloto.")
+    return {int(pid): name for pid, name, _limit in rows}
+
+
 class ChildQuotaEngine:
     """Charge only observed, confirmed, unlocked active use.
 
@@ -61,7 +73,7 @@ class ChildQuotaEngine:
     """
     def __init__(self, store):
         self.store = store
-        self.people = provision_three_children(store)
+        self.people = configured_child_profiles(store)
         self.policy = SessionAwarePolicy(confirm_frames=3, uncertain_grace_sec=30)
         self.last_day: str | None = None
 
