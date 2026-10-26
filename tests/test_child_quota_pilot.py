@@ -14,6 +14,7 @@ class ChildQuotaPilotTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.store = Storage(Path(self.tmp.name) / "kids.sqlite3")
+        provision_three_children(self.store)  # Legacy three-profile fixture only.
         self.engine = ChildQuotaEngine(self.store)
         self.ids = {name: pid for pid, name in self.engine.people.items()}
         self.a = self.ids[CHILD_LABELS[0]]
@@ -104,13 +105,20 @@ class ChildQuotaPilotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.engine.step(float("inf"), self.day, SessionState.ACTIVE, self.a)
 
-    def test_unrelated_people_database_refused(self):
+    def test_configured_profiles_support_one_and_more_than_three(self):
         with tempfile.TemporaryDirectory() as p:
             db = Storage(Path(p) / "separate.sqlite3")
             try:
-                db.add_person("Responsavel - Teste", 120)
                 with self.assertRaises(ValueError):
                     ChildQuotaEngine(db)
+                first = db.add_person("Identidade ficticia A", 120)
+                single = ChildQuotaEngine(db)
+                self.assertEqual(single.people, {first: "Identidade ficticia A"})
+                for n in range(2, 6):
+                    db.add_person(f"Identidade ficticia {n}", 120)
+                multiple = ChildQuotaEngine(db)
+                self.assertEqual(len(multiple.people), 5)
+                self.assertEqual(set(multiple.people), {p[0] for p in db.people()})
             finally:
                 db.close()
 
