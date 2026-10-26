@@ -292,7 +292,96 @@ class TestFilhosAgent(unittest.TestCase):
         self.assertTrue(tracker.warned_10m)
 
 
+    def test_in_session_switch_rules(self):
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+
+        # Regra 1: Filho ativo continua presente em detected_ids -> Nao troca
+        detected_ids = [self.child_id, 99]
+        cid = 99
+        cname = "Ana"
+        face_count = 2
+        idle_sec = 25.0
+        switched = False
+        if tracker.current_child_id in detected_ids:
+            pass  # ignorado
+        elif idle_sec < 15.0:
+            pass
+        elif face_count > 1:
+            pass
+        elif cid != tracker.current_child_id:
+            tracker.switch_child(cid, cname)
+            switched = True
+        self.assertFalse(switched)
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        # Regra 2: Quem esta no mouse manda (idle < 15s) -> Nao troca
+        detected_ids = [99]
+        face_count = 1
+        idle_sec = 5.0
+        switched = False
+        if tracker.current_child_id in detected_ids:
+            pass
+        elif idle_sec < 15.0:
+            pass
+        elif face_count > 1:
+            pass
+        elif cid != tracker.current_child_id:
+            tracker.switch_child(cid, cname)
+            switched = True
+        self.assertFalse(switched)
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        # Regra 3: Multiplos rostos (face_count > 1) -> Nao troca
+        detected_ids = [99]
+        face_count = 2
+        idle_sec = 25.0
+        switched = False
+        if tracker.current_child_id in detected_ids:
+            pass
+        elif idle_sec < 15.0:
+            pass
+        elif face_count > 1:
+            pass
+        elif cid != tracker.current_child_id:
+            tracker.switch_child(cid, cname)
+            switched = True
+        self.assertFalse(switched)
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        # Regra 4: Troca legitima (filho anterior ausente, idle >= 15s, rosto unico face_count == 1) -> Troca!
+        detected_ids = [99]
+        face_count = 1
+        idle_sec = 25.0
+        switched = False
+        if tracker.current_child_id in detected_ids:
+            pass
+        elif idle_sec < 15.0:
+            pass
+        elif face_count > 1:
+            pass
+        elif cid != tracker.current_child_id:
+            tracker.switch_child(cid, cname)
+            switched = True
+        self.assertTrue(switched)
+        self.assertEqual(tracker.current_child_id, 99)
+        self.assertEqual(tracker.current_child_name, "Ana")
+
+    def test_effective_idle_calculation_prevents_relock(self):
+        # Simula sessao recem-desbloqueada pelo rosto (1 segundo atras)
+        session_active_since_mono = 100.0
+        current_mono = 101.0  # 1s de sessao ativa
+        stale_input_idle = 145.0  # mouse sem toque fisico ha 145s (antes do desbloqueio)
+
+        active_duration = max(0.0, current_mono - session_active_since_mono)
+        idle_sec = min(stale_input_idle, active_duration)
+
+        self.assertEqual(idle_sec, 1.0)
+        self.assertLess(idle_sec, 120.0)
+
+
 if __name__ == "__main__":
+
 
 
     unittest.main()

@@ -586,6 +586,7 @@ def run_agent():
         )
 
     last_active_time = time.monotonic()
+    session_active_since_mono = time.monotonic()
     check_interval = get_face_check_interval()
     identifier = InSessionFaceIdentifier(interval_seconds=check_interval)
     today = date.today().isoformat()
@@ -623,6 +624,7 @@ def run_agent():
                         new_cname = data.get("child_name", f"Crianca {new_cid}")
                         if new_cid is not None:
                             tracker.switch_child(int(new_cid), str(new_cname))
+                        session_active_since_mono = time.monotonic()
                         # Se recente (menos de 15s), reabre a tela de boas-vindas
                         if (time.time() - current_ts) < 15.0:
                             logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
@@ -640,8 +642,13 @@ def run_agent():
             if state is SessionState.LOCKED:
                 dismiss_welcome_screen()
 
-            # C. Verificacao facial periodica em sessao ativa (a cada 2 minutos)
             if state is SessionState.ACTIVE:
+                # 1. Checar inatividade fisica considerando o tempo real desde que a sessao destravou
+                active_duration = max(0.0, time.monotonic() - session_active_since_mono)
+                idle_sec = min(get_user_idle_seconds(), active_duration)
+                lock_sec, warn_sec = get_inactivity_settings()
+
+                # C. Verificacao facial periodica em sessao ativa
                 pipe_resp = identifier.check_result()
                 if pipe_resp:
                     status = pipe_resp.get("status")
@@ -649,11 +656,33 @@ def run_agent():
                     if status == "ALLOW":
                         cid = pipe_resp.get("child_id") or data_block.get("child_id")
                         cname = pipe_resp.get("child_name") or data_block.get("child_name", f"Crianca {cid}")
+                        detected_ids = pipe_resp.get("detected_ids") or data_block.get("detected_ids", [])
+                        face_count = pipe_resp.get("face_count") or data_block.get("face_count", 1)
+
                         if cid is not None:
                             cid = int(cid)
                             cname = str(cname)
-                            # Se outra crianca for detectada na frente do computador:
-                            if cid != tracker.current_child_id:
+                            # Regra 1: Se o filho atual continua visivel em frente a tela, NUNCA troca (pessoas passando atras sao ignoradas)
+                            if tracker.current_child_id is not None and tracker.current_child_id in detected_ids:
+                                logger.debug(
+                                    "Filho ativo (%s) continua presente no enquadramento. Presencas secundarias ignoradas.",
+                                    tracker.current_child_name,
+                                )
+                            # Regra 2: Quem esta no mouse/teclado manda! Se o teclado/mouse foi usado nos ultimos 15s, ignora troca.
+                            elif tracker.current_child_id is not None and idle_sec < 15.0:
+                                logger.debug(
+                                    "Filho ativo (%s) usando mouse/teclado ativamente (idle=%.1fs). Troca ignorada.",
+                                    tracker.current_child_name,
+                                    idle_sec,
+                                )
+                            # Regra 3: Se ha mais de 1 pessoa no enquadramento (irmaos passando atras ou assistindo junto), nao troca.
+                            elif tracker.current_child_id is not None and face_count > 1:
+                                logger.info(
+                                    "Multiplos rostos (%d) detectados no enquadramento. Troca de perfil em sessao ignorada.",
+                                    face_count,
+                                )
+                            # Regra 4: Troca legitima para novo filho que assumiu o computador sozinho apos pausa
+                            elif cid != tracker.current_child_id:
                                 logger.info(
                                     "Troca automatica de perfil em sessao: de %s (ID %s) para %s (ID %d)",
                                     tracker.current_child_name,
@@ -663,6 +692,7 @@ def run_agent():
                                 )
                                 tracker.switch_child(cid, cname)
                                 last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
+                                session_active_since_mono = time.monotonic()
                                 trigger_welcome_screen()
                                 show_toast(
                                     "👋 Perfil Alternado",
@@ -673,41 +703,47 @@ def run_agent():
                                 )
                     elif status in ("DENY_QUOTA", "DENY_CURFEW"):
                         denied_cid = pipe_resp.get("child_id") or data_block.get("child_id")
-                        if denied_cid is not None and denied_cid != tracker.current_child_id:
+                        detected_ids = pipe_resp.get("detected_ids") or data_block.get("detected_ids", [])
+                        face_count = pipe_resp.get("face_count") or data_block.get("face_count", 1)
+                        if (
+                            denied_cid is not None
+                            and tracker.current_child_id not in detected_ids
+                            and face_count <= 1
+                            and idle_sec >= 15.0
+                            and denied_cid != tracker.current_child_id
+                        ):
                             msg = data_block.get("message", "Sem tempo restante hoje")
                             cname = pipe_resp.get("child_name") or data_block.get("child_name", "Filho")
-                            logger.warning("%s reconhecido mas com quota zerada. Bloqueando sessao...", cname)
+                            logger.warning("%s reconhecido sozinho com quota zerada. Bloqueando sessao...", cname)
                             show_toast("🔒 FaceControl Kids", f"{cname}: {msg}. O computador foi bloqueado.", icon="🔒", color="#F38BA8")
                             time.sleep(1.2)
                             lock_current_session()
 
-                # Agenda a proxima checagem facial (se intervalo de 2 minutos decorrido)
+                # Agenda a proxima checagem facial
                 identifier.trigger_if_due()
-            # Checar se horario de dormir / curfew esta ativo
-            is_curfew, curfew_msg = store.is_curfew_active()
-            if is_curfew and state is SessionState.ACTIVE:
-                logger.warning("Horario de dormir ativo: %s. Bloqueando sessao...", curfew_msg)
-                show_toast(
-                    "🌙 Horário de Dormir",
-                    f"{curfew_msg} O computador foi bloqueado. Até amanhã!",
-                    icon="🌙",
-                    color="#CBA6F7",
-                    duration_ms=4500,
-                )
-                time.sleep(1.2)
-                try:
-                    lock_current_session()
-                except Exception as e:
-                    logger.error("Erro ao bloquear no horario de dormir: %s", e)
-                time.sleep(5.0)
-                last_active_time = time.monotonic()
-                continue
 
-            if state is SessionState.ACTIVE:
-                # 1. Checar inatividade fisica (teclado e mouse)
-                idle_sec = get_user_idle_seconds()
-                lock_sec, warn_sec = get_inactivity_settings()
+                # Checar se horario de dormir / curfew esta ativo
+                is_curfew, curfew_msg = store.is_curfew_active()
+                if is_curfew:
+                    logger.warning("Horario de dormir ativo: %s. Bloqueando sessao...", curfew_msg)
+                    show_toast(
+                        "🌙 Horário de Dormir",
+                        f"{curfew_msg} O computador foi bloqueado. Até amanhã!",
+                        icon="🌙",
+                        color="#CBA6F7",
+                        duration_ms=4500,
+                    )
+                    time.sleep(1.2)
+                    try:
+                        lock_current_session()
+                    except Exception as e:
+                        logger.error("Erro ao bloquear no horario de dormir: %s", e)
+                    time.sleep(5.0)
+                    last_active_time = time.monotonic()
+                    session_active_since_mono = time.monotonic()
+                    continue
 
+                # Checar inatividade fisica (teclado e mouse)
                 if idle_sec >= lock_sec:
                     logger.info("Inatividade de %.1fs detectada (limite %.0fs). Bloqueando sessao...", idle_sec, lock_sec)
                     # Reembolsa o tempo de inatividade para a crianca nao perder saldo
@@ -722,6 +758,7 @@ def run_agent():
                     except Exception as e:
                         logger.error("Erro ao solicitar bloqueio por inatividade: %s", e)
                     inactivity_warned = False
+                    session_active_since_mono = time.monotonic()
                     time.sleep(3.0)
                     last_active_time = time.monotonic()
                     continue
@@ -754,9 +791,11 @@ def run_agent():
                         # Se bloqueou, aguarda um pouco para estabilizar o lock
                         time.sleep(5.0)
                         last_active_time = time.monotonic()
+                        session_active_since_mono = time.monotonic()
             else:
                 # Sessao bloqueada (Win+L) ou suspensa: NAO cobra tempo!
                 last_active_time = time.monotonic()
+                session_active_since_mono = time.monotonic()
 
         except Exception as e:
             logger.error("Erro no loop de rastreamento do FilhosAgent: %s", e)

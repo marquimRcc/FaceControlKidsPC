@@ -167,6 +167,8 @@ class FaceAuthenticator:
             consecutive_matches = 0
             best_frame = None
             best_face_box = None
+            best_detected_ids: list[int] = []
+            best_face_count: int = 0
 
             try:
                 while time.monotonic() < deadline:
@@ -177,22 +179,31 @@ class FaceAuthenticator:
 
                     faces = rec.faces(frame)
                     if len(faces) >= 1:
-                        # Prioriza o rosto mais proximo da camera (maior area)
-                        largest_face = max(faces, key=lambda f: float(f[2]) * float(f[3]))
-                        features = rec.features(frame, largest_face)
-                        candidate_id, score = rec.identify(
-                            features, references, threshold=0.38, min_margin=0.04
-                        )
+                        # Ordena os rostos detectados do maior (mais proximo) para o menor
+                        sorted_faces = sorted(faces, key=lambda f: float(f[2]) * float(f[3]), reverse=True)
+                        current_frame_detected_ids = []
+                        for f_box in sorted_faces[:3]:
+                            feat = rec.features(frame, f_box)
+                            cid, sc = rec.identify(feat, references, threshold=0.38, min_margin=0.04)
+                            if cid is not None and cid not in current_frame_detected_ids:
+                                current_frame_detected_ids.append(cid)
+
+                        largest_face = sorted_faces[0]
+                        candidate_id = current_frame_detected_ids[0] if current_frame_detected_ids else None
+
                         if candidate_id is not None:
                             logger.info(
-                                "Rosto candidato detectado: %s (score=%.3f)",
+                                "Rosto candidato detectado: %s (rostos=%d, detectados=%s)",
                                 names.get(candidate_id, candidate_id),
-                                score or 0.0,
+                                len(faces),
+                                current_frame_detected_ids,
                             )
                             if candidate_id == best_candidate:
                                 consecutive_matches += 1
                                 best_frame = frame.copy()
                                 best_face_box = largest_face
+                                best_detected_ids = list(current_frame_detected_ids)
+                                best_face_count = len(faces)
                                 if consecutive_matches >= 2:
                                     break
                             else:
@@ -200,6 +211,8 @@ class FaceAuthenticator:
                                 consecutive_matches = 1
                                 best_frame = frame.copy()
                                 best_face_box = largest_face
+                                best_detected_ids = list(current_frame_detected_ids)
+                                best_face_count = len(faces)
                         else:
                             best_candidate = None
                             consecutive_matches = 0
@@ -233,6 +246,8 @@ class FaceAuthenticator:
                     "child_name": child_name,
                     "remaining": 0,
                     "message": "Tempo diario esgotado",
+                    "detected_ids": best_detected_ids or ([best_candidate] if best_candidate else []),
+                    "face_count": best_face_count or 1,
                 }
 
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
@@ -271,6 +286,8 @@ class FaceAuthenticator:
                 "remaining": remaining_seconds,
                 "user": "Filhos",
                 "password": "1",
+                "detected_ids": best_detected_ids or ([best_candidate] if best_candidate else []),
+                "face_count": best_face_count or 1,
             }
         finally:
             store.close()
