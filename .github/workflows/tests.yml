@@ -204,31 +204,45 @@ jobs:
               $result.ChildEffectiveTokenTested) {
             throw 'Disposable ACL rollback safety contract failed'
           }
-      - name: Windows-only pilot launcher parse and three-child status smoke test
+      - name: Windows-only real adult launcher syntax and dynamic profiles smoke
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'scripts/Iniciar-Piloto-Filhos.ps1').Path,
-            [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -ne 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            throw "PowerShell pilot launcher parse failed"
+          foreach ($script in @('scripts/Iniciar-Piloto-Filhos.ps1',
+                                'scripts/Iniciar-Teste-Adulto-Filhos.ps1')) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -ne 0) {
+              throw "PowerShell syntax invalid in $script : $($parseErrors[0].Message)"
+            }
           }
-          $data = Join-Path $env:RUNNER_TEMP 'facekids-children-ci.sqlite3'
+          $data = Join-Path $env:RUNNER_TEMP 'facekids-children-dynamic-ci.sqlite3'
           try {
+            python -m facekids.children_pilot --database $data add-profile 'Crianca 1'
+            if ($LASTEXITCODE -ne 0) { throw 'Single-profile enrollment failed' }
             $lines = @(python -m facekids.children_pilot --database $data status)
-            if ($LASTEXITCODE -ne 0) { throw 'Children CLI status failed' }
+            if ($LASTEXITCODE -ne 0 -or @($lines | Where-Object { $_.StartsWith('Crianca ') }).Count -ne 1) {
+              throw "Single profile status failed: $($lines -join '; ')"
+            }
+            foreach ($idx in 2..5) {
+              python -m facekids.children_pilot --database $data add-profile "Crianca $idx"
+              if ($LASTEXITCODE -ne 0) { throw "Profile creation failed: $idx" }
+            }
+            $lines = @(python -m facekids.children_pilot --database $data status)
+            if ($LASTEXITCODE -ne 0) { throw 'Multi-profile status failed' }
             $recognized = @($lines | Where-Object {
               $_.StartsWith('Crianca ') -and
               $_.Contains('0 amostras; 120 minutos restantes hoje.')
             })
-            if ($recognized.Count -ne 3) {
-              throw "Unexpected pilot profiles: $($lines -join '; ')"
+            if ($recognized.Count -ne 5) {
+              throw "Expected 5 individually configurable profiles: $($lines -join '; ')"
             }
           } finally {
-            Remove-Item -LiteralPath $data -Force -ErrorAction SilentlyContinue
+            foreach ($extension in @('', '-wal', '-shm')) {
+              Remove-Item -LiteralPath ($data + $extension) -Force -ErrorAction SilentlyContinue
+            }
           }
