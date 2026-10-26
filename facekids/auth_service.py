@@ -361,13 +361,26 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                     events.write(json.dumps(evidence) + "\n")
             write_status(status_file, **evidence)
 
-    h_mutex = kernel32.CreateMutexW(None, False, AUTH_MUTEX_NAME)
+    sa = create_security_attributes()
+    h_mutex = kernel32.CreateMutexW(
+        ctypes.byref(sa) if (sa and sa.lpSecurityDescriptor) else None,
+        False,
+        AUTH_MUTEX_NAME,
+    )
     if not h_mutex:
-        logger.error("Nao foi possivel abrir mutex (erro %d).", kernel32.GetLastError())
+        err = kernel32.GetLastError()
+        if err == 5:  # ERROR_ACCESS_DENIED: Outra instancia possui o mutex com DACL restrita ou SYSTEM
+            report("duplicate")
+            logger.info("Outra instancia do autenticador ja esta em execucao (mutex existente, erro 5).")
+            if sa is not None and sa.lpSecurityDescriptor:
+                kernel32.LocalFree(sa.lpSecurityDescriptor)
+            return 20
+        logger.error("Nao foi possivel abrir mutex (erro %d).", err)
+        if sa is not None and sa.lpSecurityDescriptor:
+            kernel32.LocalFree(sa.lpSecurityDescriptor)
         return 1
     # Keep the existence lock for exactly this instance's lifetime. Check BEFORE
     # touching the webcam, so retries cannot steal an interactive worker's camera.
-    sa = None
     try:
         if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
             report("duplicate")
@@ -385,7 +398,6 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             _ = auth.recognizer
         except Exception as e:
             logger.warning("Aviso ao pre-aquecer modelos faciais: %s", e)
-        sa = create_security_attributes()
         _serve_connections(kernel32, sa, auth, camera_backend, once, report)
         return 0
     finally:

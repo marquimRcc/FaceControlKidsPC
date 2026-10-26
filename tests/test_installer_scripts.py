@@ -79,6 +79,9 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("set TK_LIBRARY=", inst)
         self.assertIn("FaceKidsFilhosAgent.vbs", inst)
         self.assertIn("Startup solicitado para %USERNAME%", inst)
+        # Ativacao automatica da tarefa de boot (SYSTEM)
+        self.assertIn("Ativar-Desbloqueio-No-Boot.ps1", inst)
+        self.assertTrue((self.root / "Ativar-Desbloqueio-No-Boot.bat").exists())
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:

@@ -241,6 +241,19 @@ try {
     Write-Host "A conta Filhos ainda nao possui sessao; o agente iniciara no proximo logon." -ForegroundColor DarkGray
 }
 
+# 8. Configurar e ativar autenticador facial no Boot (SYSTEM / antes do logon)
+try {
+    Write-Host "Configurando servico facial no Boot (SYSTEM)..." -ForegroundColor Yellow
+    $bootScript = Join-Path $PSScriptRoot 'Ativar-Desbloqueio-No-Boot.ps1'
+    if (Test-Path -LiteralPath $bootScript) {
+        & $bootScript
+        Write-Host "Desbloqueio facial no boot ativado com sucesso!" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "Aviso ao configurar boot facial: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    Write-Host "A inicializacao interativa via FaceKidsAuthService continuara funcionando." -ForegroundColor DarkGray
+}
+
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "     INSTALACAO E ATUALIZACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green

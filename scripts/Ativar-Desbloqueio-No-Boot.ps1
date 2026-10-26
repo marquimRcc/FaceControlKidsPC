@@ -27,12 +27,19 @@ if ($Desativar) {
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $models = Join-Path $root 'models'
 $dataDir = 'C:\ProgramData\FaceKids'
+$dbFile = Join-Path $dataDir 'criancas.sqlite3'
+if (-not (Test-Path -LiteralPath $dbFile)) {
+    if (-not (Test-Path $dataDir)) {
+        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+    }
+    & $python -c "import facekids.storage, pathlib; s = facekids.storage.Storage(pathlib.Path('$dbFile')); s.close()"
+}
 $required = @(
     $python,
     (Join-Path $root 'facekids\boot_auth.py'),
     (Join-Path $models 'face_detection_yunet_2023mar.onnx'),
     (Join-Path $models 'face_recognition_sface_2021dec.onnx'),
-    (Join-Path $dataDir 'criancas.sqlite3'),
+    $dbFile,
     (Join-Path $dataDir 'FaceKidsCredentialProvider.dll')
 )
 foreach ($file in $required) {
@@ -61,6 +68,7 @@ $action = New-ScheduledTaskAction -Execute $python -WorkingDirectory $root -Argu
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -Priority 4 `
     -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `

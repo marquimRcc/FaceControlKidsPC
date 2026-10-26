@@ -95,6 +95,16 @@ class BootAuthTests(unittest.TestCase):
         probe.assert_not_called()
         kernel.CloseHandle.assert_called_once_with(0x100000042)
 
+    def test_duplicate_access_denied_mutex_exits_cleanly_code_20(self):
+        kernel = MagicMock()
+        kernel.CreateMutexW.return_value = 0
+        kernel.GetLastError.return_value = 5  # ERROR_ACCESS_DENIED
+        with patch.object(ctypes, "windll", types.SimpleNamespace(kernel32=kernel), create=True), \
+             patch.object(auth_service, "probe_camera_access") as probe:
+            self.assertEqual(auth_service.run_pipe_server(), 20)
+        probe.assert_not_called()
+        kernel.CloseHandle.assert_not_called()
+
     def test_camera_failure_releases_mutex_for_interactive_fallback(self):
         kernel = MagicMock()
         kernel.CreateMutexW.return_value = 42
