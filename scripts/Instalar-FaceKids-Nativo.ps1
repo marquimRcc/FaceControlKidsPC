@@ -196,7 +196,8 @@ if (-not (Test-Path -LiteralPath $configJson)) {
     $defaultSettings = @{
         inactivity_lock_seconds = 120
         inactivity_warn_seconds = 100
-        description = 'FaceControlKidsPC - Bloqueio automatico por inatividade da conta Filhos (2 min)'
+        face_check_interval_seconds = 120
+        description = 'FaceControlKidsPC - Bloqueio por inatividade e checagem facial periodica (2 min)'
     }
     $defaultSettings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $configJson -Encoding UTF8 -Force
     Write-Host "Regra de bloqueio por inatividade (2 min) configurada em $configJson" -ForegroundColor Green

@@ -63,6 +63,7 @@ LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 CONFIG_SETTINGS_FILE = application_data_dir() / "configuracoes.json"
 DEFAULT_INACTIVITY_LOCK_SECONDS = 120.0  # 2 minutos de inatividade sem teclado/mouse
 DEFAULT_INACTIVITY_WARN_SECONDS = 100.0  # Aviso aos 1m40s
+DEFAULT_FACE_CHECK_INTERVAL_SECONDS = 120.0  # Verificacao facial periodica a cada 2 minutos
 
 
 def get_inactivity_settings() -> Tuple[float, float]:
@@ -81,6 +82,19 @@ def get_inactivity_settings() -> Tuple[float, float]:
         except Exception:
             pass
     return max(30.0, lock_sec), max(10.0, warn_sec)
+
+
+def get_face_check_interval() -> float:
+    """Retorna o intervalo em segundos para a verificacao facial periodica em sessao."""
+    interval = DEFAULT_FACE_CHECK_INTERVAL_SECONDS
+    if CONFIG_SETTINGS_FILE.exists():
+        try:
+            data = json.loads(CONFIG_SETTINGS_FILE.read_text(encoding="utf-8"))
+            if "face_check_interval_seconds" in data:
+                interval = float(data["face_check_interval_seconds"])
+        except Exception:
+            pass
+    return max(15.0, interval)
 
 
 def get_user_idle_seconds() -> float:
@@ -572,7 +586,8 @@ def run_agent():
         )
 
     last_active_time = time.monotonic()
-    identifier = InSessionFaceIdentifier(interval_seconds=15.0)
+    check_interval = get_face_check_interval()
+    identifier = InSessionFaceIdentifier(interval_seconds=check_interval)
     today = date.today().isoformat()
     inactivity_warned = False
 
@@ -625,27 +640,49 @@ def run_agent():
             if state is SessionState.LOCKED:
                 dismiss_welcome_screen()
 
-            # Se em modo UNIDENTIFIED e sessao ativa, verifica resultado e agenda identificacao em background
-            if tracker.current_child_id is None and state is SessionState.ACTIVE:
+            # C. Verificacao facial periodica em sessao ativa (a cada 2 minutos)
+            if state is SessionState.ACTIVE:
                 pipe_resp = identifier.check_result()
                 if pipe_resp:
                     status = pipe_resp.get("status")
+                    data_block = pipe_resp.get("data", {})
                     if status == "ALLOW":
-                        cid = pipe_resp.get("child_id") or pipe_resp.get("data", {}).get("child_id")
-                        cname = pipe_resp.get("child_name") or pipe_resp.get("data", {}).get("child_name", f"Crianca {cid}")
+                        cid = pipe_resp.get("child_id") or data_block.get("child_id")
+                        cname = pipe_resp.get("child_name") or data_block.get("child_name", f"Crianca {cid}")
                         if cid is not None:
-                            logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
-                            tracker.switch_child(int(cid), str(cname))
-                            last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
-                            trigger_welcome_screen()
+                            cid = int(cid)
+                            cname = str(cname)
+                            # Se outra crianca for detectada na frente do computador:
+                            if cid != tracker.current_child_id:
+                                logger.info(
+                                    "Troca automatica de perfil em sessao: de %s (ID %s) para %s (ID %d)",
+                                    tracker.current_child_name,
+                                    tracker.current_child_id,
+                                    cname,
+                                    cid,
+                                )
+                                tracker.switch_child(cid, cname)
+                                last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
+                                trigger_welcome_screen()
+                                show_toast(
+                                    "👋 Perfil Alternado",
+                                    f"Olá, {cname}! Seu perfil foi reconhecido e carregado.",
+                                    icon="👤",
+                                    color="#A6E3A1",
+                                    duration_ms=6000,
+                                )
                     elif status in ("DENY_QUOTA", "DENY_CURFEW"):
-                        msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
-                        show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
-                        time.sleep(1.2)
-                        lock_current_session()
+                        denied_cid = pipe_resp.get("child_id") or data_block.get("child_id")
+                        if denied_cid is not None and denied_cid != tracker.current_child_id:
+                            msg = data_block.get("message", "Sem tempo restante hoje")
+                            cname = pipe_resp.get("child_name") or data_block.get("child_name", "Filho")
+                            logger.warning("%s reconhecido mas com quota zerada. Bloqueando sessao...", cname)
+                            show_toast("🔒 FaceControl Kids", f"{cname}: {msg}. O computador foi bloqueado.", icon="🔒", color="#F38BA8")
+                            time.sleep(1.2)
+                            lock_current_session()
 
-                if tracker.current_child_id is None:
-                    identifier.trigger_if_due()
+                # Agenda a proxima checagem facial (se intervalo de 2 minutos decorrido)
+                identifier.trigger_if_due()
             # Checar se horario de dormir / curfew esta ativo
             is_curfew, curfew_msg = store.is_curfew_active()
             if is_curfew and state is SessionState.ACTIVE:

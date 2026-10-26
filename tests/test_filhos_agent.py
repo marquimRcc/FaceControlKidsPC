@@ -246,6 +246,53 @@ class TestFilhosAgent(unittest.TestCase):
         self.assertEqual(self.store.remaining(self.child_id, today), initial_rem)
 
 
+    def test_face_check_interval_settings(self):
+        from facekids.filhos_agent import get_face_check_interval
+        with tempfile.TemporaryDirectory() as td:
+            dummy_cfg = Path(td) / "configuracoes.json"
+            with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
+                interval = get_face_check_interval()
+                self.assertEqual(interval, 120.0)
+
+                dummy_cfg.write_text(json.dumps({
+                    "face_check_interval_seconds": 60.0
+                }), encoding="utf-8")
+                interval = get_face_check_interval()
+                self.assertEqual(interval, 60.0)
+
+    def test_in_session_child_switch_different_child(self):
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        # Simula resposta do pipe detectando outra crianca (ex: Ana, ID 99)
+        pipe_resp = {"status": "ALLOW", "child_id": 99, "child_name": "Ana"}
+        new_cid = pipe_resp["child_id"]
+        new_cname = pipe_resp["child_name"]
+
+        if new_cid != tracker.current_child_id:
+            tracker.switch_child(new_cid, new_cname)
+
+        self.assertEqual(tracker.current_child_id, 99)
+        self.assertEqual(tracker.current_child_name, "Ana")
+
+    def test_in_session_child_switch_same_child_noop(self):
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+        tracker.warned_10m = True
+
+        # Se o mesmo filho for reconhecido, nao re-inicializa nem reseta avisos
+        pipe_resp = {"status": "ALLOW", "child_id": self.child_id, "child_name": "Lucas"}
+        new_cid = pipe_resp["child_id"]
+
+        if new_cid != tracker.current_child_id:
+            tracker.switch_child(new_cid, pipe_resp["child_name"])
+
+        self.assertEqual(tracker.current_child_id, self.child_id)
+        self.assertTrue(tracker.warned_10m)
+
+
 if __name__ == "__main__":
+
 
     unittest.main()
