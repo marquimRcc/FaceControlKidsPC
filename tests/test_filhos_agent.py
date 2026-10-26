@@ -207,5 +207,45 @@ class TestFilhosAgent(unittest.TestCase):
         self.assertIn(123, fake_kernel32.closed)
 
 
+
+    def test_inactivity_settings_default_and_custom(self):
+        from facekids.filhos_agent import get_inactivity_settings
+        with tempfile.TemporaryDirectory() as td:
+            dummy_cfg = Path(td) / "configuracoes.json"
+            with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
+                lock_s, warn_s = get_inactivity_settings()
+                self.assertEqual(lock_s, 120.0)
+                self.assertEqual(warn_s, 100.0)
+
+                dummy_cfg.write_text(json.dumps({
+                    "inactivity_lock_seconds": 180,
+                    "inactivity_warn_seconds": 150
+                }), encoding="utf-8")
+                lock_s, warn_s = get_inactivity_settings()
+                self.assertEqual(lock_s, 180.0)
+                self.assertEqual(warn_s, 150.0)
+
+    def test_get_user_idle_seconds(self):
+        from facekids.filhos_agent import get_user_idle_seconds
+        idle = get_user_idle_seconds()
+        self.assertIsInstance(idle, float)
+        self.assertGreaterEqual(idle, 0.0)
+
+    def test_inactivity_refund_logic(self):
+        from datetime import date
+        today = date.today().isoformat()
+        initial_rem = self.store.remaining(self.child_id, today)
+
+        # Simula 120 segundos debitados enquanto a crianca se afastou
+        self.store.charge(self.child_id, 120.0, today)
+        self.assertEqual(self.store.remaining(self.child_id, today), initial_rem - 120)
+
+        # Regra de reembolso de inatividade restaura o saldo integral
+        refund = 120.0
+        self.store.refund(self.child_id, refund, today)
+        self.assertEqual(self.store.remaining(self.child_id, today), initial_rem)
+
+
 if __name__ == "__main__":
+
     unittest.main()

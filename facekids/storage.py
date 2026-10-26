@@ -265,6 +265,17 @@ class Storage:
             """, (person_id,day,float(seconds)))
         return self.used(person_id,day)
 
+    def refund(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
+        if seconds < 0:
+            raise ValueError("Não é permitido reembolsar tempo negativo")
+        day = day or date.today().isoformat()
+        with self.db:
+            self.db.execute("""
+                UPDATE daily_usage SET seconds = MAX(0.0, seconds - ?)
+                WHERE person_id=? AND day=?
+            """, (float(seconds), person_id, day))
+        return self.used(person_id, day)
+
     def bonus(self, person_id: int, day: Optional[str] = None) -> int:
         row=self.db.execute("SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
                             (person_id, day or date.today().isoformat())).fetchone()

@@ -40,6 +40,11 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(db.remaining(a,"2026-10-20"),7200)
             db.add_embedding(a,np.ones(128,dtype=np.float32))
             self.assertEqual(db.embeddings()[0][0],a)
+            # Testa reembolso de inatividade
+            db.refund(a, 39, "2026-10-19")
+            self.assertEqual(db.remaining(a, "2026-10-19"), 7178)
+            with self.assertRaises(ValueError):
+                db.refund(a, -10, "2026-10-19")
             db.close()
 
     def test_bonus_total_capped_per_child_and_day(self):

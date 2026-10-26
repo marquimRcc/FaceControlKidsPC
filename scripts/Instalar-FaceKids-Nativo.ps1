@@ -189,6 +189,18 @@ $programsConfig = @{
     )
 }
 $programsConfig | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $programDataDir 'programas_inicializar.json') -Encoding UTF8 -Force
+
+# Configuracao de regra do sistema: Bloqueio automatico por inatividade da conta Filhos (2 minutos)
+$configJson = Join-Path $programDataDir 'configuracoes.json'
+if (-not (Test-Path -LiteralPath $configJson)) {
+    $defaultSettings = @{
+        inactivity_lock_seconds = 120
+        inactivity_warn_seconds = 100
+        description = 'FaceControlKidsPC - Bloqueio automatico por inatividade da conta Filhos (2 min)'
+    }
+    $defaultSettings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $configJson -Encoding UTF8 -Force
+    Write-Host "Regra de bloqueio por inatividade (2 min) configurada em $configJson" -ForegroundColor Green
+}
 $agentBat = "C:\ProgramData\FaceKids\iniciar-filhos-agent.bat"
 $agentContent = @"
 @echo off

@@ -60,6 +60,48 @@ except Exception:
 logger = logging.getLogger("FilhosAgent")
 
 LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
+CONFIG_SETTINGS_FILE = application_data_dir() / "configuracoes.json"
+DEFAULT_INACTIVITY_LOCK_SECONDS = 120.0  # 2 minutos de inatividade sem teclado/mouse
+DEFAULT_INACTIVITY_WARN_SECONDS = 100.0  # Aviso aos 1m40s
+
+
+def get_inactivity_settings() -> Tuple[float, float]:
+    """Retorna (lock_seconds, warn_seconds) a partir de configuracoes.json ou padroes do sistema."""
+    lock_sec = DEFAULT_INACTIVITY_LOCK_SECONDS
+    warn_sec = DEFAULT_INACTIVITY_WARN_SECONDS
+    if CONFIG_SETTINGS_FILE.exists():
+        try:
+            data = json.loads(CONFIG_SETTINGS_FILE.read_text(encoding="utf-8"))
+            if "inactivity_lock_seconds" in data:
+                lock_sec = float(data["inactivity_lock_seconds"])
+            if "inactivity_warn_seconds" in data:
+                warn_sec = float(data["inactivity_warn_seconds"])
+            else:
+                warn_sec = max(10.0, lock_sec - 20.0)
+        except Exception:
+            pass
+    return max(30.0, lock_sec), max(10.0, warn_sec)
+
+
+def get_user_idle_seconds() -> float:
+    """Retorna quantos segundos a sessao esta sem interacao fisica de mouse ou teclado."""
+    if sys.platform != "win32":
+        return 0.0
+    try:
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+        lii = LASTINPUTINFO()
+        lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+        user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
+        kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+        if user32 and kernel32 and hasattr(user32, "GetLastInputInfo"):
+            if user32.GetLastInputInfo(ctypes.byref(lii)):
+                millis = kernel32.GetTickCount() - lii.dwTime
+                return max(0.0, millis / 1000.0)
+    except Exception:
+        pass
+    return 0.0
 
 
 def show_toast(
@@ -532,6 +574,7 @@ def run_agent():
     last_active_time = time.monotonic()
     identifier = InSessionFaceIdentifier(interval_seconds=15.0)
     today = date.today().isoformat()
+    inactivity_warned = False
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
 
@@ -624,6 +667,40 @@ def run_agent():
                 continue
 
             if state is SessionState.ACTIVE:
+                # 1. Checar inatividade fisica (teclado e mouse)
+                idle_sec = get_user_idle_seconds()
+                lock_sec, warn_sec = get_inactivity_settings()
+
+                if idle_sec >= lock_sec:
+                    logger.info("Inatividade de %.1fs detectada (limite %.0fs). Bloqueando sessao...", idle_sec, lock_sec)
+                    # Reembolsa o tempo de inatividade para a crianca nao perder saldo
+                    if tracker.current_child_id is not None and idle_sec > 0:
+                        refund = min(idle_sec, lock_sec)
+                        store.refund(tracker.current_child_id, refund, today)
+                        rem = store.remaining(tracker.current_child_id, today)
+                        tracker.update_balance(rem)
+                        logger.info("Reembolsados %.0fs de inatividade para %s. Saldo ajustado: %.0fs", refund, tracker.current_child_name, rem)
+                    try:
+                        lock_current_session()
+                    except Exception as e:
+                        logger.error("Erro ao solicitar bloqueio por inatividade: %s", e)
+                    inactivity_warned = False
+                    time.sleep(3.0)
+                    last_active_time = time.monotonic()
+                    continue
+                elif idle_sec >= warn_sec and not inactivity_warned:
+                    inactivity_warned = True
+                    logger.info("Aviso de inatividade: %.1fs sem interacao", idle_sec)
+                    show_toast(
+                        "⚠️ Ausência Detectada",
+                        "Mexa o mouse ou teclado para continuar usando o computador.",
+                        icon="🖱️",
+                        color="#F9E2AF",
+                        duration_ms=8000,
+                    )
+                elif idle_sec < warn_sec:
+                    inactivity_warned = False
+
                 now_mono = time.monotonic()
                 delta = now_mono - last_active_time
                 last_active_time = now_mono
