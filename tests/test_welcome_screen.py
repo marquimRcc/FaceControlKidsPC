@@ -146,6 +146,79 @@ class TestWelcomeScreen(unittest.TestCase):
                 self.assertEqual(name, "Filho(a)")
                 self.assertEqual(rem, 0)
 
+    def test_welcome_window_topmost_drop(self):
+        mock_root = Mock()
+        app = welcome_screen.WelcomeWindow.__new__(welcome_screen.WelcomeWindow)
+        app.root = mock_root
+        app._drop_topmost()
+        mock_root.attributes.assert_called_with("-topmost", False)
+
+    def test_welcome_window_minimize(self):
+        mock_root = Mock()
+        app = welcome_screen.WelcomeWindow.__new__(welcome_screen.WelcomeWindow)
+        app.root = mock_root
+        app.minimize()
+        mock_root.update_idletasks.assert_called_once()
+        mock_root.overrideredirect.assert_called_with(False)
+        mock_root.iconify.assert_called_once()
+
+    def test_welcome_window_switch_child(self):
+        mock_root = Mock()
+        mock_root.state.return_value = "normal"
+        mock_root.after.return_value = "job_123"
+
+        app = welcome_screen.WelcomeWindow.__new__(welcome_screen.WelcomeWindow)
+        app.root = mock_root
+        app.child_id = 2
+        app.child_name = "Crianca 2"
+        app.remaining_seconds = 1000
+        app.title_label = Mock()
+        app.sub_label = Mock()
+        app.time_icon_label = Mock()
+        app.bar_canvas = Mock()
+        app.avatar_frame = Mock()
+        app.photo_image = None
+        app.bar_fill = "#A6E3A1"
+        app.bg_card = "#181825"
+        app.accent_blue = "#38BDF8"
+        app.accent_cyan = "#89DCEB"
+
+        with patch.object(app, "_render_avatar") as mock_render, \
+             patch.object(app, "_update_quota_bar") as mock_bar:
+            app.switch_child(3, "Elena", 7200)
+            self.assertEqual(app.child_id, 3)
+            self.assertEqual(app.child_name, "Elena")
+            self.assertEqual(app.remaining_seconds, 7200)
+            app.title_label.config.assert_called_with(text="Olá, Elena! 👋")
+            mock_render.assert_called_once()
+            mock_bar.assert_called_once()
+            mock_root.attributes.assert_called_with("-topmost", True)
+            mock_root.lift.assert_called_once()
+            mock_root.after.assert_called_with(30000, app._drop_topmost)
+
+    def test_welcome_window_check_for_child_switch(self):
+        with tempfile.TemporaryDirectory() as td:
+            unlock_file = Path(td) / "last_unlock.json"
+            now = time.time()
+            unlock_file.write_text(
+                json.dumps({
+                    "child_id": 4,
+                    "child_name": "Ana",
+                    "remaining_seconds": 5400,
+                    "timestamp": now + 10,
+                }),
+                encoding="utf-8",
+            )
+            app = welcome_screen.WelcomeWindow.__new__(welcome_screen.WelcomeWindow)
+            app.child_id = 2
+            app.child_name = "Crianca 2"
+            app.remaining_seconds = 1000
+            app._last_seen_ts = now
+            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
+                 patch.object(app, "switch_child") as mock_switch:
+                app._check_for_child_switch()
+                mock_switch.assert_called_once_with(4, "Ana", 5400)
+
 
 if __name__ == "__main__":
     unittest.main()

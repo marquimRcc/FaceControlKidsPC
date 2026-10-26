@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from facekids.admin_dashboard import AdminDashboard, is_admin_account, time_format_hm
-from facekids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files
+from facekids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files, get_child_avatar_path
 from facekids.storage import Storage
 
 
@@ -93,6 +93,22 @@ class TestAdminDashboard(unittest.TestCase):
             store.set_parent_pin(None)
             self.assertIsNone(store.get_parent_pin())
             store.close()
+
+    def test_get_child_avatar_path_converts_jpg_to_png(self):
+        import cv2
+        import numpy as np
+        with tempfile.TemporaryDirectory() as td:
+            avatar_dir = Path(td) / "fotos"
+            avatar_dir.mkdir(parents=True, exist_ok=True)
+            jpg_file = avatar_dir / "crianca_9.jpg"
+            dummy = np.zeros((100, 100, 3), dtype=np.uint8)
+            cv2.imwrite(str(jpg_file), dummy)
+
+            with patch("facekids.avatar_utils.AVATAR_DIR", avatar_dir):
+                res = get_child_avatar_path(9)
+                self.assertIsNotNone(res)
+                self.assertTrue(res.name.endswith(".png"))
+                self.assertTrue(res.exists())
 
 
 if __name__ == "__main__":

@@ -237,10 +237,14 @@ class FaceAuthenticator:
 
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
 
-            # Salva foto recortada de avatar da crianca reconhecida
+            # Salva avatar apenas se a crianca ainda nao tiver foto oficial/cadastrada
             if best_frame is not None:
                 try:
-                    save_child_photo(best_candidate, best_frame, best_face_box)
+                    from .avatar_utils import get_child_avatar_path
+                    if not get_child_avatar_path(best_candidate):
+                        save_child_photo(best_candidate, best_frame, best_face_box)
+                    else:
+                        logger.debug("Avatar oficial ja existente para filho %d; foto preservada.", best_candidate)
                 except Exception as e:
                     logger.warning("Falha ao salvar avatar do filho: %s", e)
 

@@ -271,6 +271,7 @@ class WelcomeWindow:
         self.child_name = child_name
         self.remaining_seconds = remaining_seconds
         self.photo_image = None
+        self._last_seen_ts = time.time()
 
         # Posicionamento para arrastar janela
         self._drag_start_x = 0
@@ -280,6 +281,7 @@ class WelcomeWindow:
         self.root.title("FaceControl Kids")
         self.root.attributes("-topmost", True)
         self.root.overrideredirect(True)
+        self.root.bind("<Map>", self._on_map)
 
         # Cores modernas (Dark Card com detalhes Ciano/Azul)
         self.bg_card = "#181825"
@@ -314,7 +316,7 @@ class WelcomeWindow:
         container.bind("<Button-1>", self._start_drag)
         container.bind("<B1-Motion>", self._on_drag)
 
-        # Barra superior com botao fechar [X]
+        # Barra superior com botoes [—] minimizar e [✕] fechar
         header_bar = tk.Frame(container, bg=self.bg_card)
         header_bar.pack(fill=tk.X, padx=12, pady=(8, 0))
         header_bar.bind("<Button-1>", self._start_drag)
@@ -346,41 +348,48 @@ class WelcomeWindow:
         )
         close_btn.pack(side=tk.RIGHT)
 
-        # 1. Avatar da Crianca
-        avatar_frame = tk.Frame(container, bg=self.bg_card)
-        avatar_frame.pack(pady=(10, 6))
+        min_btn = tk.Button(
+            header_bar,
+            text="—",
+            font=("Segoe UI", 9, "bold"),
+            fg=self.text_sub,
+            bg=self.bg_card,
+            activeforeground="#FFFFFF",
+            activebackground="#313244",
+            relief=tk.FLAT,
+            cursor="hand2",
+            command=self.minimize,
+            bd=0,
+            padx=8,
+            pady=1,
+        )
+        min_btn.pack(side=tk.RIGHT, padx=(0, 4))
 
-        avatar_path = get_child_avatar_path(self.child_id) if self.child_id is not None else None
-        if avatar_path and avatar_path.exists():
-            try:
-                self.photo_image = tk.PhotoImage(file=str(avatar_path))
-                avatar_label = tk.Label(avatar_frame, image=self.photo_image, bg=self.bg_card)
-                avatar_label.pack()
-            except Exception:
-                self._draw_fallback_avatar(avatar_frame)
-        else:
-            self._draw_fallback_avatar(avatar_frame)
+        # 1. Avatar da Crianca
+        self.avatar_frame = tk.Frame(container, bg=self.bg_card)
+        self.avatar_frame.pack(pady=(10, 6))
+        self._render_avatar()
 
         # 2. Titulo e Saudacao
         salutation = f"Olá, {self.child_name}! 👋" if self.child_id is not None else "Olá! 👋"
-        title_label = tk.Label(
+        self.title_label = tk.Label(
             container,
             text=salutation,
             font=("Segoe UI", 18, "bold"),
             fg=self.text_title,
             bg=self.bg_card,
         )
-        title_label.pack(pady=(4, 2))
+        self.title_label.pack(pady=(4, 2))
 
         sub_msg = "Desbloqueio facial realizado com sucesso!" if self.child_id is not None else "Entrada por PIN ou aguardando identificação facial."
-        sub_label = tk.Label(
+        self.sub_label = tk.Label(
             container,
             text=sub_msg,
             font=("Segoe UI", 10),
             fg=self.text_sub,
             bg=self.bg_card,
         )
-        sub_label.pack(pady=(0, 14))
+        self.sub_label.pack(pady=(0, 14))
 
         # 3. Card de Tempo Restante
         quota_box = tk.Frame(container, bg=self.bg_box, highlightbackground="#313244", highlightthickness=1)
@@ -401,15 +410,9 @@ class WelcomeWindow:
         )
         self.time_icon_label.pack(pady=(10, 6))
 
-        # Barra de progresso visual (quota base: 2h = 7200s)
-        total_seconds = 7200
-        pct = max(0.0, min(1.0, self.remaining_seconds / total_seconds)) if self.child_id is not None else 0.0
-        bar_canvas = tk.Canvas(quota_box, width=320, height=8, bg=self.bar_bg, highlightthickness=0)
-        bar_canvas.pack(pady=(0, 10))
-        fill_width = int(320 * pct)
-        if fill_width > 0:
-            bar_color = self.bar_fill if pct > 0.25 else "#F38BA8"
-            bar_canvas.create_rectangle(0, 0, fill_width, 8, fill=bar_color, width=0)
+        self.bar_canvas = tk.Canvas(quota_box, width=320, height=8, bg=self.bar_bg, highlightthickness=0)
+        self.bar_canvas.pack(pady=(0, 10))
+        self._update_quota_bar()
 
         # 4. Botao de Acao Principal
         btn_frame = tk.Frame(container, bg=self.bg_card)
@@ -432,18 +435,126 @@ class WelcomeWindow:
         start_btn.pack(fill=tk.X)
 
         # 5. Dica de uso informativa (o tempo ja esta contando)
-        hint_label = tk.Label(
+        self.hint_label = tk.Label(
             container,
-            text="⏱️ Seu tempo já começou a contar! Esta tela fechará em instantes ou clique em OK.",
+            text="⏱️ Seu tempo já começou a contar! Esta janela pode ser minimizada a qualquer momento.",
             font=("Segoe UI", 9),
             fg=self.text_sub,
             bg=self.bg_card,
         )
-        hint_label.pack(pady=(8, 10))
+        self.hint_label.pack(pady=(8, 10))
 
-        # Auto-fechamento em 8 segundos e contagem regressiva ao vivo
-        self._auto_close_job = self.root.after(5000, self.dismiss)
+        # Mantem em primeiro plano (topmost) por 30 segundos; apos isso aceita segundo plano
+        self._topmost_job = self.root.after(30000, self._drop_topmost)
         self._tick_countdown()
+
+    def minimize(self):
+        """Minimiza a janela para a barra de tarefas do Windows."""
+        try:
+            self.root.update_idletasks()
+            self.root.overrideredirect(False)
+            self.root.iconify()
+        except Exception as e:
+            logger.debug("Erro ao minimizar janela: %s", e)
+
+    def _on_map(self, event):
+        """Restaura borderless quando a janela for desminimizada."""
+        try:
+            if self.root.state() == "normal" and not self.root.overrideredirect():
+                self.root.overrideredirect(True)
+        except Exception:
+            pass
+
+    def _drop_topmost(self):
+        """Apos 30 segundos, deixa de forcar a janela sobre o navegador."""
+        try:
+            self.root.attributes("-topmost", False)
+            logger.info("Topmost desativado apos 30 segundos; janela agora aceita segundo plano.")
+        except Exception:
+            pass
+
+    def _render_avatar(self):
+        """Renderiza o avatar circular da foto oficial da crianca ou o fallback de inicial."""
+        if not hasattr(self, "avatar_frame") or not self.avatar_frame.winfo_exists():
+            return
+        for child in self.avatar_frame.winfo_children():
+            child.destroy()
+
+        avatar_path = get_child_avatar_path(self.child_id) if self.child_id is not None else None
+        loaded = False
+        if avatar_path and avatar_path.exists():
+            try:
+                self.photo_image = tk.PhotoImage(file=str(avatar_path))
+                avatar_label = tk.Label(self.avatar_frame, image=self.photo_image, bg=self.bg_card)
+                avatar_label.pack()
+                loaded = True
+            except Exception as e:
+                logger.warning("Falha ao carregar imagem do avatar %s: %s", avatar_path, e)
+
+        if not loaded:
+            self._draw_fallback_avatar(self.avatar_frame)
+
+    def _update_quota_bar(self):
+        """Atualiza a barra visual de progresso da quota da crianca."""
+        if not hasattr(self, "bar_canvas") or not self.bar_canvas.winfo_exists():
+            return
+        self.bar_canvas.delete("all")
+        total_seconds = 7200
+        pct = max(0.0, min(1.0, self.remaining_seconds / total_seconds)) if self.child_id is not None else 0.0
+        fill_width = int(320 * pct)
+        if fill_width > 0:
+            bar_color = self.bar_fill if pct > 0.25 else "#F38BA8"
+            self.bar_canvas.create_rectangle(0, 0, fill_width, 8, fill=bar_color, width=0)
+
+    def _check_for_child_switch(self):
+        """Detecta em tempo real se outra crianca desbloqueou o PC e atualiza a interface."""
+        if not LAST_UNLOCK_FILE.exists():
+            return
+        try:
+            data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+            current_ts = float(data.get("timestamp", 0.0))
+            if current_ts > self._last_seen_ts:
+                self._last_seen_ts = current_ts
+                new_cid = data.get("child_id")
+                new_cname = data.get("child_name")
+                new_rem = int(data.get("remaining_seconds", 0))
+                if new_cid is not None and (new_cid != self.child_id or new_cname != self.child_name):
+                    logger.info("Outra crianca reconhecida no lockscreen: %s (ID %s). Atualizando tela...", new_cname, new_cid)
+                    self.switch_child(new_cid, str(new_cname), new_rem)
+        except Exception as e:
+            logger.debug("Erro ao checar troca de crianca: %s", e)
+
+    def switch_child(self, new_child_id: int, new_child_name: str, new_remaining_seconds: int):
+        """Atualiza a tela de boas-vindas para uma nova crianca identificada sem recriar a janela."""
+        self.child_id = new_child_id
+        self.child_name = new_child_name
+        self.remaining_seconds = new_remaining_seconds
+
+        if hasattr(self, "title_label") and self.title_label.winfo_exists():
+            self.title_label.config(text=f"Olá, {self.child_name}! 👋")
+        if hasattr(self, "sub_label") and self.sub_label.winfo_exists():
+            self.sub_label.config(text="Desbloqueio facial realizado com sucesso!")
+        if hasattr(self, "time_icon_label") and self.time_icon_label.winfo_exists():
+            self.time_icon_label.config(text=f"⏱️  Tempo disponível hoje: {format_remaining_time(self.remaining_seconds)}")
+
+        self._update_quota_bar()
+        self._render_avatar()
+
+        # Restaura da minimizacao e reativa topmost por 30s para a nova crianca
+        try:
+            if self.root.state() != "normal":
+                self.root.overrideredirect(True)
+                self.root.deiconify()
+            self.root.attributes("-topmost", True)
+            self.root.lift()
+            if hasattr(self, "_topmost_job") and self._topmost_job:
+                try:
+                    self.root.after_cancel(self._topmost_job)
+                except Exception:
+                    pass
+            self._topmost_job = self.root.after(30000, self._drop_topmost)
+        except Exception as e:
+            logger.debug("Erro ao restaurar janela no switch_child: %s", e)
 
     def _start_drag(self, event):
         self._drag_start_x = event.x
@@ -462,6 +573,7 @@ class WelcomeWindow:
         canvas.create_text(45, 45, text=initial, font=("Segoe UI", 32, "bold"), fill=self.accent_cyan)
 
     def _tick_countdown(self):
+        self._check_for_child_switch()
         if self.child_id is not None and self.remaining_seconds > 0:
             self.remaining_seconds -= 1
             time_str = format_remaining_time(self.remaining_seconds)
@@ -476,12 +588,12 @@ class WelcomeWindow:
             pass
 
     def dismiss(self):
-        if hasattr(self, "_auto_close_job") and self._auto_close_job:
+        if hasattr(self, "_topmost_job") and self._topmost_job:
             try:
-                self.root.after_cancel(self._auto_close_job)
+                self.root.after_cancel(self._topmost_job)
             except Exception:
                 pass
-            self._auto_close_job = None
+            self._topmost_job = None
         if hasattr(self, "_timer_job") and self._timer_job:
             try:
                 self.root.after_cancel(self._timer_job)

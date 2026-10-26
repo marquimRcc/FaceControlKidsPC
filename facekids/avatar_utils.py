@@ -155,11 +155,45 @@ def remove_child_avatar_files(child_id: int) -> bool:
 
 
 def get_child_avatar_path(child_id: int) -> Optional[Path]:
-    """Retorna o caminho do PNG circular da crianca, ou o JPEG original se nao existir o PNG."""
+    """Retorna o caminho do PNG circular da crianca, gerando-o a partir do JPG ou SQLite se necessario."""
+    ensure_avatar_dir()
     png = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
-    if png.exists():
+    if png.exists() and png.stat().st_size > 0:
         return png
+
+    # 1. Se existir JPG oficial, gera a versao circular em PNG compativel com Tkinter
     jpg = AVATAR_DIR / f"crianca_{child_id}.jpg"
-    if jpg.exists():
-        return jpg
+    if jpg.exists() and jpg.stat().st_size > 0:
+        img = load_image_any_path(str(jpg))
+        if img is not None and img.size > 0:
+            circle = generate_circular_png(img, 120)
+            cv2.imwrite(str(png), circle)
+            return png
+
+    # 2. Se houver foto selecionada no banco SQLite (profile_photos), exporta e gera o PNG
+    try:
+        from .children_pilot import child_pilot_database
+        from .storage import Storage
+        db_path = child_pilot_database()
+        if db_path.exists():
+            store = Storage(db_path)
+            try:
+                photo_bytes = store.selected_profile_photo(child_id)
+                if not photo_bytes:
+                    photos = store.profile_photos(child_id)
+                    if photos:
+                        photo_bytes = photos[0][1]
+                if photo_bytes:
+                    arr = np.frombuffer(photo_bytes, dtype=np.uint8)
+                    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if img is not None and img.size > 0:
+                        cv2.imwrite(str(jpg), img)
+                        circle = generate_circular_png(img, 120)
+                        cv2.imwrite(str(png), circle)
+                        return png
+            finally:
+                store.close()
+    except Exception as e:
+        logger.debug("Nao foi possivel carregar foto da crianca %d do SQLite: %s", child_id, e)
+
     return None

@@ -137,13 +137,10 @@ def show_toast(
 
 
 def is_welcome_screen_running() -> bool:
-    """Verifica se ja existe uma janela de boas-vindas aberta para evitar duplicatas."""
-    try:
-        cmd = 'tasklist /fi "imagename eq pythonw.exe" /v /fo csv'
-        output = subprocess.check_output(cmd, shell=True, text=True, errors="ignore")
-        return "FaceControl Kids" in output or "welcome_screen" in output
-    except Exception:
-        return False
+    """Verifica se a janela de boas-vindas gerenciada por este agente ainda esta ativa."""
+    global _welcome_proc
+    with _welcome_lock:
+        return _welcome_proc is not None and _welcome_proc.poll() is None
 
 
 _welcome_proc: Optional[subprocess.Popen] = None
@@ -151,7 +148,7 @@ _welcome_lock = threading.Lock()
 
 
 def dismiss_welcome_screen():
-    """Encerra qualquer janela de boas-vindas aberta se o PC for bloqueado ou se uma nova abrir."""
+    """Encerra qualquer janela de boas-vindas aberta se o PC for bloqueado."""
     global _welcome_proc
     with _welcome_lock:
         if _welcome_proc is not None:
@@ -170,6 +167,10 @@ def dismiss_welcome_screen():
 def trigger_welcome_screen():
     """Dispara a tela de boas-vindas no Desktop da conta Filhos (apenas 1 instancia)."""
     global _welcome_proc
+    if is_welcome_screen_running():
+        logger.info("Tela de boas-vindas ja esta aberta; atualizacao ocorrera via evento local.")
+        return
+
     logger.info("Disparando tela de boas-vindas no Desktop dos Filhos...")
     dismiss_welcome_screen()
     try:
