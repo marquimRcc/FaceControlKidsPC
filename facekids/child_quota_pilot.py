@@ -53,6 +53,18 @@ def provision_three_children(store) -> dict[int, str]:
     return {pid: name for pid, name, _ in people}
 
 
+def configured_child_profiles(store) -> dict[int, str]:
+    """Return every explicitly configured profile without fixed child slots.
+
+    The legacy three-child provisioner remains available only for old fixtures.
+    Active pilots must fail closed until at least one profile is created.
+    """
+    rows = store.people()
+    if not rows:
+        raise ValueError("Cadastre pelo menos um perfil para iniciar o piloto.")
+    return {int(person_id): name for person_id, name, _limit in rows}
+
+
 class ChildQuotaEngine:
     """Charge only observed, confirmed, unlocked active use.
 
@@ -61,9 +73,7 @@ class ChildQuotaEngine:
     """
     def __init__(self, store, people: dict[int, str] | None = None):
         self.store = store
-        # The Windows pilot keeps its original three-profile provisioning.
-        # Linux passes the profiles configured by the responsible adult.
-        self.people = provision_three_children(store) if people is None else dict(people)
+        self.people = configured_child_profiles(store) if people is None else dict(people)
         if not self.people:
             raise ValueError("Cadastre ao menos uma criança.")
         self.policy = SessionAwarePolicy(confirm_frames=3, uncertain_grace_sec=30)

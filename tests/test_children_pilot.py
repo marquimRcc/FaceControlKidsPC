@@ -6,7 +6,7 @@ from unittest.mock import patch
 from facekids.children_pilot import (
     validate_real_lock, _child_id, child_pilot_database, _status,
 )
-from facekids.child_quota_pilot import ChildQuotaEngine
+from facekids.child_quota_pilot import ChildQuotaEngine, provision_three_children
 from facekids.storage import Storage
 
 
@@ -21,17 +21,23 @@ class ChildrenPilotCliTests(unittest.TestCase):
                     validate_real_lock(os_type, account, confirmed=confirm)
         validate_real_lock("nt","fIlHoS",confirmed=True)
 
-    def test_child_profile_mapping_never_accepts_fourth(self):
+    def test_child_profile_mapping_accepts_any_configured_positive_id(self):
         with tempfile.TemporaryDirectory() as directory:
             db=Storage(Path(directory)/"kids.sqlite3")
             try:
+                provision_three_children(db)
                 engine=ChildQuotaEngine(db)
                 self.assertEqual(_child_id(db,1),next(iter(engine.people)))
-                with self.assertRaises(ValueError):
+                with self.assertRaises(KeyError):
                     _child_id(db,4)
+                fourth = db.add_person("Crianca ficticia 4", 30)
+                self.assertEqual(_child_id(db,fourth), fourth)
+                with self.assertRaises(ValueError):
+                    _child_id(db, 0)
+                engine = ChildQuotaEngine(db)
                 with patch("builtins.print") as printer:
                     _status(db,engine)
-                self.assertEqual(printer.call_count,3)
+                self.assertEqual(printer.call_count,4)
             finally:
                 db.close()
 

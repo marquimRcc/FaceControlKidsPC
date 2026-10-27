@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
- FaceKids: pilot for 3 children, 120 minutes each.
+ FaceKids: pilot for one or more configured profiles.
  Does NOT install services, edit logon, register scheduled tasks or
  automatically lock the Windows administrator.
  This script runs in the CURRENT Windows user's local data directory.
@@ -15,8 +15,8 @@ try {
         throw 'Este piloto requer Windows 10/11.'
     }
     $branch = & git branch --show-current
-    if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'feature/filhos-face-quota-pilot') {
-        throw "Branch incorreta: $branch; atualize para feature/filhos-face-quota-pilot."
+    if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'developer') {
+        throw "Branch incorreta: $branch; use exclusivamente a developer neste laboratorio."
     }
     $python = Join-Path $root '.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $python)) {
@@ -47,27 +47,36 @@ try {
     Write-Host 'A conta MarcosMiniPC mantem seu login normal.'
     while ($true) {
         Write-Host ''
-        Write-Host '[1] Cadastrar rosto Crianca 1'
-        Write-Host '[2] Cadastrar rosto Crianca 2'
-        Write-Host '[3] Cadastrar rosto Crianca 3'
-        Write-Host '[4] Testar reconhecimento e cronometro por 90 segundos (SEM Win+L)'
-        Write-Host '[5] Consultar cadastro e saldos'
-        Write-Host '[6] Apagar dados faciais de uma crianca (nao apaga quota)'
+        Write-Host '[1] Adicionar perfil'
+        Write-Host '[2] Cadastrar rosto de um perfil existente'
+        Write-Host '[3] Testar reconhecimento e cronometro por 90 segundos (SEM Win+L)'
+        Write-Host '[4] Consultar cadastro e saldos'
+        Write-Host '[5] Apagar dados faciais de um perfil (nao apaga quota)'
         Write-Host '[0] Sair'
         $choice=(Read-Host 'Selecione uma opcao').Trim()
         $arguments=@('--camera',"$CameraIndex")
-        if ($choice -in @('1','2','3')) {
-            $confirm = (Read-Host "O responsavel autorizou o cadastro da Crianca $choice? Digite SIM").Trim()
+        if ($choice -eq '1') {
+            $alias=(Read-Host 'Apelido do novo perfil').Trim()
+            $minutes=(Read-Host 'Limite diario em minutos (1..1440)').Trim()
+            if ($alias.Length -lt 1 -or $alias.Length -gt 50 -or $minutes -notmatch '^\d+$' -or
+                [int]$minutes -lt 1 -or [int]$minutes -gt 1440) {
+                Write-Warning 'Apelido ou limite invalido'; continue
+            }
+            $arguments += @('add-profile',$alias,'--minutes',$minutes)
+        } elseif ($choice -eq '2') {
+            $idx=(Read-Host 'ID positivo do perfil').Trim()
+            if ($idx -notmatch '^[1-9]\d*$') { Write-Warning 'Perfil invalido'; continue }
+            $confirm = (Read-Host "O responsavel autorizou o cadastro do perfil $idx? Digite SIM").Trim()
             if ($confirm -cne 'SIM') { Write-Host 'Cadastro cancelado.'; continue }
-            $arguments += @('enroll', $choice)
-        } elseif ($choice -eq '4') {
+            $arguments += @('enroll', $idx)
+        } elseif ($choice -eq '3') {
             $arguments += @('monitor','--seconds','90')
-        } elseif ($choice -eq '5') {
+        } elseif ($choice -eq '4') {
             $arguments += @('status')
-        } elseif ($choice -eq '6') {
-            $idx=(Read-Host 'Numero do perfil (1/2/3)').Trim()
-            if ($idx -notin @('1','2','3')) { Write-Warning 'Perfil invalido'; continue }
-            $confirm=(Read-Host "Para apagar modelos da Crianca $idx, digite APAGAR").Trim()
+        } elseif ($choice -eq '5') {
+            $idx=(Read-Host 'ID positivo do perfil').Trim()
+            if ($idx -notmatch '^[1-9]\d*$') { Write-Warning 'Perfil invalido'; continue }
+            $confirm=(Read-Host "Para apagar os modelos do perfil $idx, digite APAGAR").Trim()
             if ($confirm -cne 'APAGAR') { continue }
             $arguments += @('erase',$idx)
         } elseif ($choice -eq '0') { break }
