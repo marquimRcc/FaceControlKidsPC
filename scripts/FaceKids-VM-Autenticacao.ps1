@@ -212,7 +212,9 @@ switch ($Action) {
             if(-not $ready){throw 'Nao entrou no estado listening em 15 s.'}
             # status.pid belongs to the server actually answering the pipe.
             # It may differ from Start-Process -PassThru PID on Windows venv.
-            $actualPid=[int]$status.pid
+            # The status JSON was read into $s in the loop above.
+            # Never read $status here: it is undefined and coerces to PID 0.
+            $actualPid=[int]$s.pid
             if ($actualPid -lt 1) { throw 'Servidor nao publicou PID valido.' }
             $actual=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $actualPid) -ErrorAction Stop
             if (-not $actual -or -not $actual.CommandLine -or
