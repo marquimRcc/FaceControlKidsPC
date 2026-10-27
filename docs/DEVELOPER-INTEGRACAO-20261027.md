@@ -33,7 +33,7 @@ Preservar a experiência doméstica atual como *baseline funcional*:
 
 - [`bb993052` Windows/Ubuntu unitários](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495102640): **success** nas duas plataformas; [integração Linux](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495102773): **success**.
 - [`af426dcd` Credential Provider/host](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40494994283): **success** nos jobs de compilação e host.
-- Último commit com testes de compatibilidade `c6d2eb71`: [Actions](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495237694). Consultar o status concluído antes de promovê-lo a evidência de aprovação.
+- Último commit de código com regressões integradas `c6d2eb71`: [Windows e Ubuntu](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495237694) **success, 439 testes descobertos por plataforma**, além de [Linux](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495237800) **success**. Não são testes de webcam ou Winlogon. O commit documental subsequente não altera código.
 
 ## Não integrado / próximo passo
 
