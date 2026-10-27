@@ -112,8 +112,12 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
     if (-not $python) {
         # Python 3.11.9 is the final official 3.11 Windows installer.
         # Install only inside the VM workspace and do not require winget.
-        if ([Environment]::Is64BitOperatingSystem -ne $true -or
-            [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'X64') {
+        # Windows PowerShell 5.1 can expose a null RuntimeInformation.OSArchitecture
+        # on older .NET installations. Query the guest processor through WMI
+        # instead of invoking ToString() on a potentially null value.
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        if (-not [Environment]::Is64BitOperatingSystem -or
+            $null -eq $cpu -or [int]$cpu.Architecture -ne 9) {
             throw 'Bootstrap oficial Python 3.11.9 requer Windows x64 nesta VM.'
         }
         $pythonHome = Join-Path $workspace 'runtime\python311'
@@ -125,15 +129,20 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
         Write-Host 'winget nao necessario: baixando Python 3.11.9 oficial do python.org...' -ForegroundColor Cyan
         $validCache = $false
         if (Test-Path -LiteralPath $installer -PathType Leaf) {
-            $validCache = ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expectedSha256)
+            $cachedDigest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256 -ErrorAction Stop).Hash
+            $validCache = ([string]$cachedDigest -eq $expectedSha256)
         }
         if (-not $validCache) {
             Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
             Invoke-WebRequest -UseBasicParsing -Uri $installerUrl -OutFile $installer
         }
-        if (-not (Test-Path -LiteralPath $installer -PathType Leaf) -or
-            (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedSha256) {
-            throw 'Python oficial recusado: assinatura SHA-256 divergente ou download incompleto.'
+        if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw 'Python oficial recusado: download incompleto.'
+        }
+        $downloadDigest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256 -ErrorAction Stop).Hash
+        if ([string]$downloadDigest -ne $expectedSha256) {
+            throw ('Python oficial recusado: SHA-256 divergente. Esperado: ' +
+                $expectedSha256 + '; obtido: ' + [string]$downloadDigest)
         }
         Write-Host 'SHA-256 verificado. Instalando Python somente no perfil da VM...' -ForegroundColor Cyan
         $installArgs = @(
