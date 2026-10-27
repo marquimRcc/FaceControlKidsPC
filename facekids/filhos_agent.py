@@ -36,6 +36,9 @@ from .locker import lock_current_session
 from .platform_paths import application_data_dir
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .quota_agent_accounting import LegacyLedgerQuota
+from .unlock_event import validated_unlock_event, enrolled_display_name
+from .ipc_json import parse_local_json
 from .windows_pipe_api import configure_kernel32
 
 AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
@@ -355,8 +358,8 @@ def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = 
         bytes_read = wintypes.DWORD()
         ok = perform_io(kernel32.ReadFile, buf, 2047, bytes_read)
         if ok and bytes_read.value > 0:
-            resp_str = buf.value.decode("utf-8", errors="ignore").strip()
-            return json.loads(resp_str)
+            resp_str = buf.raw[:bytes_read.value].decode("utf-8", errors="strict").strip()
+            return parse_local_json(resp_str)
     except Exception as e:
         logger.debug("Falha na consulta ao pipe em sessao: %s", e)
     finally:
@@ -404,20 +407,10 @@ def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
     """Le as informacoes do ultimo filho identificado se recente e de hoje."""
     if LAST_UNLOCK_FILE.exists():
         try:
-            data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            ts = float(data.get("timestamp", 0))
-            is_fresh = True
-            if ts > 0:
-                if (time.time() - ts) >= 600:
-                    is_fresh = False
-                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
-                    is_fresh = False
-
-            if is_fresh:
-                cid = data.get("child_id")
-                cname = data.get("child_name", f"Crianca {cid}")
-                if cid is not None:
-                    return int(cid), str(cname), ts
+            data = parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+            validated = validated_unlock_event(data)
+            if validated is not None:
+                return validated
         except Exception as e:
             logger.warning("Erro ao ler last_unlock.json: %s", e)
     return None, "", 0.0
@@ -562,12 +555,13 @@ def run_agent():
 
     db_path = child_pilot_database()
     store = Storage(db_path)
+    quota_accounting = LegacyLedgerQuota(store)  # No broker writer on the family machine.
     tracker = QuotaTracker(store)
 
     cid, cname, unlock_ts = read_last_unlock_child()
-    if cid is not None:
+    if cid is not None and enrolled_display_name(store, cid) is not None:
         last_seen_ts = unlock_ts
-        tracker.switch_child(cid, cname)
+        tracker.switch_child(cid, enrolled_display_name(store, cid))
         time.sleep(1.0)
         trigger_welcome_screen()
     else:
@@ -610,8 +604,9 @@ def run_agent():
             # A. Verificar se houve novo evento de desbloqueio facial no lock screen
             if LAST_UNLOCK_FILE.exists():
                 try:
-                    data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-                    current_ts = float(data.get("timestamp", 0.0))
+                    data = parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+                    valid_event = validated_unlock_event(data)
+                    current_ts = valid_event[2] if valid_event else 0.0
                     # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
                     is_fresh = (
                         (current_ts > last_seen_ts)
@@ -620,10 +615,10 @@ def run_agent():
                     )
                     if is_fresh:
                         last_seen_ts = current_ts
-                        new_cid = data.get("child_id")
-                        new_cname = data.get("child_name", f"Crianca {new_cid}")
-                        if new_cid is not None:
-                            tracker.switch_child(int(new_cid), str(new_cname))
+                        new_cid = valid_event[0] if valid_event else None
+                        new_cname = enrolled_display_name(store, new_cid) if new_cid is not None else None
+                        if new_cname is not None:
+                            tracker.switch_child(new_cid, new_cname)
                         session_active_since_mono = time.monotonic()
                         # Se recente (menos de 15s), reabre a tela de boas-vindas
                         if (time.time() - current_ts) < 15.0:
@@ -781,12 +776,13 @@ def run_agent():
 
                 # Se o delta for razoavel (entre 0.5s e 15s, evitando picos apos hibernacao)
                 if tracker.current_child_id is not None and 0.5 <= delta <= 15.0:
-                    store.charge(tracker.current_child_id, delta, today)
-                    rem = store.remaining(tracker.current_child_id, today)
+                    tick = quota_accounting.active_tick(
+                        child_id=tracker.current_child_id, seconds=delta, day=today)
+                    rem = tick.remaining_seconds
                     tracker.update_balance(rem)
 
                     # Verifica avisos e bloqueio automatico
-                    locked = tracker.check_notifications_and_lock(rem)
+                    locked = tracker.check_notifications_and_lock(rem) if tick.may_enforce_lock else False
                     if locked:
                         # Se bloqueou, aguarda um pouco para estabilizar o lock
                         time.sleep(5.0)
