@@ -39,10 +39,30 @@ from .windows_pipe_api import configure_kernel32
 from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
 
-if sys.platform == "win32":
-    log_dir = Path(os.environ.get("PROGRAMDATA", "C:/ProgramData")) / "FaceKids"
-else:
-    log_dir = Path(tempfile.gettempdir()) / "FaceKids"
+from .vm_lab_paths import vm_lab_root
+
+
+def authentication_log_dir() -> Path:
+    """Put VM diagnostics alongside the opted-in isolated test data."""
+    root = vm_lab_root()
+    if root is not None:
+        return root / "appdata"
+    if sys.platform == "win32":
+        return Path(os.environ.get("PROGRAMDATA", "C:/ProgramData")) / "FaceKids"
+    return Path(tempfile.gettempdir()) / "FaceKids"
+
+
+log_dir = authentication_log_dir()
+
+
+def unlock_metadata_path() -> Path:
+    """Respect the VM opt-in even if the environment changes after import."""
+    root = vm_lab_root()
+    if root is not None:
+        return root / "appdata" / "last_unlock.json"
+    if sys.platform == "win32":
+        return Path("C:/ProgramData/FaceKids/last_unlock.json")
+    return log_dir / "last_unlock.json"
 
 try:
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -285,8 +305,7 @@ class FaceAuthenticator:
                         "remaining_seconds": remaining_seconds,
                         "timestamp": time.time(),
                     }
-                    unlock_path = (Path("C:/ProgramData/FaceKids/last_unlock.json")
-                                   if sys.platform == "win32" else (log_dir / "last_unlock.json"))
+                    unlock_path = unlock_metadata_path()
                     unlock_path.parent.mkdir(parents=True, exist_ok=True)
                     unlock_path.write_text(
                         json.dumps(unlock_data, indent=2, ensure_ascii=False), encoding="utf-8")
