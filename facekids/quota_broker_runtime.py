@@ -67,7 +67,7 @@ class ServiceOwnedQuotaRuntime:
             store, expected_windows_sid=expected_windows_sid,
             observe_wts=observe_wts,
             capture_face_locally=lambda: authenticator.evaluate(
-                persist_unlock_metadata=False
+                publish_unlock_event=False
             ),
             monotonic=monotonic, today=today,
         )
