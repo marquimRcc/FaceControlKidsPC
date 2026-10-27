@@ -34,6 +34,19 @@ class VmLabPathTests(unittest.TestCase):
                     default_data_path(), root.resolve() / "data" / "criancas.sqlite3")
                 self.assertEqual(application_data_dir(), root.resolve() / "appdata")
 
+    def test_auth_logs_and_unlock_metadata_stay_inside_vm_workspace(self):
+        from facekids.auth_service import authentication_log_dir, unlock_metadata_path
+        with TemporaryDirectory() as td:
+            root = Path(td) / "FaceKids-VM-Lab" / "dados-isolados"
+            env = {"LOCALAPPDATA": td,
+                   "FACEKIDS_VM_LAB_DIR": str(root),
+                   "FACEKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(authentication_log_dir(),
+                                 root.resolve() / "appdata")
+                self.assertEqual(unlock_metadata_path(),
+                                 root.resolve() / "appdata" / "last_unlock.json")
+
     def test_refuses_missing_ack_or_escape_outside_local_appdata(self):
         with TemporaryDirectory() as td:
             with patch.dict(os.environ, {
