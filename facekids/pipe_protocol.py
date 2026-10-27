@@ -24,6 +24,6 @@ def decode_pipe_command(payload: bytes) -> tuple[str | None, str | None]:
         text = text[:-1]
     if not text or any(c in text for c in "\r\n\t "):
         return None, "INVALID_REQUEST"
-    if text not in ("AUTH_QUERY", "QUERY", "PING"):
+    if text not in ("AUTH_QUERY", "SESSION_QUERY", "QUERY", "PING"):
         return None, "INVALID_COMMAND"
     return text, None
