@@ -36,6 +36,13 @@ try {
     & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestPipeClient.cpp -o TestPipeClient.exe -lole32
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar TestPipeClient.exe" }
 
+    Write-Host "[FaceKids] Testes isolados de JSON e identidade de servidor..." -ForegroundColor Cyan
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestJsonEnvelopeGuardPortable.cpp -o TestJsonEnvelopeGuardPortable.exe
+    if ($LASTEXITCODE -ne 0) { throw "Falha no teste nativo do parser JSON" }
+
+    & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ TestPipePeerIdentity.cpp -o TestPipePeerIdentity.exe -ladvapi32
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar teste de SID do pipe" }
+
     Write-Host "[FaceKids] Compilando teste de repeticao automatica..." -ForegroundColor Cyan
     & $gpp -std=c++17 -O2 -static -static-libgcc -static-libstdc++ -DFACEKIDS_RETRY_HOST_TEST TestCredentialRetry.cpp FaceKidsCredential.cpp FaceKidsProvider.cpp `
         -o TestCredentialRetry.exe -lole32 -ladvapi32 -lsecur32 -luuid -lcredui
