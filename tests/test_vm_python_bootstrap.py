@@ -26,6 +26,19 @@ class VmPythonBootstrapTests(unittest.TestCase):
         self.assertNotIn("Register-ScheduledTask", text)
         self.assertNotIn("New-Service", text)
 
+    def test_legacy_powershell_51_never_calls_method_on_nullable_os_architecture(self):
+        text = LAUNCHER.read_text(encoding="utf-8")
+        self.assertNotIn("RuntimeInformation]::OSArchitecture.ToString()", text)
+        self.assertNotIn(".Hash.ToLowerInvariant()", text)
+        self.assertIn("Get-CimInstance Win32_Processor", text)
+        self.assertIn("[Environment]::Is64BitOperatingSystem", text)
+
+    def test_p6_finds_same_workspace_venv_before_global_python(self):
+        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
+            encoding="utf-8")
+        self.assertIn("$labVenv = Join-Path (Split-Path $root -Parent)", preflight)
+        self.assertIn("if (Test-Path -LiteralPath $labVenv -PathType Leaf)", preflight)
+
 
 if __name__ == "__main__":
     unittest.main()
