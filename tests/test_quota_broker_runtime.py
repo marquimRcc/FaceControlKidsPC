@@ -157,7 +157,7 @@ class RuntimeIntegrationTest(unittest.TestCase):
             try:
                 runtime.on_service_session_change(8, (42,))
                 self.assertTrue(runtime.bind_from_service_camera().accepted)
-                evaluate.assert_called_once_with(persist_unlock_metadata=False)
+                evaluate.assert_called_once_with(publish_unlock_event=False)
                 self.now += 3
                 self.assertEqual(runtime.service_tick().charged_seconds, 3)
             finally:
