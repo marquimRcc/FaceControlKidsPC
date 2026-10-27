@@ -47,6 +47,20 @@ class Storage:
           PRIMARY KEY(person_id, day),
           FOREIGN KEY(person_id) REFERENCES people(id));
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS quota_refund_receipts (
+            event_id TEXT PRIMARY KEY,
+            session_epoch TEXT NOT NULL,
+            person_id INTEGER NOT NULL,
+            day TEXT NOT NULL,
+            requested_seconds REAL NOT NULL,
+            refunded_seconds REAL NOT NULL,
+            reason TEXT NOT NULL CHECK(reason IN ('inactivity')),
+            UNIQUE(session_epoch, person_id, day)
+        );
+        CREATE TABLE IF NOT EXISTS quota_refund_charge_links (
+            charge_event_id TEXT PRIMARY KEY,
+            refund_event_id TEXT NOT NULL REFERENCES quota_refund_receipts(event_id)
+        );
         CREATE TABLE IF NOT EXISTS profile_photos (
           id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL,
           jpeg BLOB NOT NULL CHECK(length(jpeg) BETWEEN 100 AND 100000),
@@ -418,6 +432,99 @@ class Storage:
                 (event_id, person_id, day, float(seconds), charged),
             )
             return charged
+
+    def refund_capped_once(
+        self, event_id: str, session_epoch: str, person_id: int,
+        seconds: float, charge_event_ids: tuple[str, ...], day: Optional[str] = None,
+    ) -> float:
+        """VM service-only idempotent refund of *previously charged* receipts.
+
+        event_id, session_epoch, and eligible charge receipts MUST originate
+        from the privileged service, never a Filhos IPC payload. A tick can
+        be refunded at most once, regardless of a new event_id. One inactivity
+        refund per verified WTS unlock epoch. No access to a trusted input-idle
+        sensor is inferred here: this storage primitive is not deployed.
+        """
+        def valid_hex(value: object) -> bool:
+            return (type(value) is str and len(value) == 32
+                    and all(ch in "0123456789abcdef" for ch in value))
+
+        if not valid_hex(event_id) or not valid_hex(session_epoch):
+            raise ValueError("Service-owned refund event and epoch required")
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Invalid child ID")
+        if (type(seconds) not in (int, float) or not math.isfinite(seconds)
+                or seconds < 0 or seconds > 120):
+            raise ValueError("Refund must be finite and no more than 120 seconds")
+        if (type(charge_event_ids) is not tuple or not charge_event_ids
+                or len(charge_event_ids) > 128 or
+                any(not valid_hex(x) for x in charge_event_ids) or
+                len(set(charge_event_ids)) != len(charge_event_ids)):
+            raise ValueError("Distinct service charge receipts required")
+        day = date.today().isoformat() if day is None else day
+        if type(day) is not str:
+            raise ValueError("Invalid refund day")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Invalid refund day")
+        except (ValueError, TypeError):
+            raise ValueError("Invalid refund day") from None
+
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=True)
+            existing = self.db.execute(
+                "SELECT session_epoch,person_id,day,requested_seconds "
+                "FROM quota_refund_receipts WHERE event_id=?", (event_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing != (session_epoch, person_id, day, float(seconds)):
+                    raise ValueError("Refund receipt reused with different payload")
+                return 0.0
+            already_epoch = self.db.execute(
+                "SELECT 1 FROM quota_refund_receipts "
+                "WHERE session_epoch=? AND person_id=? AND day=?",
+                (session_epoch, person_id, day),
+            ).fetchone()
+            if already_epoch:
+                return 0.0
+            eligible = 0.0
+            for charge_event_id in charge_event_ids:
+                charge = self.db.execute(
+                    "SELECT person_id,day,charged_seconds FROM quota_tick_receipts "
+                    "WHERE event_id=?", (charge_event_id,)
+                ).fetchone()
+                if (charge is None or charge[0] != person_id or charge[1] != day or
+                        self.db.execute(
+                            "SELECT 1 FROM quota_refund_charge_links "
+                            "WHERE charge_event_id=?", (charge_event_id,)
+                        ).fetchone()):
+                    raise ValueError("Charge receipt missing, already refunded or belongs to another child")
+                eligible += float(charge[2])
+            used = self.db.execute(
+                "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            actual = min(float(seconds), max(0.0, eligible),
+                         max(0.0, float(used[0])) if used else 0.0)
+            self.db.execute(
+                "INSERT INTO quota_refund_receipts "
+                "(event_id,session_epoch,person_id,day,requested_seconds,refunded_seconds,reason) "
+                "VALUES (?,?,?,?,?,?,'inactivity')",
+                (event_id, session_epoch, person_id, day, float(seconds), actual),
+            )
+            if actual > 0:
+                self.db.execute(
+                    "UPDATE daily_usage SET seconds=MAX(0,seconds-?) "
+                    "WHERE person_id=? AND day=?",
+                    (actual, person_id, day),
+                )
+            for charge_event_id in charge_event_ids:
+                self.db.execute(
+                    "INSERT INTO quota_refund_charge_links(charge_event_id,refund_event_id) "
+                    "VALUES (?,?)", (charge_event_id, event_id),
+                )
+            return actual
 
     def refund(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
         if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
