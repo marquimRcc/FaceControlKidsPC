@@ -480,6 +480,12 @@ class Storage:
             if existing is not None:
                 if existing != (session_epoch, person_id, day, float(seconds)):
                     raise ValueError("Refund receipt reused with different payload")
+                original_links = self.db.execute(
+                    "SELECT charge_event_id FROM quota_refund_charge_links "
+                    "WHERE refund_event_id=?", (event_id,)
+                ).fetchall()
+                if {row[0] for row in original_links} != set(charge_event_ids):
+                    raise ValueError("Refund receipt replay with different charge window")
                 return 0.0
             already_epoch = self.db.execute(
                 "SELECT 1 FROM quota_refund_receipts "
