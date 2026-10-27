@@ -57,8 +57,9 @@ class VmLogonStageTests(unittest.TestCase):
         bootstrap = (ROOT / "scripts" / "Iniciar-FaceKids-VM-Developer.ps1").read_text(
             encoding="utf-8")
         for needle in ["VirtualBox|innotek", "scripts/", "-NoDashboard",
-                       "-SkipTests", "-NoCameraProbe", "-Action StartAuth",
-                       "-Action Ping", "-Action FaceProbe"]:
+                       "-SkipTests", "-NoCameraProbe",
+                       "@('-Action','StartAuth')", "@('-Action','Ping')",
+                       "@('-Action','FaceProbe')"]:
             with self.subTest(needle=needle):
                 self.assertIn(needle, wrapper)
         self.assertIn("[switch]$NoDashboard", bootstrap)
