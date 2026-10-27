@@ -83,8 +83,11 @@ class VmLogonStageTests(unittest.TestCase):
         source = self.source
         for token in [
             "if($other.Count -gt 0){",
-            "if ($other.Count -ne 1)",
-            "[int]$state.pid -ne [int]$existing.ProcessId",
+            "$matches=@($other | Where-Object { [int]$_.ProcessId -eq [int]$state.pid })",
+            "$foreign=@($other | Where-Object {",
+            "if ($matches.Count -ne 1 -or $foreign.Count -gt 0)",
+            "[int]$state.pid -lt 1",
+            "$existing=$matches[0]",
             "$existing.CommandLine -notlike ('*'+$statusFile+'*')",
             "Get-WorkerSid -ProcessId ([int]$existing.ProcessId)",
             "$existingSid -ne [string]$current.User.Value",
