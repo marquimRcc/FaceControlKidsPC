@@ -70,7 +70,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m scripts.ci_parent_theme_tk_smoke
           if ($LASTEXITCODE -ne 0) { throw 'Real Tk parent theme smoke failed' }
-      - name: Windows-only pilot launcher parse and three-child status smoke test
+      - name: Windows-only pilot launcher parse and dynamic-profile status smoke test
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -86,15 +86,32 @@ jobs:
           }
           $data = Join-Path $env:RUNNER_TEMP 'facekids-children-ci.sqlite3'
           try {
-            $lines = @(python -m facekids.children_pilot --database $data status)
-            if ($LASTEXITCODE -ne 0) { throw 'Children CLI status failed' }
-            $recognized = @($lines | Where-Object {
-              $_.StartsWith('Crianca ') -and
+            python -m facekids.children_pilot --database $data add-profile 'Perfil CI 1' --minutes 120
+            if ($LASTEXITCODE -ne 0) { throw 'Single child profile creation failed' }
+            $single = @(python -m facekids.children_pilot --database $data status)
+            if ($LASTEXITCODE -ne 0) { throw 'Single child status failed' }
+            $singleProfiles = @($single | Where-Object {
+              $_.StartsWith('Perfil CI ') -and
               $_.Contains('0 amostras; 120 minutos restantes hoje.')
             })
-            if ($recognized.Count -ne 3) {
-              throw "Unexpected pilot profiles: $($lines -join '; ')"
+            if ($singleProfiles.Count -ne 1) {
+              throw "Unexpected single profile status: $($single -join '; ')"
+            }
+            2..5 | ForEach-Object {
+              python -m facekids.children_pilot --database $data add-profile "Perfil CI $_" --minutes 120
+              if ($LASTEXITCODE -ne 0) { throw "Child profile $_ creation failed" }
+            }
+            $multiple = @(python -m facekids.children_pilot --database $data status)
+            if ($LASTEXITCODE -ne 0) { throw 'Multiple child status failed' }
+            $multipleProfiles = @($multiple | Where-Object {
+              $_.StartsWith('Perfil CI ') -and
+              $_.Contains('0 amostras; 120 minutos restantes hoje.')
+            })
+            if ($multipleProfiles.Count -ne 5) {
+              throw "Unexpected multiple profile status: $($multiple -join '; ')"
             }
           } finally {
-            Remove-Item -LiteralPath $data -Force -ErrorAction SilentlyContinue
+            @($data, "$data-wal", "$data-shm") | ForEach-Object {
+              Remove-Item -LiteralPath $_ -Force -ErrorAction SilentlyContinue
+            }
           }
