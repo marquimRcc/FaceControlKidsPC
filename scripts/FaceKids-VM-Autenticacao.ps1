@@ -16,7 +16,7 @@ $ErrorActionPreference='Stop'
 $marker='FaceKids-VM-CP-Lab-v1'
 $clsid='{FAC0D042-3DD0-4A8C-9F18-440C44330C20}'
 $cpKey="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\$clsid"
-$comKey="Registry::HKEY_CLASSES_ROOT\CLSID\$clsid"
+$comKey="Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$clsid"
 $policyKey='HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider'
 $lab=Join-Path $env:LOCALAPPDATA 'FaceKids-VM-Lab'
 $root=Join-Path $lab 'codigo-developer'
@@ -45,7 +45,7 @@ function Assert-Guest {
 }
 function Require-Admin {
     param($Current)
-    $principal=New-Object Security.Principal.WindowsPrincipal($Current)
+    $principal=[Security.Principal.WindowsPrincipal]::new($Current)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Para alterar o login, abra PowerShell COMO ADMINISTRADOR na VM.'
     }
@@ -259,6 +259,10 @@ switch ($Action) {
             $installed=Start-Process -FilePath $regsvr -ArgumentList ('/s "'+$dllTarget+'"') -Wait -PassThru
             if($installed.ExitCode -ne 0){throw ('regsvr32 retornou '+$installed.ExitCode)}
             if(-not (Test-Path -LiteralPath $cpKey)){throw 'Credential Provider nao foi registrado.'}
+            $inproc=Get-ItemProperty -LiteralPath (Join-Path $comKey 'InprocServer32') -ErrorAction SilentlyContinue
+            if(-not $inproc -or $inproc.'(default)' -ne $dllTarget){
+                throw 'InprocServer32 nao aponta para a DLL exclusiva da VM.'
+            }
             Write-Host 'DLL registrada na VM, sem Win+L/logoff automatico.' -ForegroundColor Green
             Write-Warning 'Guarde o login convencional. Rollback via -Action Rollback ou snapshot externo.'
         } catch {
