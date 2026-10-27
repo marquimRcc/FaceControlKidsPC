@@ -67,15 +67,25 @@ function Require-Filhos {
     return [string]$account.SID.Value
 }
 function Get-Worker {
-    # Use the PID written by the real auth server, not the Python launcher PID.
-    # Windows venv redirectors can create a second Python process.
+    # Track the real server PID, which can differ from the venv launcher.
     if (-not (Test-Path -LiteralPath $workerFile -PathType Leaf)) { return $null }
     try {
         $state=Get-Content -LiteralPath $workerFile -Raw | ConvertFrom-Json
         if ($state.python -ne $python -or -not $state.processId) { return $null }
         $p=Get-CimInstance Win32_Process -Filter ('ProcessId=' + [int]$state.processId) -ErrorAction SilentlyContinue
-        if (-not $p -or -not $p.ExecutablePath -or
-            (Split-Path $p.ExecutablePath -Leaf) -notmatch '^(?i:pythonw?[.]exe)
+        if (-not $p -or -not $p.ExecutablePath) { return $null }
+        $exe=Split-Path $p.ExecutablePath -Leaf
+        if ($exe -notin @('python.exe','pythonw.exe')) { return $null }
+        if (-not $p.CommandLine -or $p.CommandLine -notmatch 'facekids[.]auth_service' -or
+            $p.CommandLine -notlike ('*'+$statusFile+'*')) { return $null }
+        $serverState=Get-Content -LiteralPath $statusFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ([int]$serverState.pid -ne [int]$p.ProcessId) { return $null }
+        $owner=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction Stop
+        $expectedSid=[string]([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        if ($owner.ReturnValue -ne 0 -or [string]$owner.Sid -ne $expectedSid) { return $null }
+        return $p
+    } catch { return $null }
+}
 function Get-WorkerSid {
     param([int]$ProcessId)
     $p=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $ProcessId) -ErrorAction Stop
