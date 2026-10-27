@@ -39,8 +39,9 @@ from .storage import Storage
 from .quota_agent_accounting import LegacyLedgerQuota
 from .unlock_event import validated_unlock_event, enrolled_display_name
 from .ipc_json import parse_local_json
-from .ipc_reply import validated_pipe_allow
+from .ipc_reply import validated_face_observation
 from .windows_pipe_api import configure_kernel32
+from .session_transition_policy import decide_child_transition, TransitionDecision
 
 AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
 
@@ -252,7 +253,7 @@ def trigger_welcome_screen():
         logger.error("Erro ao iniciar tela de boas-vindas: %s", e)
 
 
-def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = None) -> Optional[dict]:
+def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = None, *, command: str = "AUTH_QUERY") -> Optional[dict]:
     """Consulta o servico facial com um prazo total, inclusive para ReadFile.
 
     O handle e aberto com I/O sobreposto para que uma resposta travada nunca
@@ -350,9 +351,12 @@ def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = 
             finally:
                 kernel32.CloseHandle(event)
 
-        req = ctypes.create_string_buffer(b"AUTH_QUERY\n")
+        if command not in ("AUTH_QUERY", "SESSION_QUERY"):
+            raise ValueError("Invalid local face command")
+        payload = (command + "\\n").encode("ascii")
+        req = ctypes.create_string_buffer(payload)
         written = wintypes.DWORD()
-        if not perform_io(kernel32.WriteFile, req, len(b"AUTH_QUERY\n"), written):
+        if not perform_io(kernel32.WriteFile, req, len(payload), written):
             return None
 
         buf = ctypes.create_string_buffer(2048)
@@ -396,7 +400,7 @@ class InSessionFaceIdentifier:
         def _worker():
             # O reconhecimento facial pode usar ate 4,5 s; 6,5 s inclui
             # conexao e transporte sem jamais bloquear o loop principal.
-            res = query_auth_service(timeout_seconds=6.5)
+            res = query_auth_service(timeout_seconds=6.5, command="SESSION_QUERY")
             with self._lock:
                 self.pending_result = res
 
@@ -559,26 +563,18 @@ def run_agent():
     quota_accounting = LegacyLedgerQuota(store)  # No broker writer on the family machine.
     tracker = QuotaTracker(store)
 
+    # last_unlock.json is UI-only: never assign quota owner from writable JSON.
     cid, cname, unlock_ts = read_last_unlock_child()
-    if cid is not None and enrolled_display_name(store, cid) is not None:
-        last_seen_ts = unlock_ts
-        tracker.switch_child(cid, enrolled_display_name(store, cid))
-        time.sleep(1.0)
+    last_seen_ts = unlock_ts if cid is not None else time.time()
+    tracker.current_child_id = None
+    tracker.current_child_name = "Nao identificado"
+    if cid is not None and (time.time() - unlock_ts) < 15:
         trigger_welcome_screen()
     else:
-        # Quando nao ha desbloqueio recente, inicializa com time.time() para que
-        # eventos antigos NUNCA sejam aceitos no loop subsequente
-        last_seen_ts = time.time()
-        tracker.current_child_id = None
-        tracker.current_child_name = "Nao identificado"
-        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
         show_toast(
-            "👋 FaceControl Kids",
-            "Entrada por PIN detectada. Olhe para a webcam para carregar seu tempo de tela.",
-            icon="👤",
-            color="#89DCEB",
-            duration_ms=6000,
-        )
+            "FaceControl Kids",
+            "Olhe para a webcam para carregar seu tempo de tela.",
+            icon="👤", color="#89DCEB", duration_ms=6000)
 
     last_active_time = time.monotonic()
     session_active_since_mono = time.monotonic()
@@ -586,6 +582,7 @@ def run_agent():
     identifier = InSessionFaceIdentifier(interval_seconds=check_interval)
     today = date.today().isoformat()
     inactivity_warned = False
+    previous_session_state = None
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
 
@@ -602,41 +599,29 @@ def run_agent():
                 today = now_day
                 tracker.reset_warnings()
 
-            # A. Verificar se houve novo evento de desbloqueio facial no lock screen
+            # Notification file is UI-only. It must not change identity or
+            # restart the inactivity clock (a Filhos process can edit it).
             if LAST_UNLOCK_FILE.exists():
                 try:
-                    data = parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-                    valid_event = validated_unlock_event(data)
-                    current_ts = valid_event[2] if valid_event else 0.0
-                    # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
-                    is_fresh = (
-                        (current_ts > last_seen_ts)
-                        and ((time.time() - current_ts) < 600.0)
-                        and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())
-                    )
-                    if is_fresh:
-                        last_seen_ts = current_ts
-                        new_cid = valid_event[0] if valid_event else None
-                        new_cname = enrolled_display_name(store, new_cid) if new_cid is not None else None
-                        if new_cname is not None:
-                            tracker.switch_child(new_cid, new_cname)
-                        session_active_since_mono = time.monotonic()
-                        # Se recente (menos de 15s), reabre a tela de boas-vindas
-                        if (time.time() - current_ts) < 15.0:
-                            logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
-                            time.sleep(0.5)
+                    event = validated_unlock_event(
+                        parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8")))
+                    if event is not None and event[2] > last_seen_ts:
+                        last_seen_ts = event[2]
+                        if (time.time() - event[2] < 15.0 and
+                                current_session_state() is SessionState.ACTIVE):
                             trigger_welcome_screen()
-                    elif current_ts > last_seen_ts:
-                        # Evento expirado: avanca ponteiro sem comutar filho
-                        last_seen_ts = current_ts
-                        logger.debug("Evento facial ignorado por estar expirado (ts=%.1f)", current_ts)
-                except Exception as e:
-                    logger.debug("Erro ao ler unlock timestamp: %s", e)
+                except (OSError, ValueError, TypeError) as e:
+                    logger.debug("Evento UI ignorado: %s", e)
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
             if state is SessionState.LOCKED:
                 dismiss_welcome_screen()
+            if state is SessionState.ACTIVE and previous_session_state is not SessionState.ACTIVE:
+                session_active_since_mono = time.monotonic()
+                last_active_time = time.monotonic()
+                identifier.last_query_mono = 0.0
+            previous_session_state = state
 
             if state is SessionState.ACTIVE:
                 # 1. Checar inatividade fisica considerando o tempo real desde que a sessao destravou
@@ -649,71 +634,37 @@ def run_agent():
                 if pipe_resp:
                     status = pipe_resp.get("status")
                     data_block = pipe_resp.get("data", {})
-                    decision = validated_pipe_allow(pipe_resp) if status == "ALLOW" else None
-                    if status == "ALLOW" and decision is not None:
-                        cid, cname, _authorization_ts = decision
-                        detected_ids = pipe_resp.get("detected_ids") or data_block.get("detected_ids", [])
-                        face_count = pipe_resp.get("face_count") or data_block.get("face_count", 1)
-
-                        if cid is not None:
-                            cid = int(cid)
-                            cname = str(cname)
-                            # Regra 1: Se o filho atual continua visivel em frente a tela, NUNCA troca (pessoas passando atras sao ignoradas)
-                            if tracker.current_child_id is not None and tracker.current_child_id in detected_ids:
-                                logger.debug(
-                                    "Filho ativo (%s) continua presente no enquadramento. Presencas secundarias ignoradas.",
-                                    tracker.current_child_name,
-                                )
-                            # Regra 2: Quem esta no mouse/teclado manda! Se o teclado/mouse foi usado nos ultimos 15s, ignora troca.
-                            elif tracker.current_child_id is not None and idle_sec < 15.0:
-                                logger.debug(
-                                    "Filho ativo (%s) usando mouse/teclado ativamente (idle=%.1fs). Troca ignorada.",
-                                    tracker.current_child_name,
-                                    idle_sec,
-                                )
-                            # Regra 3: Se ha mais de 1 pessoa no enquadramento (irmaos passando atras ou assistindo junto), nao troca.
-                            elif tracker.current_child_id is not None and face_count > 1:
-                                logger.info(
-                                    "Multiplos rostos (%d) detectados no enquadramento. Troca de perfil em sessao ignorada.",
-                                    face_count,
-                                )
-                            # Regra 4: Troca legitima para novo filho que assumiu o computador sozinho apos pausa
-                            elif cid != tracker.current_child_id:
-                                logger.info(
-                                    "Troca automatica de perfil em sessao: de %s (ID %s) para %s (ID %d)",
-                                    tracker.current_child_name,
-                                    tracker.current_child_id,
-                                    cname,
-                                    cid,
-                                )
-                                tracker.switch_child(cid, cname)
-                                last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
-                                session_active_since_mono = time.monotonic()
-                                trigger_welcome_screen()
-                                show_toast(
-                                    "👋 Perfil Alternado",
-                                    f"Olá, {cname}! Seu perfil foi reconhecido e carregado.",
-                                    icon="👤",
-                                    color="#A6E3A1",
-                                    duration_ms=6000,
-                                )
-                    elif status in ("DENY_QUOTA", "DENY_CURFEW"):
-                        denied_cid = pipe_resp.get("child_id") or data_block.get("child_id")
-                        detected_ids = pipe_resp.get("detected_ids") or data_block.get("detected_ids", [])
-                        face_count = pipe_resp.get("face_count") or data_block.get("face_count", 1)
-                        if (
-                            denied_cid is not None
-                            and tracker.current_child_id not in detected_ids
-                            and face_count <= 1
-                            and idle_sec >= 15.0
-                            and denied_cid != tracker.current_child_id
-                        ):
-                            msg = data_block.get("message", "Sem tempo restante hoje")
-                            cname = pipe_resp.get("child_name") or data_block.get("child_name", "Filho")
-                            logger.warning("%s reconhecido sozinho com quota zerada. Bloqueando sessao...", cname)
-                            show_toast("🔒 FaceControl Kids", f"{cname}: {msg}. O computador foi bloqueado.", icon="🔒", color="#F38BA8")
-                            time.sleep(1.2)
-                            lock_current_session()
+                    observed = validated_face_observation(pipe_resp)
+                    if observed is not None:
+                        registered_name = enrolled_display_name(store, observed.child_id)
+                        if registered_name is None:
+                            logger.warning("Observacao ignorada: perfil nao cadastrado.")
+                        else:
+                            transition = decide_child_transition(
+                                tracker.current_child_id, list(observed.detected_ids),
+                                observed.face_count, idle_sec, observed.child_id,
+                                observation_age_seconds=max(0.0, time.time() - observed.timestamp))
+                            if observed.status == "ALLOW":
+                                if transition is TransitionDecision.SWITCH_CHILD:
+                                    logger.info("Troca de perfil validada: %s -> %s",
+                                                tracker.current_child_name, registered_name)
+                                    tracker.switch_child(observed.child_id, registered_name)
+                                    session_active_since_mono = time.monotonic()
+                                    trigger_welcome_screen()
+                                    show_toast("👋 Perfil Alternado",
+                                               f"Olá, {registered_name}! Seu perfil foi carregado.",
+                                               icon="👤", color="#A6E3A1", duration_ms=6000)
+                            elif (observed.status in ("DENY_QUOTA", "DENY_CURFEW")
+                                  and tracker.current_child_id is not None
+                                  and transition is TransitionDecision.SWITCH_CHILD):
+                                logger.warning("Perfil diferente sem quota/horario: %s", registered_name)
+                                show_toast("🔒 FaceControl Kids",
+                                           f"{registered_name}: acesso indisponivel. O computador sera bloqueado.",
+                                           icon="🔒", color="#F38BA8")
+                                time.sleep(1.2)
+                                lock_current_session()
+                    elif status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
+                        logger.warning("Decisao facial ignorada: resposta inconsistente ou antiga")
 
                 # Agenda a proxima checagem facial
                 identifier.trigger_if_due()
