@@ -467,18 +467,21 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 h_pipe, buf, BUFFER_SIZE - 1, ctypes.byref(bytes_read), None
             )
 
-            request_str = buf.value.decode("utf-8", errors="ignore").strip() if success else ""
-            logger.info("Requisicao recebida (%d bytes): '%s'", bytes_read.value, request_str[:64])
+            raw_command = buf.raw[:bytes_read.value] if success else b""
+            command, error = decode_pipe_command(raw_command)
+            logger.info("Requisicao IPC (%d bytes, valida=%s)",
+                        bytes_read.value, error is None)
 
-            # Validacao estrita do protocolo IPC
-            if len(request_str) > 512:
-                status, data = "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
-            elif request_str in ("AUTH_QUERY", "QUERY"):
+            if error == "INVALID_REQUEST":
+                status, data = "INVALID_REQUEST", {"message": "Enquadramento IPC invalido"}
+            elif error == "INVALID_COMMAND":
+                status, data = "INVALID_COMMAND", {"message": "Comando IPC desconhecido"}
+            elif command in ("AUTH_QUERY", "QUERY"):
                 status, data = auth.evaluate(camera_backend=camera_backend)
-            elif request_str == "PING":
+            elif command == "PING":
                 status, data = "PONG", {"version": "1.0"}
             else:
-                status, data = "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
+                status, data = "INVALID_REQUEST", {"message": "Requisicao IPC vazia"}
 
             response_payload = {
                 "status": status,
