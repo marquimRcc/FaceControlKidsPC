@@ -88,7 +88,7 @@ class VmLogonStageTests(unittest.TestCase):
             "if ($matches.Count -ne 1 -or $foreign.Count -gt 0)",
             "[int]$state.pid -lt 1",
             "$existing=$matches[0]",
-            "$existing.CommandLine -notlike ('*'+$statusFile+'*')",
+            "$_.CommandLine -notlike ('*'+$statusFile+'*')",
             "Get-WorkerSid -ProcessId ([int]$existing.ProcessId)",
             "$existingSid -ne [string]$current.User.Value",
             "$reply=Invoke-AuthPipe -Command PING",
