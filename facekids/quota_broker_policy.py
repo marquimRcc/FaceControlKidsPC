@@ -93,6 +93,9 @@ class ServiceOwnedQuotaBroker:
         if (lease is None or type(session_id) is not int or
                 lease.session_id != session_id):
             return None
+        if self._grace_until is not None and self._now() >= self._grace_until:
+            self.end_verified_session()
+            return None
         return lease.child_id
 
     def end_verified_session(self) -> None:
@@ -136,6 +139,15 @@ class ServiceOwnedQuotaBroker:
             return BrokerTick(None, 0.0, 0.0, False, "session-switched")
         now = self._now()
         if self._rechecking or self._grace_until is not None:
+            # Even with suspended charging, curfew or exhaustion revokes
+            # permission immediately. Grace is not an authorization bypass.
+            day = self._today().isoformat()
+            remaining = self._store.remaining(lease.child_id, day)
+            curfew, _ = self._store.is_curfew_active()
+            if curfew or remaining <= 0:
+                self.end_verified_session()
+                return BrokerTick(lease.child_id, 0.0, remaining, True,
+                                  "curfew" if curfew else "quota")
             lease.last_mono = now  # never charge the camera capture or grace
             if self._grace_until is not None and now >= self._grace_until:
                 self.end_verified_session()
