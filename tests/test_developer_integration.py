@@ -17,24 +17,33 @@ from facekids.storage import Storage
 
 
 class DeveloperIntegrationRegression(unittest.TestCase):
-    def test_main_session_rules_stay_present_during_security_port(self):
+    def test_main_session_rules_use_the_real_pure_policy(self):
         source = inspect.getsource(filhos_agent.run_agent)
-        required = (
-            "tracker.current_child_id in detected_ids",
-            "idle_sec < 15.0",
-            "face_count > 1",
-            "idle_sec >= 15.0",
-            "session_active_since_mono",
-            "idle_sec = min(get_user_idle_seconds(), active_duration)",
-            "store.refund(",
-            "quota_accounting.active_tick",
-            "validated_pipe_allow",
-        )
-        for expression in required:
-            with self.subTest(expression=expression):
-                self.assertIn(expression, source)
-        self.assertNotIn("BrokerLabReadOnlyQuota(", source)
+        from facekids.session_transition_policy import (
+            decide_child_transition, TransitionDecision)
+        self.assertIn("decide_child_transition(", source)
+        self.assertIn("session_active_since_mono", source)
+        self.assertIn("idle_sec = min(get_user_idle_seconds(), active_duration)", source)
+        self.assertIn("store.refund(", source)
+        self.assertIn("quota_accounting.active_tick", source)
+        self.assertIn('command="SESSION_QUERY"', inspect.getsource(
+            filhos_agent.InSessionFaceIdentifier.trigger_if_due))
         self.assertNotIn("store.charge(", source)
+        self.assertNotIn("BrokerLabReadOnlyQuota(", source)
+        # UI notification file cannot drive quota ownership or inactivity.
+        start = source.index("# Notification file is UI-only")
+        end = source.index("# B. Checar", start)
+        untrusted = source[start:end]
+        self.assertNotIn("tracker.switch_child(", untrusted)
+        self.assertNotIn("session_active_since_mono =", untrusted)
+        self.assertEqual(
+            decide_child_transition(7, [7, 8], 2, 25, 8,
+                                    observation_age_seconds=0),
+            TransitionDecision.KEEP_CURRENT)
+        self.assertEqual(
+            decide_child_transition(7, [8], 1, 25, 8,
+                                    observation_age_seconds=0),
+            TransitionDecision.SWITCH_CHILD)
 
     def test_multi_face_response_contract_keeps_metadata(self):
         source = inspect.getsource(auth_service.FaceAuthenticator.evaluate)
