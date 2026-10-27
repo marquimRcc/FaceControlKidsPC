@@ -170,7 +170,8 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 }
 & $venvPython -m pip install --disable-pip-version-check --quiet -r (Join-Path $repo 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar OpenCV/NumPy dentro da VM.' }
-& $venvPython -c 'import tkinter,cv2,numpy;print("Python, Tkinter, OpenCV e NumPy: OK")'
+# Avoid Python -c quoting: Windows PowerShell 5.1 strips nested double quotes.
+& $venvPython -m facekids.vm_guest_diagnostics dependencies
 if ($LASTEXITCODE -ne 0) { throw 'Bibliotecas nao funcionais na VM.' }
 
 # Both the parent dashboard and pilot database must use ONLY VM data paths.
