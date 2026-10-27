@@ -60,6 +60,22 @@ class FaceRecheckGraceTests(unittest.TestCase):
         self.assertIsNone(self.worker.verified_child_for_current_console())
         self.assertEqual(self.worker.observe_service_tick().charged_seconds, 0)
 
+    def test_expired_grace_is_not_returned_as_verified_identity(self):
+        self.assertTrue(self.bind(self.allow).accepted)
+        self.assertEqual(self.bind(lambda: ("DENY_UNKNOWN", {})).reason, "face-grace")
+        self.now += 30.1
+        self.assertIsNone(self.worker.verified_child_for_current_console())
+
+    def test_curfew_invalidates_paused_lease(self):
+        self.assertTrue(self.bind(self.allow).accepted)
+        self.assertEqual(self.bind(lambda: ("DENY_NO_FACE", {})).reason, "face-grace")
+        from unittest.mock import patch
+        with patch.object(self.store, "is_curfew_active", return_value=(True, "curfew")):
+            tick = self.worker.observe_service_tick()
+        self.assertTrue(tick.locked)
+        self.assertEqual(tick.reason, "curfew")
+        self.assertIsNone(self.worker.verified_child_for_current_console())
+
     def test_recapture_success_discards_paused_window(self):
         self.assertTrue(self.bind(self.allow).accepted)
         self.now += 7
