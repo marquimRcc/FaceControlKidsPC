@@ -123,7 +123,26 @@ function Get-WorkerDiagnostics {
             return [pscustomobject]$data
         }
         if (-not $p.ExecutablePath -or
-            (Split-Path $p.ExecutablePath -Leaf) -notmatch '^(?i:pythonw?[.]exe)
+            (Split-Path $p.ExecutablePath -Leaf) -notin @('python.exe','pythonw.exe')) {
+            $data.Reason = 'WORKER_EXECUTABLE_MISMATCH_OR_UNREADABLE'
+            return [pscustomobject]$data
+        }
+        if (-not $p.CommandLine -or $p.CommandLine -notmatch 'facekids[.]auth_service' -or
+            $p.CommandLine -notlike ('*'+$serverStatusFile+'*')) {
+            $data.Reason = 'WORKER_COMMANDLINE_MISMATCH_OR_UNREADABLE'
+            return [pscustomobject]$data
+        }
+        try {
+            $reported = Get-Content -LiteralPath $serverStatusFile -Raw -ErrorAction Stop |
+                ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            $data.Reason = 'SERVER_STATUS_MISSING_OR_UNREADABLE'
+            return [pscustomobject]$data
+        }
+        if ([int]$reported.pid -ne $trackedPid) {
+            $data.Reason = 'WORKER_TRACKED_PID_DIFFERS_FROM_SERVER'
+            return [pscustomobject]$data
+        }
         try {
             $owner = Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction Stop
             if ($owner.ReturnValue -ne 0 -or -not $owner.Sid) {
