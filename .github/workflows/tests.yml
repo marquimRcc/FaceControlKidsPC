@@ -16,6 +16,24 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      - name: Windows VM one-liner/bootstrap syntax and no-install assertions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = (Resolve-Path 'scripts/Iniciar-FaceKids-VM-Developer.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $source, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'VM launcher PowerShell syntax failed'
+          }
+          $content = Get-Content -LiteralPath $source -Raw
+          if ($content -match 'regsvr32|Register-ScheduledTask|New-Service|Set-Acl') {
+            throw 'VM launcher unexpectedly contains installation operations'
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh
