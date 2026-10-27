@@ -38,8 +38,13 @@ $credentialProviderAlreadyRegistered = Test-Path -LiteralPath $cpKey
 $services = @(Get-Service -Name 'FaceKids*' -ErrorAction SilentlyContinue |
               Select-Object -ExpandProperty Name)
 $python = $null
+# The one-line VM bootstrap keeps its virtualenv outside codigo-developer
+# to survive source refreshes. Prefer the same interpreter as the dashboard.
+$labVenv = Join-Path (Split-Path $root -Parent) '.venv\Scripts\python.exe'
 $venv = Join-Path $root '.venv\Scripts\python.exe'
-if (Test-Path -LiteralPath $venv) {
+if (Test-Path -LiteralPath $labVenv -PathType Leaf) {
+    $python = $labVenv
+} elseif (Test-Path -LiteralPath $venv -PathType Leaf) {
     $python = $venv
 } elseif (Get-Command py.exe -ErrorAction SilentlyContinue) {
     $python = 'py.exe'
