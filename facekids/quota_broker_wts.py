@@ -123,6 +123,24 @@ class VerifiedWtsQuotaWorker:
         """Revoke any previous child identity after failed recognition."""
         self._broker.end_verified_session()
 
+    def begin_trusted_face_recheck(self, *, session_id: int) -> bool:
+        state = self._observed()
+        if (state is None or state.session_id != session_id or
+                state.token_sid != self._expected_sid or not state.connected
+                or not self._locks.is_unlocked(session_id)):
+            self._broker.end_verified_session()
+            return False
+        return self._broker.begin_recheck(session_id=session_id)
+
+    def transient_face_grace(self, *, session_id: int) -> bool:
+        state = self._observed()
+        if (state is None or state.session_id != session_id or
+                state.token_sid != self._expected_sid or not state.connected
+                or not self._locks.is_unlocked(session_id)):
+            self._broker.end_verified_session()
+            return False
+        return self._broker.allow_transient_grace(session_id=session_id)
+
     def start_trusted_face_binding(self, *, enrolled_child_id: int, session_id: int) -> BrokerTick:
         """Only a privileged recognized-face callback may call this method."""
         state = self._observed()
