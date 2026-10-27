@@ -70,6 +70,20 @@ jobs:
               throw ('Unexpected VM logon staging mutation: ' + $command)
             }
           }
+      - name: Windows VM one-command auth driver parse
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = (Resolve-Path 'scripts/Preparar-FaceKids-Autenticacao-VM.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'VM authentication one-command driver PowerShell syntax failed'
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh
