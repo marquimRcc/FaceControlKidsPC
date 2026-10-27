@@ -36,6 +36,7 @@ from .recognition import Recognizer
 from .storage import Storage
 from .avatar_utils import save_child_photo
 from .windows_pipe_api import configure_kernel32
+from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
 
 if sys.platform == "win32":
@@ -73,9 +74,14 @@ BUFFER_SIZE = 4096
 PIPE_ACCESS_DUPLEX = 0x00000003
 PIPE_TYPE_MESSAGE = 0x00000004
 PIPE_READMODE_MESSAGE = 0x00000002
+PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+def auth_pipe_mode_flags() -> int:
+    return PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS
+
 
 # Marcador de versao do contrato IPC. Isto NAO e segredo nem mecanismo
 # criptografico; a confianca local continua dependendo das ACLs do Named Pipe.
@@ -430,7 +436,7 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
         h_pipe = kernel32.CreateNamedPipeW(
             PIPE_NAME,
             PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            auth_pipe_mode_flags(),
             PIPE_UNLIMITED_INSTANCES,
             BUFFER_SIZE,
             BUFFER_SIZE,
