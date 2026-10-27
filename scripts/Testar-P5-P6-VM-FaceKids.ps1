@@ -92,24 +92,12 @@ if ($RunUnitTests) {
 }
 if ($CameraProbe) {
     # Only the guest's interactive camera; NOT SYSTEM Session 0 or LogonUI.
-    $code = @'
-import cv2,sys
-index=int(sys.argv[1])
-cap=cv2.VideoCapture(index, cv2.CAP_DSHOW)
-try:
-    if not cap.isOpened():
-        print("CAMERA_GUEST_INTERACTIVE=UNAVAILABLE")
-        sys.exit(2)
-    ok, frame=cap.read()
-    print("CAMERA_GUEST_INTERACTIVE=" + ("FRAME_OBSERVED" if ok and frame is not None else "NO_FRAME"))
-    sys.exit(0 if ok and frame is not None else 3)
-finally:
-    cap.release()
-'@
+    # Windows PowerShell 5.1 can strip nested quotes in Python -c.
+    # Execute the checked-in module instead; it always releases the camera.
     if ($python -eq 'py.exe') {
-        & py.exe -3.11 -c $code $CameraIndex
+        & py.exe -3.11 -m facekids.vm_guest_diagnostics camera --index $CameraIndex
     } else {
-        & $python -c $code $CameraIndex
+        & $python -m facekids.vm_guest_diagnostics camera --index $CameraIndex
     }
     $report.CameraProbeExitCode = $LASTEXITCODE
 }
