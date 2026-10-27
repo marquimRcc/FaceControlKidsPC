@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import math
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -254,22 +255,177 @@ class Storage:
         row = self.db.execute("SELECT seconds FROM daily_usage WHERE person_id=? AND day=?", (person_id,day)).fetchone()
         return float(row[0]) if row else 0.0
 
+    def _require_quota_writer(self, *, service_receipt: bool) -> None:
+        """Defense in depth for the VM cutover, checked inside BEGIN IMMEDIATE.
+
+        This is NOT a credential boundary: only NTFS preventing a child from
+        editing SQLite/WAL/SHM can provide that security. This gate prevents
+        accidentally running the two application writers after cutover.
+        """
+        row = self.db.execute(
+            "SELECT value FROM settings WHERE key='quota_writer_owner'"
+        ).fetchone()
+        value = row[0] if row is not None else None
+        if value is not None and value != "vm-service-only":
+            raise PermissionError("Unknown quota writer owner; fail closed")
+        if value == "vm-service-only" and not service_receipt:
+            raise PermissionError("Legacy debit forbidden: SCM owns VM ledger")
+
     def charge(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
-        if seconds < 0:
-            raise ValueError("Não é permitido descontar tempo negativo")
-        day = day or date.today().isoformat()
+        # Never persist NaN/Inf, strings or negative clock differences in the ledger.
+        # This guard does not authenticate the caller or make local SQLite tamperproof.
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Tempo debitado deve ser um número finito não negativo")
+        day = date.today().isoformat() if day is None else day
+        if not isinstance(day, str):
+            raise ValueError("Dia inválido")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Dia inválido")
+        except (TypeError, ValueError):
+            raise ValueError("Dia inválido") from None
         with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=False)
             self.db.execute("""
                 INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
                 ON CONFLICT(person_id,day) DO UPDATE SET seconds = seconds + excluded.seconds
             """, (person_id,day,float(seconds)))
         return self.used(person_id,day)
 
+    def charge_up_to_available(self, person_id: int, seconds: float,
+                               day: Optional[str] = None) -> float:
+        """Atomically debit no more than available seconds for a trusted caller.
+
+        BEGIN IMMEDIATE serializes read/modify/write across SQLite connections;
+        it is NOT a Windows privilege or authorization boundary. The Filhos
+        account can still tamper with the unprotected legacy database.
+        Returns the actual seconds debited.
+        """
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Identificador invalido")
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Debito deve ser finito e nao negativo")
+        day = date.today().isoformat() if day is None else day
+        if not isinstance(day, str):
+            raise ValueError("Dia invalido")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Dia invalido")
+        except (TypeError, ValueError):
+            raise ValueError("Dia invalido") from None
+
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=False)
+            row = self.db.execute(
+                "SELECT daily_limit_seconds FROM people WHERE id=?", (person_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(person_id)
+            bonus_row = self.db.execute(
+                "SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            usage_row = self.db.execute(
+                "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            allowed = max(0.0, float(row[0]) +
+                          (float(bonus_row[0]) if bonus_row else 0.0) -
+                          (float(usage_row[0]) if usage_row else 0.0))
+            debit = min(float(seconds), allowed)
+            if debit > 0:
+                self.db.execute("""
+                    INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
+                    ON CONFLICT(person_id,day)
+                    DO UPDATE SET seconds = seconds + excluded.seconds
+                """, (person_id, day, debit))
+            return debit
+
+    def charge_capped_once(self, event_id: str, person_id: int, seconds: float,
+                           day: Optional[str] = None) -> float:
+        """Prototype durable replay protection for service-issued tick IDs.
+
+        event_id MUST be generated by the future trusted service and never
+        accepted from the Filhos account. Returns newly debited seconds, or
+        zero for an exact replay. This is not yet called in production.
+        """
+        if (not isinstance(event_id, str) or len(event_id) != 32 or
+                any(ch not in "0123456789abcdef" for ch in event_id)):
+            raise ValueError("Invalid service-generated tick identifier")
+        if type(person_id) is not int or person_id <= 0:
+            raise ValueError("Invalid child ID")
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Invalid quota debit")
+        day = date.today().isoformat() if day is None else day
+        if not isinstance(day, str):
+            raise ValueError("Invalid day")
+        try:
+            if len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("Invalid day")
+        except (TypeError, ValueError):
+            raise ValueError("Invalid day") from None
+
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=True)
+            self.db.execute("""
+                CREATE TABLE IF NOT EXISTS quota_tick_receipts (
+                    event_id TEXT PRIMARY KEY,
+                    person_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    requested_seconds REAL NOT NULL,
+                    charged_seconds REAL NOT NULL
+                )
+            """)
+            receipt = self.db.execute(
+                "SELECT person_id, day, requested_seconds FROM quota_tick_receipts WHERE event_id=?",
+                (event_id,),
+            ).fetchone()
+            if receipt is not None:
+                if (receipt[0] != person_id or receipt[1] != day or
+                        float(receipt[2]) != float(seconds)):
+                    raise ValueError("Service tick identifier reused with different payload")
+                return 0.0
+
+            person = self.db.execute(
+                "SELECT daily_limit_seconds FROM people WHERE id=?", (person_id,)
+            ).fetchone()
+            if person is None:
+                raise KeyError(person_id)
+            bonus = self.db.execute(
+                "SELECT seconds FROM daily_bonus WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            used = self.db.execute(
+                "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                (person_id, day),
+            ).fetchone()
+            remaining = max(0.0, float(person[0]) +
+                            (float(bonus[0]) if bonus else 0.0) -
+                            (float(used[0]) if used else 0.0))
+            charged = min(float(seconds), remaining)
+            if charged > 0:
+                self.db.execute("""
+                    INSERT INTO daily_usage(person_id,day,seconds) VALUES (?,?,?)
+                    ON CONFLICT(person_id,day)
+                    DO UPDATE SET seconds=seconds+excluded.seconds
+                """, (person_id, day, charged))
+            self.db.execute(
+                "INSERT INTO quota_tick_receipts(event_id,person_id,day,requested_seconds,charged_seconds)"
+                " VALUES (?,?,?,?,?)",
+                (event_id, person_id, day, float(seconds), charged),
+            )
+            return charged
+
     def refund(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
-        if seconds < 0:
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
             raise ValueError("Não é permitido reembolsar tempo negativo")
         day = day or date.today().isoformat()
         with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            self._require_quota_writer(service_receipt=False)
             self.db.execute("""
                 UPDATE daily_usage SET seconds = MAX(0.0, seconds - ?)
                 WHERE person_id=? AND day=?
