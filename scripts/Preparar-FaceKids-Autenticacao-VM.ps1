@@ -24,18 +24,34 @@ New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
 $bootstrap = Join-Path $scriptDir 'Iniciar-FaceKids-VM-Developer.ps1'
 $stage = Join-Path $scriptDir 'FaceKids-VM-Autenticacao.ps1'
 $base = 'https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/'
+# Windows PowerShell 5.1 blocks direct & invocation of .ps1 when the VM policy
+# is Restricted. -ExecutionPolicy Bypass applies ONLY to this child process,
+# without changing MachinePolicy, LocalMachine or CurrentUser settings.
+function Invoke-LabStep {
+    param(
+        [Parameter(Mandatory=$true)][string]$ScriptPath,
+        [string[]]$StepArguments = @()
+    )
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @StepArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw ('FaceKids VM: etapa falhou em ' + (Split-Path $ScriptPath -Leaf) +
+               ', argumentos=' + ($StepArguments -join ' ') +
+               ', codigo=' + $LASTEXITCODE)
+    }
+}
+
 Write-Host '[1/4] Atualizando bootstrap e integracao a partir da developer...' -ForegroundColor Cyan
 Invoke-WebRequest -UseBasicParsing -Uri ($base+'Iniciar-FaceKids-VM-Developer.ps1') -OutFile $bootstrap
 Invoke-WebRequest -UseBasicParsing -Uri ($base+'FaceKids-VM-Autenticacao.ps1') -OutFile $stage
 Write-Host '[2/4] Sincronizando codigo e Python VM (sem abrir painel)...' -ForegroundColor Cyan
-& $bootstrap -SkipTests -NoCameraProbe -NoDashboard
+Invoke-LabStep -ScriptPath $bootstrap -StepArguments @('-SkipTests','-NoCameraProbe','-NoDashboard')
 Write-Host '[3/4] Iniciando autenticador INTERATIVO de laboratorio...' -ForegroundColor Cyan
-& $stage -Action StartAuth
+Invoke-LabStep -ScriptPath $stage -StepArguments @('-Action','StartAuth')
 Write-Host '[4/4] Verificando comunicacao IPC...' -ForegroundColor Cyan
-& $stage -Action Ping
+Invoke-LabStep -ScriptPath $stage -StepArguments @('-Action','Ping')
 if (-not $SkipFaceProbe) {
     Write-Host 'Olhe para a webcam. Um unico rosto cadastrado deve estar visivel.' -ForegroundColor Yellow
-    & $stage -Action FaceProbe
+    Invoke-LabStep -ScriptPath $stage -StepArguments @('-Action','FaceProbe')
 }
 Write-Host ''
 Write-Host 'FASE DE DIAGNOSTICO CONCLUIDA. CP e SCM NAO foram instalados.' -ForegroundColor Green
