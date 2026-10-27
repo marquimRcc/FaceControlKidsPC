@@ -8,7 +8,6 @@
 param(
     [ValidateSet('Status','StartAuth','RestartAuth','Ping','FaceProbe','ActivateCP','Rollback')]
     [string]$Action = 'Status',
-    [switch]$SnapshotConfirmed,
     [switch]$RecoveryConfirmed,
     [switch]$FixedPasswordConfirmed
 )
@@ -132,7 +131,7 @@ function Remove-OurCp {
         Assert-OurCp
         if (Test-Path -LiteralPath $dllTarget -PathType Leaf) {
             $unreg=Start-Process -FilePath $regsvr -ArgumentList ('/s /u "'+$dllTarget+'"') -Wait -PassThru
-            if ($unreg.ExitCode -ne 0) { throw 'Falha ao desregistrar DLL; use o snapshot externo.' }
+            if ($unreg.ExitCode -ne 0) { throw 'Falha ao desregistrar DLL; recupere o acesso administrativo e remova a DLL de laboratorio manualmente.' }
         }
         Remove-Item -LiteralPath $cpKey -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $comKey -Recurse -Force -ErrorAction SilentlyContinue
@@ -233,8 +232,8 @@ switch ($Action) {
         Require-Admin $current
         Require-Assets
         $targetSid=Require-Filhos
-        if(-not ($SnapshotConfirmed -and $RecoveryConfirmed -and $FixedPasswordConfirmed)){
-            throw 'Exige -SnapshotConfirmed -RecoveryConfirmed -FixedPasswordConfirmed.'
+        if(-not ($RecoveryConfirmed -and $FixedPasswordConfirmed)){
+            throw 'Exige -RecoveryConfirmed -FixedPasswordConfirmed: confirme login administrativo e senha Windows de Filhos.'
         }
         if(-not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess){
             throw 'Execute PowerShell x64 na VM para instalar DLL x64.'
@@ -278,7 +277,7 @@ switch ($Action) {
                 throw 'InprocServer32 nao aponta para a DLL exclusiva da VM.'
             }
             Write-Host 'DLL registrada na VM, sem Win+L/logoff automatico.' -ForegroundColor Green
-            Write-Warning 'Guarde o login convencional. Rollback via -Action Rollback ou snapshot externo.'
+            Write-Warning 'Guarde o login convencional. Caso necessario, remova o CP com -Action Rollback na conta administrativa.'
         } catch {
             Write-Warning ('Falha no registro: '+$_.Exception.Message)
             Remove-OurCp
