@@ -42,6 +42,7 @@ from .ipc_json import parse_local_json
 from .ipc_reply import validated_face_observation
 from .windows_pipe_api import configure_kernel32
 from .session_transition_policy import decide_child_transition, TransitionDecision
+from .quota_vm_shadow_integration import VmBoundShadow, shadow_enabled_for_vm
 
 AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
 
@@ -560,8 +561,11 @@ def run_agent():
 
     db_path = child_pilot_database()
     store = Storage(db_path)
-    quota_accounting = LegacyLedgerQuota(store)  # No broker writer on the family machine.
+    quota_accounting = LegacyLedgerQuota(store)  # Still the only family writer.
     tracker = QuotaTracker(store)
+    shadow_probe = VmBoundShadow() if shadow_enabled_for_vm() else None
+    if shadow_probe is not None:
+        logger.warning("VM shadow-only enabled; no broker writes, locks, or logon decisions")
 
     # last_unlock.json is UI-only: never assign quota owner from writable JSON.
     cid, cname, unlock_ts = read_last_unlock_child()
@@ -733,6 +737,17 @@ def run_agent():
                     rem = tick.remaining_seconds
                     tracker.update_balance(rem)
 
+                    # Shadow may observe this child, but NEVER change rem,
+                    # trigger a lock, or select a facial identity.
+                    if shadow_probe is not None:
+                        try:
+                            shadow_probe.trigger_if_due(
+                                child_id=tracker.current_child_id, day=today,
+                                remaining_seconds=rem)
+                        except Exception as shadow_error:
+                            logger.debug("Shadow diagnostic unavailable: %s",
+                                         type(shadow_error).__name__)
+
                     # Verifica avisos e bloqueio automatico
                     locked = tracker.check_notifications_and_lock(rem) if tick.may_enforce_lock else False
                     if locked:
@@ -740,6 +755,23 @@ def run_agent():
                         time.sleep(5.0)
                         last_active_time = time.monotonic()
                         session_active_since_mono = time.monotonic()
+                if shadow_probe is not None:
+                    # Diagnostic-only: reads a service-bound child ID from the
+                    # OS-verified VM pipe, never asserts identity or authority.
+                    try:
+                        local_rem = (store.remaining(tracker.current_child_id, today)
+                                     if tracker.current_child_id is not None else 0.0)
+                        comparison = shadow_probe.take_result(
+                            current_child_id=tracker.current_child_id,
+                            current_day=today, current_remaining=local_rem)
+                        if comparison is not None:
+                            logger.info("VM shadow-only: %s; delta_seconds=%s; age=%.2f",
+                                        comparison.outcome,
+                                        comparison.difference_seconds,
+                                        comparison.sample_age_seconds)
+                    except Exception as shadow_error:
+                        logger.debug("Shadow read failed non-fatally: %s",
+                                     type(shadow_error).__name__)
             else:
                 # Sessao bloqueada (Win+L) ou suspensa: NAO cobra tempo!
                 last_active_time = time.monotonic()
