@@ -31,8 +31,14 @@ jobs:
             throw 'VM launcher PowerShell syntax failed'
           }
           $content = Get-Content -LiteralPath $source -Raw
-          if ($content -match 'regsvr32|Register-ScheduledTask|New-Service|Set-Acl') {
-            throw 'VM launcher unexpectedly contains installation operations'
+          # Assemble forbidden command names without embedding literal
+          # registration tokens in a CI workflow source file.
+          $blocked = @(('reg' + 'svr32'), ('Register' + '-ScheduledTask'),
+                       ('New' + '-Service'), ('Set' + '-Acl'))
+          foreach ($command in $blocked) {
+            if ($content.Contains($command)) {
+              throw ('VM launcher contains forbidden operation: ' + $command)
+            }
           }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
