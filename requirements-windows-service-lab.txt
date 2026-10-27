@@ -1,0 +1,3 @@
+# Instalar APENAS em VM Windows descartavel para testes manuais de SCM.
+# Nao faz parte do requirements.txt do FaceKids domestico.
+pywin32>=306,<400

@@ -16,7 +16,15 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-      - name: Windows-only pilot launcher parse and three-child status smoke test
+      - name: Integrated isolated acceptance - three child quotas, WTS and WAL rollback
+        run: python -m scripts.ci_quota_isolated_acceptance
+      - name: Portable JSON envelope guard (C++17, isolated)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic native/credential_provider_facekids/TestJsonEnvelopeGuardPortable.cpp -o "$RUNNER_TEMP/facekids-json-guard"
+          "$RUNNER_TEMP/facekids-json-guard"
+      - name: Read-only ACL audit syntax and uninstalled-host smoke test
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -24,23 +32,217 @@ jobs:
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'scripts/Iniciar-Piloto-Filhos.ps1').Path,
+            (Resolve-Path 'scripts/Auditar-Permissoes-FaceKids.ps1').Path,
             [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -ne 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            throw "PowerShell pilot launcher parse failed"
+          if ($errors.Count -ne 0) { throw "ACL audit PowerShell parse failed: $($errors[0].Message)" }
+          $missing = Join-Path $env:RUNNER_TEMP 'facekids-not-installed'
+          $result = & ./scripts/Auditar-Permissoes-FaceKids.ps1 -Root $missing | ConvertFrom-Json
+          if (@($result).Count -ne 11) { throw "ACL audit did not report eleven expected locations" }
+          if (@($result | Where-Object { $_.Exists }).Count -ne 0) {
+            throw "ACL audit found unexpected installed data on disposable runner"
           }
-          $data = Join-Path $env:RUNNER_TEMP 'facekids-children-ci.sqlite3'
+      - name: Installer read-only preflight on disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:ProgramData 'FaceKids'
+          $dll = Join-Path $root 'FaceKidsCredentialProvider.dll'
+          $beforeDll = Test-Path -LiteralPath $dll
+          $beforeTask = [bool](Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue)
+          $report = & ./scripts/Instalar-FaceKids-Nativo.ps1 -PreflightOnly | ConvertFrom-Json
+          if (@($report).Count -ne 11) { throw 'Installer preflight did not enumerate protected paths' }
+          $afterDll = Test-Path -LiteralPath $dll
+          $afterTask = [bool](Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue)
+          if ($beforeDll -ne $afterDll -or $beforeTask -ne $afterTask) {
+            throw 'Preflight changed Credential Provider or scheduled task state'
+          }
+      - name: Recovery audit is read-only on disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $report = & ./scripts/Desinstalar-FaceKids-Nativo.ps1 -AuditOnly | ConvertFrom-Json
+          if ($null -eq $report -or $report.HardwareRollbackVerified -ne $false) {
+            throw 'Recovery audit cannot claim hardware rollback validation'
+          }
+          if ($report.ProviderDllPresent -or $report.ProviderRegistered -or $report.ChildTaskPresent) {
+            throw 'Recovery audit unexpectedly found an installed provider on CI runner'
+          }
+      - name: Read-only pipe provenance diagnostic
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Auditar-Identidade-PipeFaceKids.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw "Pipe provenance script parse failure: $($errors[0].Message)" }
+          $report = & $script | ConvertFrom-Json
+          if ($report.NamedPipeServerIdentityVerified -ne $false -or
+              $report.SafeForAuthentication -ne $false) {
+            throw 'Read-only diagnostic must not claim authentication trust'
+          }
+          if ('PrincipalSid' -notin @($report.Task.PSObject.Properties.Name)) {
+            throw 'Pipe audit must include the scheduled principal SID field'
+          }
+          foreach ($proc in @($report.AuthProcesses)) {
+            if ($proc -and 'OwnerMatchesScheduledPrincipal' -notin @($proc.PSObject.Properties.Name)) {
+              throw 'Pipe audit must report owner/principal SID comparison'
+            }
+          }
+      - name: Simulate read-only security isolation plan
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Planejar-Isolamento-FaceKids.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw "Isolation plan parse failed: $($errors[0].Message)" }
+          $data = Join-Path $env:RUNNER_TEMP 'facekids-synthetic-data'
+          $protected = Join-Path $env:RUNNER_TEMP 'facekids-protected-should-not-exist'
+          New-Item -ItemType Directory -Path $data -Force | Out-Null
+          $dll = Join-Path $data 'FaceKidsCredentialProvider.dll'
+          Set-Content -LiteralPath $dll -Value 'synthetic, not a DLL' -Encoding utf8
           try {
+            $before = (Get-FileHash -LiteralPath $dll).Hash
+            $plan = & $script -DataRoot $data -ProtectedRoot $protected | ConvertFrom-Json
+            if ($plan.ReadyToDeploy -or $plan.MutationsPerformed -ne 0 -or
+                -not $plan.RequiresServiceOwnedQuotaLedger -or
+                @($plan.ProposedAssets).Count -ne 3) {
+              throw 'Isolation plan unexpectedly approved deployment or changed scope'
+            }
+            if ((Get-FileHash -LiteralPath $dll).Hash -ne $before -or
+                (Test-Path -LiteralPath $protected)) {
+              throw 'Read-only migration planner modified filesystem'
+            }
+          } finally {
+            Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - name: Optional Windows SCM class validation in disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install -r requirements-windows-service-lab.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Optional pywin32 dependency installation failed' }
+          python -c "import win32serviceutil; from facekids.quota_broker_scm_win import FaceKidsQuotaLabService; assert issubclass(FaceKidsQuotaLabService, win32serviceutil.ServiceFramework); print('SCM wrapper loaded: no service registered')"
+          if ($LASTEXITCODE -ne 0) { throw 'SCM wrapper failed import or subclass verification' }
+          python -m unittest discover -s tests -p test_quota_broker_scm_lifecycle.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'SCM mocked start/stop tests failed' }
+      - name: Hosted Windows VM — real SCM install, query, stop and rollback
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_scm_lab_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Disposable Windows SCM integration failed' }
+      - name: Hosted Windows VM — real SCM-owned writer with protected synthetic quotas
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_scm_writer_vm_smoke
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Disposable Windows SCM writer/child ACL integration failed'
+          }
+      - name: Hosted Windows VM — real synthetic child token NTFS isolation
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_acl_child_token_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Unprivileged child token ACL test failed' }
+      - name: Hosted Windows VM — synthetic service-owned SQLite cutover with real child token
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m scripts.ci_quota_migration_windows
+          if ($LASTEXITCODE -ne 0) { throw 'Disposable SQLite migration and ACL rollback failed' }
+      - name: Windows VM preflight must fail closed before real Winlogon testing
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = (Resolve-Path 'scripts/Testar-Preflight-VM-FaceKids.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) { throw "VM preflight syntax invalid" }
+          $report = & $script | ConvertFrom-Json
+          if ($report.ReadyForFamilyInstallation -or $report.WritesPerformed -ne 0 -or
+              $report.ExternalSnapshotTested -or $report.CredentialProviderWinlogonTested) {
+            throw 'Read-only preflight must never certify manual Winlogon or snapshot restore'
+          }
+      - name: Disposable Windows ACL and rollback rehearsal
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = (Resolve-Path 'scripts/Testar-ACL-Rollback-Broker-Lab.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "ACL rollback lab syntax error: $($parseErrors[0].Message)"
+          }
+          $result = & $path | ConvertFrom-Json
+          if (-not $result.OriginalAclRestored -or
+              -not $result.BroadUsersWriteAceAbsent -or
+              -not $result.SyntheticFileBytesUnchanged -or
+              $result.ProductionPathsTouched -or
+              $result.ChildEffectiveTokenTested) {
+            throw 'Disposable ACL rollback safety contract failed'
+          }
+      - name: Windows-only real adult launcher syntax and dynamic profiles smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($script in @('scripts/Iniciar-Piloto-Filhos.ps1',
+                                'scripts/Iniciar-Teste-Adulto-Filhos.ps1')) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -ne 0) {
+              throw "PowerShell syntax invalid in $script : $($parseErrors[0].Message)"
+            }
+          }
+          $data = Join-Path $env:RUNNER_TEMP 'facekids-children-dynamic-ci.sqlite3'
+          try {
+            python -m facekids.children_pilot --database $data add-profile 'Crianca 1'
+            if ($LASTEXITCODE -ne 0) { throw 'Single-profile enrollment failed' }
             $lines = @(python -m facekids.children_pilot --database $data status)
-            if ($LASTEXITCODE -ne 0) { throw 'Children CLI status failed' }
+            if ($LASTEXITCODE -ne 0 -or @($lines | Where-Object { $_.StartsWith('Crianca ') }).Count -ne 1) {
+              throw "Single profile status failed: $($lines -join '; ')"
+            }
+            foreach ($idx in 2..5) {
+              python -m facekids.children_pilot --database $data add-profile "Crianca $idx"
+              if ($LASTEXITCODE -ne 0) { throw "Profile creation failed: $idx" }
+            }
+            $lines = @(python -m facekids.children_pilot --database $data status)
+            if ($LASTEXITCODE -ne 0) { throw 'Multi-profile status failed' }
             $recognized = @($lines | Where-Object {
               $_.StartsWith('Crianca ') -and
               $_.Contains('0 amostras; 120 minutos restantes hoje.')
             })
-            if ($recognized.Count -ne 3) {
-              throw "Unexpected pilot profiles: $($lines -join '; ')"
+            if ($recognized.Count -ne 5) {
+              throw "Expected 5 individually configurable profiles: $($lines -join '; ')"
             }
           } finally {
-            Remove-Item -LiteralPath $data -Force -ErrorAction SilentlyContinue
+            foreach ($extension in @('', '-wal', '-shm')) {
+              Remove-Item -LiteralPath ($data + $extension) -Force -ErrorAction SilentlyContinue
+            }
           }

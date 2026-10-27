@@ -6,11 +6,30 @@
   Preserva intactos os bancos de dados biometricos e cadastros dos filhos.
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$AuditOnly
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
 $dllTarget = 'C:\ProgramData\FaceKids\FaceKidsCredentialProvider.dll'
 $clsid = "{FAC0D042-3DD0-4A8C-9F18-440C44330C20}"
+
+# Auditoria de recuperacao sem remover registro COM, tarefas, arquivos ou dados.
+# Nao considera que um backup/snapshot de LogonUI exista.
+if ($AuditOnly) {
+    $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\$clsid"
+    $comPath = "HKLM:\SOFTWARE\Classes\CLSID\$clsid"
+    [pscustomobject]@{
+        ProviderDllPresent = [bool](Test-Path -LiteralPath $dllTarget)
+        ProviderRegistered = [bool](Test-Path -LiteralPath $registryPath)
+        ComClassPresent = [bool](Test-Path -LiteralPath $comPath)
+        AuthTaskPresent = [bool](Get-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction SilentlyContinue)
+        ChildTaskPresent = [bool](Get-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -ErrorAction SilentlyContinue)
+        ChildDatabasePresent = [bool](Test-Path -LiteralPath 'C:\ProgramData\FaceKids\criancas.sqlite3')
+        HardwareRollbackVerified = $false
+    } | ConvertTo-Json -Depth 3
+    return
+}
 
 Write-Host "============================================================" -ForegroundColor Yellow
 Write-Host "     FaceControlKidsPC - Desinstalador de Seguranca" -ForegroundColor Yellow

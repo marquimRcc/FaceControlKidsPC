@@ -123,7 +123,109 @@ static int RunParsingUnitTests() {
     }
     std::wcout << L"  [PASS] 12. Status aninhado em data rejeitado com sucesso.\n";
 
-    std::wcout << L"[OK] Todos os 12 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
+    // Numeric values must be complete JSON numbers, not accepted prefixes.
+    const std::string validPrefix = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":";
+    const std::string validSuffix = ",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":7200}";
+    for (const std::string& badId : {"2junk", "\"2junk\"", "-2", "2.5", "2e1"}) {
+        if (FaceKidsPipeClient::ParseResponse(validPrefix + badId + validSuffix).success) {
+            std::wcerr << L"[FALHA] child_id malformado aceito.\n";
+            return 14;
+        }
+    }
+    std::string timestampGarbage = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "junk\",\"remaining\":7200}";
+    if (FaceKidsPipeClient::ParseResponse(timestampGarbage).success) {
+        std::wcerr << L"[FALHA] timestamp com sufixo aceito.\n";
+        return 15;
+    }
+    std::string hugeRemaining = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":1e100}";
+    AuthResult bounded = FaceKidsPipeClient::ParseResponse(hugeRemaining);
+    if (bounded.success) {
+        std::wcerr << L"[FALHA] saldo fora de faixa.\n";
+        return 16;
+    }
+    std::wcout << L"  [PASS] 13. Numeros invalidos negados e saldo fora de faixa neutralizado.\n";
+    // ALLOW must carry a positive, finite and representable quota.
+    const std::string quotaPrefix = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + ",\"remaining\":";
+    for (const std::string& badQuota : {"0", "-1", "\"2junk\"", "null", "1e100", "2147483648"}) {
+        if (FaceKidsPipeClient::ParseResponse(quotaPrefix + badQuota + "}").success) {
+            std::wcerr << L"[FALHA] ALLOW com quota invalida foi aceito.\n";
+            return 17;
+        }
+    }
+    if (FaceKidsPipeClient::ParseResponse(validPrefix + "02" + validSuffix).success) {
+        std::wcerr << L"[FALHA] child_id nao canonico aceito.\n";
+        return 18;
+    }
+    std::string positiveQuota = quotaPrefix + "7200}";
+    AuthResult withPositiveQuota = FaceKidsPipeClient::ParseResponse(positiveQuota);
+    if (!withPositiveQuota.success || withPositiveQuota.remainingSeconds != 7200) {
+        std::wcerr << L"[FALHA] ALLOW com quota positiva legitima foi recusado.\\n";
+        return 19;
+    }
+    std::wcout << L"  [PASS] 14. ALLOW exige quota positiva e child_id canonico.\n";
+
+
+    // A valid response must remain valid, including repeated names at DIFFERENT
+    // nesting levels (the server sends data.child_id and top-level child_id).
+    std::string nestedValid = allowJson.substr(0, allowJson.size() - 1) +
+        ",\"data\":{\"child_id\":2,\"remaining\":7200}}";
+    if (!FaceKidsPipeClient::ParseResponse(nestedValid).success) {
+        std::wcerr << L"[FALHA] JSON valido com dados aninhados foi rejeitado.\n";
+        return 20;
+    }
+    const std::string withoutEnd = allowJson.substr(0, allowJson.size() - 1);
+    const std::string duplicateStatus = withoutEnd + ",\"status\":\"DENY_UNKNOWN\"}";
+    const std::string duplicateUser = withoutEnd + ",\"user\":\"Administrator\"}";
+    const std::string duplicateId = withoutEnd + ",\"child_id\":3}";
+    const std::string duplicateQuota = withoutEnd + ",\"remaining\":0}";
+    const std::string duplicateNested = withoutEnd + ",\"data\":{\"value\":1,\"value\":2}}";
+    for (const auto& malformed : {
+        duplicateStatus, duplicateUser, duplicateId, duplicateQuota,
+        duplicateNested, withoutEnd, allowJson + "garbage", allowJson + "{}",
+        std::string("garbage") + allowJson
+    }) {
+        if (FaceKidsPipeClient::ParseResponse(malformed).success) {
+            std::wcerr << L"[FALHA] Envelope JSON ambiguo ou corrompido foi aceito.\n";
+            return 21;
+        }
+    }
+    std::wcout << L"  [PASS] 15. Envelope estrito rejeita duplicatas e lixo externo.\n";
+    // A JSON string containing a number is not a numeric authorization field.
+    const std::string numericStart = "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":";
+    const std::string numericEnd = ",\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    const std::string quotedId = numericStart + "\"2\"" + numericEnd;
+    const std::string quotedQuota = numericStart + "2,\"remaining\":\"7200\",\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    const std::string quotedTimestamp = numericStart + "2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":\"" + nowTs + "\"}";
+    const std::string numericUser = "{\"status\":\"ALLOW\",\"user\":123,\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    for (const auto& mismatched : {quotedId, quotedQuota, quotedTimestamp, numericUser}) {
+        if (FaceKidsPipeClient::ParseResponse(mismatched).success) {
+            std::wcerr << L"[FALHA] Tipo incorreto em campo de autorizacao aceito.\n";
+            return 22;
+        }
+    }
+    std::wcout << L"  [PASS] 16. Tipos JSON de autorizacao validados.\n";
+    // Strings and nested JSON must never masquerade as top-level auth fields.
+    const std::string fakeNote = "{\"note\":\"escaped \\\"status\\\":\\\"DENY_UNKNOWN\\\"\"," + allowJson.substr(1);
+    AuthResult noteResult = FaceKidsPipeClient::ParseResponse(fakeNote);
+    if (!noteResult.success || noteResult.childId != 2) {
+        std::wcerr << L"[FALHA] Mensagem irrelevante alterou campos de autorizacao.\n";
+        return 23;
+    }
+    const std::string wrongStatus = "{\"data\":{\"status\":\"ALLOW\",\"child_id\":2},\"status\":\"DENY_UNKNOWN\",\"user\":\"Filhos\",\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    if (FaceKidsPipeClient::ParseResponse(wrongStatus).success) {
+        std::wcerr << L"[FALHA] Status falso aninhado autorizado.\n";
+        return 24;
+    }
+    const std::string disguisedStatus = "{\"sta\\u0074us\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"remaining\":7200,\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + nowTs + "}";
+    if (FaceKidsPipeClient::ParseResponse(disguisedStatus).success) {
+        std::wcerr << L"[FALHA] Alias Unicode de chave de autorizacao foi aceito.\n";
+        return 25;
+    }
+    std::wcout << L"  [PASS] 17. Extracao robusta contra campos falsos e aliases.\n";
+
+
+
+    std::wcout << L"[OK] Todos os 17 testes unitarios de parsing passaram com 100% de sucesso!\n\n";
     return 0;
 }
 

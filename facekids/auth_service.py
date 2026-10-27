@@ -34,6 +34,7 @@ from .children_pilot import child_pilot_database
 from .recognition import Recognizer
 from .storage import Storage
 from .avatar_utils import save_child_photo
+from .pipe_protocol import decode_pipe_command
 
 if sys.platform == "win32":
     log_dir = Path(os.environ.get("PROGRAMDATA", "C:/ProgramData")) / "FaceKids"
@@ -69,8 +70,16 @@ BUFFER_SIZE = 4096
 PIPE_ACCESS_DUPLEX = 0x00000003
 PIPE_TYPE_MESSAGE = 0x00000004
 PIPE_READMODE_MESSAGE = 0x00000002
+# Windows: remote clients must never query the facial authorization pipe.
+PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 PIPE_WAIT = 0x00000000
 PIPE_UNLIMITED_INSTANCES = 255
+
+
+def auth_pipe_mode_flags() -> int:
+    """Local-only message-mode pipe; authentication peers are same-machine."""
+    return PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS
+
 INVALID_HANDLE_VALUE = -1
 
 # Marcador de versao do contrato IPC. Isto NAO e segredo nem mecanismo
@@ -101,9 +110,14 @@ def create_security_attributes() -> SECURITY_ATTRIBUTES:
         ):
             sa.lpSecurityDescriptor = p_sd
         else:
-            logger.warning("Falha ao criar SDDL customizado; usando seguranca padrao.")
-            sa.lpSecurityDescriptor = None
+            # Never silently fall back to a process-default DACL for a pipe
+            # consulted by LogonUI during local authentication.
+            logger.error("Falha ao criar SDDL do pipe; recusando abertura insegura.")
+            raise RuntimeError("Named Pipe SDDL conversion failed")
     else:
+        if sys.platform == "win32":
+            logger.error("Advapi32 indisponivel; recusando pipe com ACL padrao.")
+            raise RuntimeError("Named Pipe security API unavailable")
         sa.lpSecurityDescriptor = None
     return sa
 
@@ -125,7 +139,8 @@ class FaceAuthenticator:
             self._recognizer = Recognizer(self.models_dir)
         return self._recognizer
 
-    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5) -> Tuple[str, dict]:
+    def evaluate(self, camera_index: int = 0, timeout_seconds: float = 4.5,
+                 *, persist_unlock_metadata: bool = True) -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
             return "ERROR", {"message": "Banco de dados nao encontrado"}
@@ -227,35 +242,36 @@ class FaceAuthenticator:
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
 
             # Salva foto recortada de avatar da crianca reconhecida
-            if best_frame is not None:
+            if persist_unlock_metadata and best_frame is not None:
                 try:
                     save_child_photo(best_candidate, best_frame, best_face_box)
                 except Exception as e:
                     logger.warning("Falha ao salvar avatar do filho: %s", e)
 
-            # Grava ultimo evento de desbloqueio para a tela de boas-vindas
-            try:
-                unlock_data = {
-                    "child_id": best_candidate,
-                    "child_name": child_name,
-                    "remaining_seconds": remaining_seconds,
-                    "timestamp": time.time(),
-                }
-                unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
-                unlock_path.parent.mkdir(parents=True, exist_ok=True)
-                unlock_path.write_text(
-                    json.dumps(unlock_data, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-            except Exception as e:
-                logger.warning("Falha ao salvar last_unlock.json: %s", e)
+            # Somente o fluxo legado grava o evento (sem autoridade) e avatar.
+            # Um serviço privilegiado NÃO deve persistir last_unlock.json.
+            if persist_unlock_metadata:
+                try:
+                    unlock_data = {
+                        "child_id": best_candidate,
+                        "child_name": child_name,
+                        "remaining_seconds": remaining_seconds,
+                        "timestamp": time.time(),
+                    }
+                    unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
+                    unlock_path.parent.mkdir(parents=True, exist_ok=True)
+                    unlock_path.write_text(
+                        json.dumps(unlock_data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                except Exception as e:
+                    logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
             return "ALLOW", {
                 "child_id": best_candidate,
                 "child_name": child_name,
                 "remaining": remaining_seconds,
                 "user": "Filhos",
-                "password": "1",
             }
         finally:
             store.close()
@@ -332,7 +348,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
         h_pipe = kernel32.CreateNamedPipeW(
             PIPE_NAME,
             PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            auth_pipe_mode_flags(),
             PIPE_UNLIMITED_INSTANCES,
             BUFFER_SIZE,
             BUFFER_SIZE,
@@ -360,18 +376,23 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
                 h_pipe, buf, BUFFER_SIZE - 1, ctypes.byref(bytes_read), None
             )
 
-            request_str = buf.value.decode("utf-8", errors="ignore").strip() if success else ""
-            logger.info("Requisicao recebida (%d bytes): '%s'", bytes_read.value, request_str[:64])
+            raw_command = buf.raw[:bytes_read.value] if success else b""
+            command, error = decode_pipe_command(raw_command)
+            logger.info(
+                "Requisicao IPC recebida (%d bytes; valida=%s)",
+                bytes_read.value, error is None,
+            )
 
-            # Validacao estrita do protocolo IPC
-            if len(request_str) > 512:
-                status, data = "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
-            elif request_str in ("AUTH_QUERY", "QUERY"):
+            if error == "INVALID_REQUEST":
+                status, data = "INVALID_REQUEST", {"message": "Enquadramento IPC invalido"}
+            elif error == "INVALID_COMMAND":
+                status, data = "INVALID_COMMAND", {"message": "Comando IPC desconhecido"}
+            elif command in ("AUTH_QUERY", "QUERY"):
                 status, data = auth.evaluate()
-            elif request_str == "PING":
+            elif command == "PING":
                 status, data = "PONG", {"version": "1.0"}
             else:
-                status, data = "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
+                status, data = "INVALID_REQUEST", {"message": "Requisicao IPC vazia"}
 
             response_payload = {
                 "status": status,

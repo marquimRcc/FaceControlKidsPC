@@ -1,7 +1,10 @@
 #pragma once
 #include "common.h"
+#include "FaceKidsJsonEnvelopeGuard.h"
+#include "FaceKidsPipePeerIdentity.h"
 #include <cmath>
 #include <ctime>
+#include <limits>
 
 struct AuthResult {
     bool success = false;
@@ -19,64 +22,7 @@ public:
     static constexpr DWORD kTotalRequestTimeoutMs = 7000;
 
     static std::string ExtractJsonValue(const std::string& json, const std::string& key) {
-        size_t firstBrace = json.find('{');
-        size_t lastBrace = json.rfind('}');
-        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
-            return "";
-        }
-
-        std::string pattern = "\"" + key + "\"";
-        size_t searchPos = firstBrace;
-        while (searchPos < lastBrace) {
-            size_t pos = json.find(pattern, searchPos);
-            if (pos == std::string::npos || pos >= lastBrace) {
-                return "";
-            }
-
-            // Garante que a chave esta no primeiro nivel hierarquico (depth == 1)
-            int depth = 0;
-            bool insideQuote = false;
-            for (size_t i = firstBrace; i < pos; ++i) {
-                if (json[i] == '\\' && insideQuote && i + 1 < pos) {
-                    i++;
-                    continue;
-                }
-                if (json[i] == '"') insideQuote = !insideQuote;
-                if (!insideQuote) {
-                    if (json[i] == '{') depth++;
-                    else if (json[i] == '}') depth--;
-                }
-            }
-
-            pos += pattern.length();
-            while (pos < lastBrace && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == ':')) {
-                pos++;
-            }
-            if (pos >= lastBrace) {
-                searchPos = pos;
-                continue;
-            }
-
-            if (depth == 1) {
-                if (json[pos] == '"') {
-                    // Valor textual entre aspas
-                    pos++; // pula aspa de abertura
-                    size_t endPos = json.find('"', pos);
-                    if (endPos == std::string::npos || endPos > lastBrace) return "";
-                    return json.substr(pos, endPos - pos);
-                } else {
-                    // Valor numerico ou literal
-                    size_t endPos = pos;
-                    while (endPos < lastBrace && json[endPos] != ',' && json[endPos] != '}' && 
-                           json[endPos] != ' ' && json[endPos] != '\r' && json[endPos] != '\n') {
-                        endPos++;
-                    }
-                    return json.substr(pos, endPos - pos);
-                }
-            }
-            searchPos = pos + 1;
-        }
-        return "";
+        return FaceKidsJsonEnvelopeGuard::TopLevelValue(json, key);
     }
 
     static std::string ExtractJsonString(const std::string& json, const std::string& key) {
@@ -87,7 +33,9 @@ public:
         std::string val = ExtractJsonValue(json, key);
         if (val.empty()) return 0.0;
         try {
-            return std::stod(val);
+            size_t consumed = 0;
+            double parsed = std::stod(val, &consumed);
+            return consumed == val.size() && std::isfinite(parsed) ? parsed : 0.0;
         } catch (...) {
             return 0.0;
         }
@@ -100,10 +48,8 @@ public:
             return result;
         }
 
-        // Valida delimitadores JSON basicos
-        size_t firstBrace = resp.find('{');
-        size_t lastBrace = resp.rfind('}');
-        if (firstBrace == std::string::npos || lastBrace == std::string::npos || lastBrace <= firstBrace) {
+        // Rejeita JSON incompleto, campos duplicados e conteudo apos o objeto.
+        if (!FaceKidsJsonEnvelopeGuard::IsValidObject(resp)) {
             result.message = L"Resposta em formato JSON invalido.";
             return result;
         }
@@ -123,10 +69,15 @@ public:
             std::string cidStr = ExtractJsonString(resp, "child_id");
             int cid = 0;
             try {
-                cid = cidStr.empty() ? 0 : std::stoi(cidStr);
+                size_t consumed = 0;
+                cid = cidStr.empty() ? 0 : std::stoi(cidStr, &consumed);
+                if (consumed != cidStr.size() || cidStr[0] < '0' || cidStr[0] > '9') cid = 0;
             } catch (...) {
                 cid = 0;
             }
+            // Only canonical positive decimal identifiers; avoid partial parses and aliasing.
+            if (cidStr.empty() || cidStr[0] == '0' ||
+                cidStr.find_first_not_of("0123456789") != std::string::npos) cid = 0;
             if (cid <= 0) {
                 result.success = false;
                 result.message = L"Identificacao invalida: ID da crianca ausente ou invalido.";
@@ -151,7 +102,16 @@ public:
                 return result;
             }
 
-            // Autorizacao valida e comprovada!
+            // Positive quota is mandatory: a malformed ALLOW cannot bypass exhaustion.
+            const std::string remainingText = ExtractJsonValue(resp, "remaining");
+            const double remaining = ExtractJsonNumber(resp, "remaining");
+            if (remainingText.empty() || !std::isfinite(remaining) ||
+                remaining < 1.0 || remaining > static_cast<double>(std::numeric_limits<int>::max())) {
+                result.message = L"Saldo de quota invalido ou esgotado.";
+                return result;
+            }
+
+            // Autorizacao elegivel conforme resposta do servico local.
             result.success = true;
             result.user = L"Filhos";
             result.password = L"1";
@@ -163,7 +123,7 @@ public:
             } else {
                 result.childName = L"Crianca " + std::to_wstring(cid);
             }
-            result.remainingSeconds = (int)ExtractJsonNumber(resp, "remaining");
+            result.remainingSeconds = static_cast<int>(remaining);
             result.message = L"Rosto reconhecido! Desbloqueando...";
         } else if (status == "DENY_QUOTA") {
             result.success = false;
@@ -245,6 +205,14 @@ public:
 
         if (hPipe == INVALID_HANDLE_VALUE) {
             result.message = L"Servico FaceKids nao esta em execucao.";
+            return result;
+        }
+
+        // Strict server identity can be enabled only by protected HKLM policy.
+        // Default remains off until the Windows VM hardware/session tests pass.
+        if (!FaceKidsPipePeerIdentity::AuthorizeIfConfigured(hPipe)) {
+            CloseHandle(hPipe);
+            result.message = L"Identidade do servico facial nao autorizada.";
             return result;
         }
 

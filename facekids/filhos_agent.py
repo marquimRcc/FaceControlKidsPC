@@ -35,6 +35,11 @@ from .children_pilot import child_pilot_database
 from .locker import lock_current_session
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .unlock_event import validated_unlock_event, enrolled_display_name
+from .ipc_reply import validated_pipe_allow
+from .ipc_json import parse_local_json
+from .quota_broker_shadow import QuotaBrokerShadowProbe, compare_shadow_balance
+from .quota_agent_accounting import LegacyLedgerQuota
 
 log_dir = Path("C:/ProgramData/FaceKids")
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -275,7 +280,7 @@ def query_auth_service(timeout_seconds: float = 2.0) -> Optional[dict]:
         ok = perform_io(kernel32.ReadFile, buf, 2047, bytes_read)
         if ok and bytes_read.value > 0:
             resp_str = buf.value.decode("utf-8", errors="ignore").strip()
-            return json.loads(resp_str)
+            return parse_local_json(resp_str)
     except Exception as e:
         logger.debug("Falha na consulta ao pipe em sessao: %s", e)
     finally:
@@ -320,25 +325,16 @@ class InSessionFaceIdentifier:
 
 
 def read_last_unlock_child() -> Tuple[Optional[int], str, float]:
-    """Le as informacoes do ultimo filho identificado se recente e de hoje."""
+    """Le metadados recentes de desbloqueio, sem tratar o arquivo como prova de identidade."""
     if LAST_UNLOCK_FILE.exists():
         try:
-            data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-            ts = float(data.get("timestamp", 0))
-            is_fresh = True
-            if ts > 0:
-                if (time.time() - ts) >= 600:
-                    is_fresh = False
-                elif date.fromtimestamp(ts).isoformat() != date.today().isoformat():
-                    is_fresh = False
-
-            if is_fresh:
-                cid = data.get("child_id")
-                cname = data.get("child_name", f"Crianca {cid}")
-                if cid is not None:
-                    return int(cid), str(cname), ts
-        except Exception as e:
-            logger.warning("Erro ao ler last_unlock.json: %s", e)
+            event = validated_unlock_event(
+                parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
+            )
+            if event is not None:
+                return event
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            logger.warning("Evento local de desbloqueio invalido: %s", exc)
     return None, "", 0.0
 
 
@@ -479,8 +475,18 @@ def run_agent():
     db_path = child_pilot_database()
     store = Storage(db_path)
     tracker = QuotaTracker(store)
+    quota_accounting = LegacyLedgerQuota(store)  # Legacy default; never install VM bridge here.
 
     cid, cname, unlock_ts = read_last_unlock_child()
+    if cid is not None:
+        # Child identity labels must come from the enrollment table, not an
+        # editable notification file. This still does not authenticate the event.
+        enrolled_name = enrolled_display_name(store, cid)
+        if enrolled_name is None:
+            logger.warning("Unlock metadata referred to missing enrollment ID %s", cid)
+            cid = None
+        else:
+            cname = enrolled_name
     if cid is not None:
         last_seen_ts = unlock_ts
         tracker.switch_child(cid, cname)
@@ -503,6 +509,16 @@ def run_agent():
 
     last_active_time = time.monotonic()
     identifier = InSessionFaceIdentifier(interval_seconds=15.0)
+    # Explicit LAB shadow mode only. Never changes billing or session locks.
+    shadow_probe = None
+    if sys.platform == "win32" and os.environ.get("FACEKIDS_QUOTA_BROKER_SHADOW") == "1":
+        try:
+            shadow_probe = QuotaBrokerShadowProbe(
+                os.environ.get("FACEKIDS_QUOTA_LAB_SUFFIX", "")
+            )
+            logger.info("Quota broker LAB shadow diagnostics enabled; no enforcement.")
+        except ValueError as exc:
+            logger.warning("Invalid quota broker shadow configuration: %s", exc)
     today = date.today().isoformat()
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
@@ -520,34 +536,30 @@ def run_agent():
                 today = now_day
                 tracker.reset_warnings()
 
-            # A. Verificar se houve novo evento de desbloqueio facial no lock screen
+            # A. Metadados de ultimo desbloqueio: validar data e identidade antes da troca.
+            # Nota: last_unlock.json ainda nao e uma prova criptografica da origem.
             if LAST_UNLOCK_FILE.exists():
                 try:
-                    data = json.loads(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
-                    current_ts = float(data.get("timestamp", 0.0))
-                    # Valida estritamente se o evento e mais novo, fresco (< 600s) e de hoje
-                    is_fresh = (
-                        (current_ts > last_seen_ts)
-                        and ((time.time() - current_ts) < 600.0)
-                        and (date.fromtimestamp(current_ts).isoformat() == date.today().isoformat())
+                    event = validated_unlock_event(
+                        parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8"))
                     )
-                    if is_fresh:
-                        last_seen_ts = current_ts
-                        new_cid = data.get("child_id")
-                        new_cname = data.get("child_name", f"Crianca {new_cid}")
-                        if new_cid is not None:
-                            tracker.switch_child(int(new_cid), str(new_cname))
-                        # Se recente (menos de 15s), reabre a tela de boas-vindas
-                        if (time.time() - current_ts) < 15.0:
-                            logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
-                            time.sleep(0.5)
-                            trigger_welcome_screen()
-                    elif current_ts > last_seen_ts:
-                        # Evento expirado: avanca ponteiro sem comutar filho
-                        last_seen_ts = current_ts
-                        logger.debug("Evento facial ignorado por estar expirado (ts=%.1f)", current_ts)
-                except Exception as e:
-                    logger.debug("Erro ao ler unlock timestamp: %s", e)
+                    if event is not None:
+                        new_cid, new_cname, current_ts = event
+                        if current_ts > last_seen_ts:
+                            # Confirma que o perfil existe e usa seu nome local.
+                            store.remaining(new_cid, today)
+                            enrolled_name = enrolled_display_name(store, new_cid)
+                            if enrolled_name is None:
+                                raise KeyError(new_cid)
+                            new_cname = enrolled_name
+                            last_seen_ts = current_ts
+                            tracker.switch_child(new_cid, new_cname)
+                            if (time.time() - current_ts) < 15.0:
+                                logger.info("Novo desbloqueio facial detectado para: %s", new_cname)
+                                time.sleep(0.5)
+                                trigger_welcome_screen()
+                except (OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
+                    logger.debug("Metadados de desbloqueio ignorados: %s", exc)
 
             # B. Checar se a sessao esta ativa ou bloqueada
             state = current_session_state()
@@ -558,18 +570,41 @@ def run_agent():
                 if pipe_resp:
                     status = pipe_resp.get("status")
                     if status == "ALLOW":
-                        cid = pipe_resp.get("child_id") or pipe_resp.get("data", {}).get("child_id")
-                        cname = pipe_resp.get("child_name") or pipe_resp.get("data", {}).get("child_name", f"Crianca {cid}")
-                        if cid is not None:
-                            logger.info("Identificacao facial em sessao confirmada: %s (ID %d)", cname, cid)
-                            tracker.switch_child(int(cid), str(cname))
-                            last_seen_ts = float(pipe_resp.get("timestamp", time.time()))
-                            trigger_welcome_screen()
-                    elif status in ("DENY_QUOTA", "DENY_CURFEW"):
-                        msg = pipe_resp.get("data", {}).get("message", "Sem tempo restante")
-                        show_toast("🔒 FaceControl Kids", msg, icon="🔒", color="#F38BA8")
-                        time.sleep(1.2)
-                        lock_current_session()
+                        decision = validated_pipe_allow(pipe_resp)
+                        if decision is not None:
+                            cid, cname, auth_ts = decision
+                            try:
+                                # A quota e o curfew sao revalidados localmente.
+                                if store.remaining(cid, today) > 0 and not store.is_curfew_active()[0]:
+                                    canonical_name = enrolled_display_name(store, cid)
+                                    if canonical_name is None:
+                                        raise KeyError(cid)
+                                    logger.info("Identificacao facial em sessao: %s (ID %d)", canonical_name, cid)
+                                    tracker.switch_child(cid, canonical_name)
+                                    last_seen_ts = max(last_seen_ts, auth_ts)
+                                    trigger_welcome_screen()
+                            except KeyError:
+                                logger.warning("Pipe indicou perfil de crianca inexistente: %s", cid)
+                        else:
+                            logger.warning("Resposta ALLOW do IPC recusada por campos invalidos.")
+                    elif status == "DENY_QUOTA":
+                        # Rejeita bloqueio por mensagem forjada sem corroboracao no ledger.
+                        details = pipe_resp.get("data")
+                        cid = details.get("child_id") if isinstance(details, dict) else None
+                        if type(cid) is int and cid > 0:
+                            try:
+                                if store.remaining(cid, today) <= 0:
+                                    show_toast("FaceControl Kids", "Tempo diario esgotado.", icon="🔒", color="#F38BA8")
+                                    time.sleep(1.2)
+                                    lock_current_session()
+                            except KeyError:
+                                logger.debug("Quota negada para perfil inexistente.")
+                    elif status == "DENY_CURFEW":
+                        blocked, msg = store.is_curfew_active()
+                        if blocked:
+                            show_toast("FaceControl Kids", msg, icon="🔒", color="#F38BA8")
+                            time.sleep(1.2)
+                            lock_current_session()
 
                 if tracker.current_child_id is None:
                     identifier.trigger_if_due()
@@ -600,12 +635,26 @@ def run_agent():
 
                 # Se o delta for razoavel (entre 0.5s e 15s, evitando picos apos hibernacao)
                 if tracker.current_child_id is not None and 0.5 <= delta <= 15.0:
-                    store.charge(tracker.current_child_id, delta, today)
-                    rem = store.remaining(tracker.current_child_id, today)
+                    tick = quota_accounting.active_tick(
+                        child_id=tracker.current_child_id, seconds=delta, day=today
+                    )
+                    rem = tick.remaining_seconds
+                    if shadow_probe is not None:
+                        # Ignore the response except for non-authoritative logging.
+                        diagnostic = shadow_probe.take_result()
+                        if diagnostic is not None:
+                            comparison, discrepancy = compare_shadow_balance(rem, diagnostic)
+                            logger.info("Quota shadow-only: %s; delta=%s",
+                                        comparison, discrepancy)
+                        shadow_probe.trigger_if_due()
                     tracker.update_balance(rem)
 
-                    # Verifica avisos e bloqueio automatico
-                    locked = tracker.check_notifications_and_lock(rem)
+                    # Only a quota source explicitly authorized for enforcement
+                    # may initiate Windows locking. The read-only LAB broker
+                    # does NOT satisfy this contract and cannot replace the
+                    # legacy source via a child-provided env flag or IPC packet.
+                    locked = (tracker.check_notifications_and_lock(rem)
+                              if tick.may_enforce_lock else False)
                     if locked:
                         # Se bloqueou, aguarda um pouco para estabilizar o lock
                         time.sleep(5.0)

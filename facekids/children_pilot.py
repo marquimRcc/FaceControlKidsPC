@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import time
 
-from .child_quota_pilot import ChildQuotaEngine, CHILD_LABELS, PilotEvent
+from .child_quota_pilot import ChildQuotaEngine, PilotEvent
 from .parent_face_pilot import (
     REQUIRED_SAMPLES, _open_camera, _valid_features, replace_templates,
 )
@@ -56,15 +56,12 @@ def validate_real_lock(os_type: str, account: str, *, confirmed: bool) -> None:
 
 
 def _child_id(store: Storage, index: int) -> int:
-    if index not in (1, 2, 3):
-        raise ValueError("Indice de crianca deve ser de 1 a 3")
+    if type(index) is not int or index <= 0:
+        raise ValueError("O perfil precisa ter ID positivo.")
     for p in store.people():
         if p[0] == index:
             return int(p[0])
-    row = store.get_person(CHILD_LABELS[index - 1])
-    if row is None:
-        raise RuntimeError("Cadastre os tres perfis antes de iniciar.")
-    return int(row[0])
+    raise KeyError(f"Perfil {index} nao encontrado; cadastre-o antes.")
 
 
 def _enroll(store: Storage, index: int, models: Path, camera: int):
@@ -196,14 +193,17 @@ def _monitor(store: Storage, engine: ChildQuotaEngine,
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="FaceKids: piloto das tres criancas (sem instalador)")
+    parser = argparse.ArgumentParser(description="FaceKids: piloto de um ou mais perfis (sem instalador)")
     parser.add_argument("--database", type=Path, default=child_pilot_database())
     parser.add_argument("--models", type=Path,
                         default=Path(__file__).resolve().parent.parent / "models")
     parser.add_argument("--camera", type=int, default=0)
     sub = parser.add_subparsers(dest="action", required=True)
     enroll = sub.add_parser("enroll", help="Cadastrar uma crianca com responsavel presente")
-    enroll.add_argument("child", type=int, choices=(1, 2, 3))
+    enroll.add_argument("child", type=int, help="ID de qualquer perfil cadastrado")
+    create = sub.add_parser("add-profile", help="Adicionar mais um perfil de teste")
+    create.add_argument("alias", type=str)
+    create.add_argument("--minutes", type=int, default=120)
     sub.add_parser("status")
     monitor = sub.add_parser("monitor")
     monitor.add_argument("--seconds", type=int, default=90)
@@ -211,7 +211,7 @@ def main(argv=None) -> int:
                          help="Somente Filhos, pedido manual de Win+L por quota")
     monitor.add_argument("--confirm-real-lock", action="store_true")
     erase = sub.add_parser("erase", help="Apagar apenas biometria do perfil indicado")
-    erase.add_argument("child",type=int,choices=(1,2,3))
+    erase.add_argument("child",type=int,help="ID de qualquer perfil cadastrado")
     args = parser.parse_args(argv)
     if os.name != "nt" or not 0 <= args.camera <= 10:
         parser.error("Piloto requer Windows e camera 0..10")
@@ -221,6 +221,13 @@ def main(argv=None) -> int:
         validate_real_lock(os.name, windows_token_user(), confirmed=args.confirm_real_lock)
     store = Storage(args.database)
     try:
+        if args.action == "add-profile":
+            alias = args.alias.strip()
+            if not 1 <= len(alias) <= 50 or not 1 <= args.minutes <= 1440:
+                parser.error("Apelido: 1..50 caracteres; minutos: 1..1440")
+            person_id = store.add_person(alias, args.minutes)
+            print(f"PERFIL_CRIADO: id={person_id}, alias={alias}")
+            return 0
         engine = ChildQuotaEngine(store)
         if args.action == "enroll":
             return 0 if _enroll(store, args.child, args.models, args.camera) else 2

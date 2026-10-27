@@ -53,9 +53,12 @@ class TestInstallerScripts(unittest.TestCase):
 
     def test_installer_script_binding_and_privileges(self):
         inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
-        # Verifica vinculacao a conta Filhos com modo interativo /it
-        self.assertIn('/ru "Filhos"', inst)
-        self.assertIn("/it", inst)
+        # A tarefa Filhos deve usar o token interativo sem senha no comando.
+        self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $childAccount.Name", inst)
+        self.assertIn("New-ScheduledTaskPrincipal -UserId $childAccount.SID.Value", inst)
+        self.assertIn("-LogonType Interactive -RunLevel Limited", inst)
+        self.assertNotIn('schtasks.exe /create', inst)
+        self.assertNotIn('/rp "', inst)
         # Verifica execucao com privilegios elevados
         self.assertIn("New-ScheduledTaskPrincipal", inst)
         self.assertIn("-LogonType Interactive", inst)
@@ -66,6 +69,25 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("$requiredProtocolMarker = 'FACEKIDS_IPC_V1'", inst)
         self.assertIn("$dllAscii.Contains($requiredProtocolMarker)", inst)
         self.assertIn("$rebuiltDllAscii.Contains($requiredProtocolMarker)", inst)
+
+    def test_uninstaller_audit_exits_before_mutation(self):
+        uninst = (self.root / "scripts" / "Desinstalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        self.assertIn("[switch]$AuditOnly", uninst)
+        self.assertIn("HardwareRollbackVerified = $false", uninst)
+        start = uninst.index("if ($AuditOnly)")
+        stop = uninst.index("return", start)
+        self.assertLess(stop, uninst.index("Stop-Process"))
+        self.assertLess(stop, uninst.index("Remove-Item"))
+
+    def test_installer_preflight_returns_before_mutation(self):
+        inst = (self.root / "scripts" / "Instalar-FaceKids-Nativo.ps1").read_text(encoding="utf-8")
+        self.assertIn("[switch]$PreflightOnly", inst)
+        self.assertIn("Auditar-Permissoes-FaceKids.ps1", inst)
+        gate = inst.index("if ($PreflightOnly)")
+        early_exit = inst.index("return", gate)
+        self.assertLess(early_exit, inst.index("Copy-Item -LiteralPath $dllSource"))
+        self.assertLess(early_exit, inst.index('Start-Process -FilePath "regsvr32.exe"'))
+        self.assertNotIn('/rp "', inst)
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -20,23 +21,46 @@ class TestAuthService(unittest.TestCase):
         self.assertIn("(A;;GRGW;;;IU)", SDDL_PERMISSIVE)
         self.assertNotIn("(A;;GA;;;IU)", SDDL_PERMISSIVE)
 
-    def test_command_routing_logic(self):
-        # Valida regras de interpretacao de comando IPC
-        def route_request(request_str: str):
-            if len(request_str) > 512:
-                return "INVALID_REQUEST", {"message": "Tamanho da mensagem excede o maximo de 512 bytes"}
-            elif request_str in ("AUTH_QUERY", "QUERY"):
-                return "QUERY_ROUTED", {}
-            elif request_str == "PING":
-                return "PONG", {"version": "1.0"}
-            else:
-                return "INVALID_COMMAND", {"message": f"Comando desconhecido: '{request_str[:32]}'"}
+    def test_named_pipe_descriptor_conversion_fails_closed(self):
+        import facekids.auth_service as service
 
-        self.assertEqual(route_request("PING")[0], "PONG")
-        self.assertEqual(route_request("AUTH_QUERY")[0], "QUERY_ROUTED")
-        self.assertEqual(route_request("QUERY")[0], "QUERY_ROUTED")
-        self.assertEqual(route_request("UNKNOWN")[0], "INVALID_COMMAND")
-        self.assertEqual(route_request("X" * 600)[0], "INVALID_REQUEST")
+        failing_api = SimpleNamespace(
+            ConvertStringSecurityDescriptorToSecurityDescriptorW=lambda *args: 0
+        )
+        with patch.object(service.sys, "platform", "win32"), \
+             patch.object(service.ctypes, "windll", SimpleNamespace(advapi32=failing_api), create=True):
+            with self.assertRaisesRegex(RuntimeError, "SDDL conversion"):
+                create_security_attributes()
+
+    def test_missing_named_pipe_security_api_fails_closed(self):
+        import facekids.auth_service as service
+
+        with patch.object(service.sys, "platform", "win32"), \
+             patch.object(service.ctypes, "windll", SimpleNamespace(advapi32=None), create=True):
+            with self.assertRaisesRegex(RuntimeError, "security API"):
+                create_security_attributes()
+
+    def test_auth_pipe_rejects_remote_clients_without_changing_message_mode(self):
+        from facekids.auth_service import (
+            PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_MESSAGE,
+            PIPE_READMODE_MESSAGE, auth_pipe_mode_flags
+        )
+        self.assertEqual(PIPE_REJECT_REMOTE_CLIENTS, 0x00000008)
+        flags = auth_pipe_mode_flags()
+        self.assertEqual(flags & PIPE_REJECT_REMOTE_CLIENTS, PIPE_REJECT_REMOTE_CLIENTS)
+        self.assertEqual(flags & PIPE_TYPE_MESSAGE, PIPE_TYPE_MESSAGE)
+        self.assertEqual(flags & PIPE_READMODE_MESSAGE, PIPE_READMODE_MESSAGE)
+
+    def test_command_routing_logic(self):
+        # Exercise the actual command decoder, not a test-only copy.
+        from facekids.pipe_protocol import decode_pipe_command
+
+        self.assertEqual(decode_pipe_command(b"PING"), ("PING", None))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\n"), ("AUTH_QUERY", None))
+        self.assertEqual(decode_pipe_command(b"QUERY"), ("QUERY", None))
+        self.assertEqual(decode_pipe_command(b"UNKNOWN"), (None, "INVALID_COMMAND"))
+        self.assertEqual(decode_pipe_command(b"X" * 600), (None, "INVALID_REQUEST"))
+        self.assertEqual(decode_pipe_command(b"AUTH_QUERY\x00"), (None, "INVALID_REQUEST"))
 
     def test_authenticator_nonexistent_db(self):
         auth = FaceAuthenticator(Path("models"), Path("nonexistent.sqlite3"))
@@ -86,10 +110,39 @@ class TestAuthService(unittest.TestCase):
 
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["user"], "Filhos")
-            self.assertEqual(data["password"], "1")
+            self.assertNotIn("password", data)
             self.assertEqual(data["child_id"], pid)
             self.assertEqual(data["child_name"], "Filho Smoke")
             self.assertGreater(data["remaining"], 0)
+
+    def test_privileged_recognition_has_no_legacy_event_or_avatar_side_effects(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "synthetic.sqlite3"
+            store = Storage(db)
+            try:
+                child = store.add_person("Synthetic", 120)
+                features = np.ones(128, dtype=np.float32)
+                store.add_embedding(child, features)
+            finally:
+                store.close()
+            recognizer = MagicMock()
+            recognizer.faces.return_value = [[10, 10, 70, 70]]
+            recognizer.features.return_value = features
+            recognizer.identify.return_value = (child, 0.95)
+            video = MagicMock()
+            video.isOpened.return_value = True
+            video.read.return_value = (True, np.zeros((100, 100, 3), dtype=np.uint8))
+            auth = FaceAuthenticator(Path(td), db, recognizer=recognizer)
+            with (patch("cv2.VideoCapture", return_value=video),
+                  patch("facekids.auth_service.save_child_photo") as save_avatar,
+                  patch("facekids.auth_service.Path.write_text") as write_event):
+                status, data = auth.evaluate(timeout_seconds=1.0,
+                                             persist_unlock_metadata=False)
+            self.assertEqual(status, "ALLOW")
+            self.assertEqual(data["child_id"], child)
+            save_avatar.assert_not_called()
+            write_event.assert_not_called()
+            video.release.assert_called_once()
 
     def test_session_zero_and_camera_probe(self):
         from facekids.auth_service import is_session_zero_or_system, probe_camera_access
