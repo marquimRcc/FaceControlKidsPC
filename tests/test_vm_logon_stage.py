@@ -79,6 +79,24 @@ class VmLogonStageTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, preflight)
 
+    def test_existing_live_server_is_adopted_only_with_proven_identity(self):
+        source = self.source
+        for token in [
+            "if($other.Count -gt 0){",
+            "if ($other.Count -ne 1)",
+            "[int]$state.pid -ne [int]$existing.ProcessId",
+            "$existing.CommandLine -notlike ('*'+$statusFile+'*')",
+            "Get-WorkerSid -ProcessId ([int]$existing.ProcessId)",
+            "$existingSid -ne [string]$current.User.Value",
+            "$reply=Invoke-AuthPipe -Command PING",
+            "$reply.status -ne 'PONG'",
+            "processId=[int]$existing.ProcessId",
+            "nenhum PID foi encerrado",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, source)
+        self.assertNotIn("Stop-Process -Name python", source)
+
     def test_cp_requires_real_opt_ins_and_peer_identity(self):
         for needle in [
             "-RecoveryConfirmed",
