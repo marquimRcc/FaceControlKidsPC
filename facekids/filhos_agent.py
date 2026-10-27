@@ -353,7 +353,7 @@ def query_auth_service(timeout_seconds: float = 2.0, pipe_name: Optional[str] = 
 
         if command not in ("AUTH_QUERY", "SESSION_QUERY"):
             raise ValueError("Invalid local face command")
-        payload = (command + "\\n").encode("ascii")
+        payload = (command + "\n").encode("ascii")
         req = ctypes.create_string_buffer(payload)
         written = wintypes.DWORD()
         if not perform_io(kernel32.WriteFile, req, len(payload), written):
