@@ -40,6 +40,11 @@ class PrivilegedLocalFaceBinder:
         self._state_lock = state_lock if state_lock is not None else nullcontext()
 
     def recognize_and_bind(self) -> FaceBindingOutcome:
+        """Never charge during capture; retain identity for bounded failed checks.
+
+        Only OS-observed session/lock continuity may preserve grace. Client
+        mouse activity cannot extend or authorize a service-owned lease.
+        """
         with self._state_lock:
             before = self._worker.observed_snapshot()
             epoch = self._locks.revision
@@ -47,17 +52,29 @@ class PrivilegedLocalFaceBinder:
                     not self._locks.is_unlocked(before.session_id)):
                 self._worker.end_trusted_face_binding()
                 return FaceBindingOutcome(False, "session-unverified")
-            # The old child's lease must not charge during capture.
-            self._worker.end_trusted_face_binding()
+            has_prior = self._worker.begin_trusted_face_recheck(
+                session_id=before.session_id)
 
-        # NO LOCK HELD: Windows SCM can deliver lock/logoff/disconnect
-        # while FaceAuthenticator.evaluate() is blocked on the webcam.
+        def fail(reason: str, *, transient: bool = False) -> FaceBindingOutcome:
+            with self._state_lock:
+                after = self._worker.observed_snapshot()
+                unchanged = (after == before and self._locks.revision == epoch
+                             and self._locks.is_unlocked(before.session_id))
+                if not unchanged:
+                    self._worker.end_trusted_face_binding()
+                    return FaceBindingOutcome(False, "session-changed-during-capture")
+                if transient and has_prior and self._worker.transient_face_grace(
+                        session_id=before.session_id):
+                    return FaceBindingOutcome(False, "face-grace")
+                self._worker.end_trusted_face_binding()
+                return FaceBindingOutcome(False, reason)
+
+        # Do not hold SCM event lock over camera calls. Lock/disconnect must
+        # invalidate this observation even during a delayed or failed capture.
         try:
             status, data = self._recognize()
         except Exception:
-            with self._state_lock:
-                self._worker.end_trusted_face_binding()
-            return FaceBindingOutcome(False, "local-recognizer-error")
+            return fail("local-recognizer-error", transient=True)
 
         with self._state_lock:
             after = self._worker.observed_snapshot()
@@ -65,8 +82,14 @@ class PrivilegedLocalFaceBinder:
                     not self._locks.is_unlocked(before.session_id)):
                 self._worker.end_trusted_face_binding()
                 return FaceBindingOutcome(False, "session-changed-during-capture")
-            if (status != "ALLOW" or type(data) is not dict or
-                    data.get("user") != "Filhos"):
+            if status != "ALLOW":
+                if (status in ("DENY_UNKNOWN", "DENY_NO_FACE", "ERROR_CAMERA")
+                        and has_prior and self._worker.transient_face_grace(
+                            session_id=before.session_id)):
+                    return FaceBindingOutcome(False, "face-grace")
+                self._worker.end_trusted_face_binding()
+                return FaceBindingOutcome(False, "face-not-authorized")
+            if type(data) is not dict or data.get("user") != "Filhos":
                 self._worker.end_trusted_face_binding()
                 return FaceBindingOutcome(False, "face-not-authorized")
             child_id = data.get("child_id")
@@ -74,6 +97,5 @@ class PrivilegedLocalFaceBinder:
                 self._worker.end_trusted_face_binding()
                 return FaceBindingOutcome(False, "invalid-enrollment")
             tick = self._worker.start_trusted_face_binding(
-                enrolled_child_id=child_id, session_id=before.session_id
-            )
+                enrolled_child_id=child_id, session_id=before.session_id)
             return FaceBindingOutcome(tick.reason == "verified", tick.reason, tick)
