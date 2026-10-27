@@ -149,7 +149,7 @@ try {
     if (-not $NoCameraProbe) { $argsP6 += '-CameraProbe' }
     & powershell.exe @argsP6
     if ($LASTEXITCODE -ne 0) {
-        throw 'Preflight ou testes P6 falharam. Painel nao aberto; analise o erro acima.'
+        Write-Warning 'O preflight/teste P6 registrou falhas. Isto NAO aprova o desbloqueio: reveja a saida acima. O Painel de laboratorio sera aberto para diagnostico.'
     }
 } finally {
     Pop-Location
