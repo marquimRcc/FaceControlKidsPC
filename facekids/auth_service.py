@@ -293,15 +293,19 @@ class FaceAuthenticator:
                 except Exception as e:
                     logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
-            return "ALLOW", {
+            response = {
                 "child_id": best_candidate,
                 "child_name": child_name,
                 "remaining": remaining_seconds,
                 "user": "Filhos",
-                "password": "1",
-                "detected_ids": best_detected_ids or ([best_candidate] if best_candidate else []),
+                "detected_ids": best_detected_ids or [best_candidate],
                 "face_count": best_face_count or 1,
             }
+            # Only the legacy unlock command needs the credential field.
+            # Session observations must never carry a password or touch UI files.
+            if publish_unlock_event:
+                response["password"] = "1"
+            return "ALLOW", response
         finally:
             store.close()
 
@@ -502,7 +506,7 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")
                 response_payload["protocol_marker"] = IPC_PROTOCOL_MARKER
-                if status == "ALLOW":
+                if status == "ALLOW" and command != "SESSION_QUERY":
                     report("allow")
 
             response_json = json.dumps(response_payload) + "\n"
