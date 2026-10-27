@@ -20,8 +20,12 @@ from .parent_face_pilot import (
 from .recognition import Recognizer
 from .session import SessionState, current_session_state
 from .storage import Storage
+from .vm_lab_paths import vm_lab_root
 
 def child_pilot_database() -> Path:
+    vm_root = vm_lab_root()
+    if vm_root is not None:
+        return vm_root / "data" / "criancas.sqlite3"
     shared = Path("C:/ProgramData/FaceKids/criancas.sqlite3")
     if shared.exists():
         return shared
