@@ -36,6 +36,7 @@ function Assert-VM {
 
 function Find-Python311 {
     $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'FaceKids-VM-Lab\runtime\python311\python.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'),
         (Join-Path $env:ProgramFiles 'Python311\python.exe')
     )
@@ -109,15 +110,51 @@ Write-Host '[2/5] Preparando Python 3.11 e bibliotecas...' -ForegroundColor Cyan
 if (-not (Test-Path -LiteralPath $venvPython)) {
     $python = Find-Python311
     if (-not $python) {
-        $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-        if (-not $winget) {
-            throw 'Python 3.11 nao encontrado e winget indisponivel. Instale Python 3.11 com Tcl/Tk nesta VM e execute novamente.'
+        # Python 3.11.9 is the final official 3.11 Windows installer.
+        # Install only inside the VM workspace and do not require winget.
+        if ([Environment]::Is64BitOperatingSystem -ne $true -or
+            [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'X64') {
+            throw 'Bootstrap oficial Python 3.11.9 requer Windows x64 nesta VM.'
         }
-        Write-Host 'Instalando Python 3.11 nesta VM via winget (escopo do usuario)...'
-        & winget.exe install -e --id Python.Python.3.11 --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-        if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel instalar Python 3.11 na VM via winget.' }
+        $pythonHome = Join-Path $workspace 'runtime\python311'
+        $downloadDir = Join-Path $workspace 'downloads'
+        New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+        $installer = Join-Path $downloadDir 'python-3.11.9-amd64.exe'
+        $expectedSha256 = '5ee42c4eee1e6b4464bb23722f90b45303f79442df63083f05322f1785f5fdde'
+        $installerUrl = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe'
+        Write-Host 'winget nao necessario: baixando Python 3.11.9 oficial do python.org...' -ForegroundColor Cyan
+        $validCache = $false
+        if (Test-Path -LiteralPath $installer -PathType Leaf) {
+            $validCache = ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expectedSha256)
+        }
+        if (-not $validCache) {
+            Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest -UseBasicParsing -Uri $installerUrl -OutFile $installer
+        }
+        if (-not (Test-Path -LiteralPath $installer -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedSha256) {
+            throw 'Python oficial recusado: assinatura SHA-256 divergente ou download incompleto.'
+        }
+        Write-Host 'SHA-256 verificado. Instalando Python somente no perfil da VM...' -ForegroundColor Cyan
+        $installArgs = @(
+            '/quiet',
+            'InstallAllUsers=0',
+            'PrependPath=0',
+            'Include_launcher=0',
+            'Include_pip=1',
+            'Include_tcltk=1',
+            'Include_test=0',
+            'Shortcuts=0',
+            ('TargetDir="' + $pythonHome + '"')
+        )
+        $process = Start-Process -FilePath $installer -ArgumentList $installArgs -PassThru -Wait
+        if ($process.ExitCode -notin @(0, 3010)) {
+            throw ('Falha ao instalar Python na VM, codigo: ' + $process.ExitCode)
+        }
         $python = Find-Python311
-        if (-not $python) { throw 'Python 3.11 instalado, mas nao localizado; reabra o PowerShell da VM.' }
+        if (-not $python) {
+            throw 'Python oficial instalado, mas Tk/Python 3.11 nao foi validado. Consulte instalacao na VM.'
+        }
     }
     & $python -m venv $venv
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar ambiente Python isolado.' }
