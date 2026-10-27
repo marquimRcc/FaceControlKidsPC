@@ -9,7 +9,6 @@ O script esta em scripts/FaceKids-VM-Autenticacao.ps1.
 - Conta Filhos ativa e separada da conta administrativa Marcos.
 - Cadastro de rosto adulto como perfil ficticio (12 amostras), reconhecimento no preview.
 - Base VM: %LOCALAPPDATA%\FaceKids-VM-Lab\dados-isolados\data\criancas.sqlite3.
-- Snapshots antes/depois do cadastro documentados e restaurados.
 - Nenhum servico, tarefa, DLL ou Credential Provider instalado no diagnostico anterior.
 
 ## Limite da arquitetura
@@ -58,13 +57,13 @@ Deixe somente o rosto cadastrado na webcam, e nao abra simultaneamente o aplicat
 ## Ativacao opt-in do Credential Provider
 
 Somente depois de:
-1. Confirmar snapshot externo RESTAURADO e login administrativo por senha/PIN.
+1. Confirmar acesso administrativo por senha/PIN convencional, mesmo sem o FaceKids.
 2. Confirmar que Filhos possui de fato a senha Windows "1" usada pela DLL atual.
 3. Ter Ping e FaceProbe aprovados, com o worker da conta administrativa ativo.
 4. Abrir PowerShell x64 COMO ADMINISTRADOR dentro da VM.
 
 ~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action ActivateCP -SnapshotConfirmed -RecoveryConfirmed -FixedPasswordConfirmed
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action ActivateCP -RecoveryConfirmed -FixedPasswordConfirmed
 ~~~
 
 O script revalida rosto ALLOW, registra o CP somente se o CLSID estiver ausente, e
@@ -81,7 +80,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-A
 
 Remove APENAS registro CP marcado como pertencente ao laboratorio e encerra
 o worker rastreado pelo proprio script. Preserva dados faciais/SQLite e main.
-Se nao conseguir entrar no Windows, use o snapshot externo do VirtualBox.
+Se nao conseguir entrar no Windows, restaure o login administrativo pelo procedimento normal do Windows ou refaca a VM de testes.
 
 ## Portoes ainda abertos
 
@@ -92,6 +91,8 @@ Se nao conseguir entrar no Windows, use o snapshot externo do VirtualBox.
 - Substituir senha fixa e mecanismo legado antes de qualquer implantacao real.
 - Homologar transicao de quota em SQLite protegido sem escritor simultaneo.
 - Manter main intocada e nao executar o instalador domestico legado.
+
+Passo 2 simplificado: [preflight de laboratorio](VM-PASSO2-PREFLIGHT-20261027.md).
 
 CI: parse PowerShell, testes de integridade da etapa e deteccao de operacoes
 de risco; CI nao comprova funcionamento fisico do Windows LogonUI.
