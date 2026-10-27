@@ -12,6 +12,7 @@ param(
     [ValidateRange(0,9)][int]$CameraIndex = 0,
     [switch]$SkipTests,
     [switch]$NoCameraProbe,
+    [switch]$NoDashboard,
     [switch]$PreflightOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -206,6 +207,13 @@ try {
     }
 } finally {
     Pop-Location
+}
+
+if ($NoDashboard) {
+    Write-Host '[5/5] Ambiente FaceKids VM pronto. NoDashboard: painel nao iniciado.' -ForegroundColor Green
+    Write-Host ('Codigo: {0}' -f $repo)
+    Write-Host ('Dados isolados: {0}' -f $dataDir)
+    return
 }
 
 Write-Host '[5/5] Abrindo Painel dos Pais (dados isolados da VM)...' -ForegroundColor Green
