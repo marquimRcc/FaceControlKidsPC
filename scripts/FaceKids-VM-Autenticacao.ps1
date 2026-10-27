@@ -188,7 +188,36 @@ switch ($Action) {
         }
         $other=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -match 'facekids[.]auth_service' })
-        if($other.Count -gt 0){throw 'Existe outro autenticador. Recusado disputar webcam/mutex.'}
+        if($other.Count -gt 0){
+            # A failed launcher may leave the real Python interpreter alive.
+            # Never kill unknown processes or compete for the camera.
+            if ($other.Count -ne 1) {
+                throw 'Multiplos autenticadores encontrados. Reconciliacao recusada.'
+            }
+            $existing=$other[0]
+            $state=if (Test-Path -LiteralPath $statusFile -PathType Leaf) {
+                Get-Content -LiteralPath $statusFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            } else { $null }
+            if (-not $state -or $state.phase -ne 'listening' -or
+                [int]$state.pid -ne [int]$existing.ProcessId -or
+                -not $existing.CommandLine -or
+                $existing.CommandLine -notlike ('*'+$statusFile+'*')) {
+                throw 'Autenticador existente nao corresponde ao status do laboratorio; nenhum PID foi encerrado.'
+            }
+            $existingSid=Get-WorkerSid -ProcessId ([int]$existing.ProcessId)
+            if ($existingSid -ne [string]$current.User.Value) {
+                throw 'Autenticador existente pertence a outra conta; nenhum PID foi encerrado.'
+            }
+            $reply=Invoke-AuthPipe -Command PING
+            if ($reply.status -ne 'PONG') {
+                throw 'Autenticador existente nao respondeu PONG; nenhum PID foi encerrado.'
+            }
+            @{processId=[int]$existing.ProcessId;launcherPid=$null;python=$python;sid=$existingSid} |
+                ConvertTo-Json | Set-Content -LiteralPath $workerFile -Encoding UTF8
+            Write-Host ('Servidor existente validado e recuperado, PID '+$existing.ProcessId+
+                ', IPC PONG; nenhum outro processo iniciado.') -ForegroundColor Green
+            break
+        }
         $env:FACEKIDS_VM_LAB_DIR=Join-Path $lab 'dados-isolados'
         $env:FACEKIDS_VM_LAB_ACK='ISOLATED_VM_ONLY'
         $env:FACEKIDS_VM_SHADOW='0'
