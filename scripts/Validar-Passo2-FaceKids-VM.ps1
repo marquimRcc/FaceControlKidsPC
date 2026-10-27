@@ -27,6 +27,7 @@ $root = Join-Path $lab 'codigo-developer'
 $python = Join-Path $lab '.venv\Scripts\python.exe'
 $db = Join-Path $lab 'dados-isolados\data\criancas.sqlite3'
 $workerFile = Join-Path $lab 'vm-auth-worker.json'
+$serverStatusFile = Join-Path $lab 'vm-auth-status.json'
 $stage = Join-Path $lab 'scripts\FaceKids-VM-Autenticacao.ps1'
 $logDir = Join-Path $lab 'logs'
 $historyFile = Join-Path $logDir 'facekids-vm-events.jsonl'
@@ -121,12 +122,155 @@ function Get-WorkerDiagnostics {
             $data.Reason = 'WORKER_EXITED_OR_STALE_PID'
             return [pscustomobject]$data
         }
-        if (-not $p.ExecutablePath -or $p.ExecutablePath -ine $python) {
+        if (-not $p.ExecutablePath -or
+            (Split-Path $p.ExecutablePath -Leaf) -notmatch '^(?i:pythonw?[.]exe)
+        try {
+            $owner = Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction Stop
+            if ($owner.ReturnValue -ne 0 -or -not $owner.Sid) {
+                $data.Reason = 'WORKER_SID_QUERY_FAILED'
+                return [pscustomobject]$data
+            }
+            if ([string]$owner.Sid -ne [string]$identity.User.Value) {
+                $data.Reason = 'WORKER_OWNER_SID_MISMATCH'
+                return [pscustomobject]$data
+            }
+            $data.MatchingSid = $true
+            $data.Reason = 'WORKER_VERIFIED'
+            return [pscustomobject]$data
+        } catch {
+            $data.Reason = 'WORKER_SID_QUERY_EXCEPTION'
+            return [pscustomobject]$data
+        }
+    } catch {
+        $data.Reason = 'PROCESS_QUERY_EXCEPTION'
+        return [pscustomobject]$data
+    }
+}
+
+function Save-Diagnostic {
+    param($Report)
+    try {
+        New-Item -ItemType Directory -Path $logDir -Force -ErrorAction Stop | Out-Null
+        $line = ConvertTo-Json -InputObject $Report -Depth 7 -Compress
+        Add-Content -LiteralPath $historyFile -Value $line -Encoding UTF8 -ErrorAction Stop
+        $pretty = ConvertTo-Json -InputObject $Report -Depth 7
+        Set-Content -LiteralPath $lastFile -Value $pretty -Encoding UTF8 -ErrorAction Stop
+        Write-Host ('Historico: ' + $historyFile) -ForegroundColor DarkCyan
+        Write-Host ('Ultima execucao: ' + $lastFile) -ForegroundColor DarkCyan
+    } catch {
+        Write-Warning ('LOG_NAO_GRAVADO: ' + $_.Exception.Message)
+    }
+}
+
+$admin = Get-LocalUser -Name $identity.Name.Split('\')[-1] -ErrorAction SilentlyContinue
+$child = Get-LocalUser -Name 'Filhos' -ErrorAction SilentlyContinue
+$localAdmins = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue)
+$member = [bool](@($localAdmins | Where-Object {
+    $_.SID -and $_.SID.Value -eq [string]$identity.User.Value
+}).Count -gt 0)
+$worker = Get-WorkerDiagnostics
+$ipc = Test-AuthPipePing
+$assets = (Test-Path -LiteralPath $python -PathType Leaf) -and
+          (Test-Path -LiteralPath $db -PathType Leaf) -and
+          (Test-Path -LiteralPath $stage -PathType Leaf) -and
+          (Test-Path -LiteralPath (Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll') -PathType Leaf)
+$cpAbsent = -not ((Test-Path -LiteralPath $cpKey) -or
+                 (Test-Path -LiteralPath $comKey) -or
+                 (Test-Path -LiteralPath $policyKey) -or
+                 (Test-Path -LiteralPath $labDll))
+$checks = [ordered]@{
+    VmVirtualBox = $true
+    CurrentAdminAccountEnabled = [bool]($admin -and $admin.Enabled)
+    CurrentAccountInLocalAdministrators = $member
+    FilhosAccountEnabled = [bool]($child -and $child.Enabled)
+    LabAssetsAvailable = [bool]$assets
+    AuthWorkerRunningAsCurrentAccount = [bool]$worker.MatchingSid
+    IpcPongConfirmed = [bool]$ipc.Responding
+    CredentialProviderNotRegistered = $cpAbsent
+    FamilyCredentialProviderDllAbsent = -not (Test-Path -LiteralPath $familyDll)
+}
+$blocked = @($checks.Values | Where-Object { -not [bool]$_ }).Count -gt 0
+$status = if ($blocked) { 'BLOCKED' } else { 'READY_TECHNICALLY' }
+$reason = if (-not $worker.MatchingSid) {
+    $worker.Reason
+} elseif (-not $ipc.Responding) {
+    $ipc.Code
+} elseif ($blocked) {
+    'OTHER_PRECONDITION_FAILED'
+} else {
+    'PRECHECK_PASSED'
+}
+
+Write-Host ''
+Write-Host '=== FaceKids VM - PASSO 2: DIAGNOSTICO COM HISTORICO ===' -ForegroundColor Cyan
+foreach ($name in $checks.Keys) {
+    $ok = [bool]$checks[$name]
+    $label = if ($ok) { 'OK' } else { 'ATENCAO' }
+    Write-Host ('[{0}] {1}' -f $label, $name)
+}
+Write-Host ('Worker registrado PID: ' + $(if ($worker.TrackedPid) { $worker.TrackedPid } else { 'AUSENTE' }))
+Write-Host ('Motivo do worker: ' + $worker.Reason)
+Write-Host ('Outros processos auth observados (PIDs): ' + $(if ($worker.OtherAuthPids.Count) {
+    $worker.OtherAuthPids -join ','
+} else { 'NENHUM' }))
+Write-Host ('Teste independente de IPC: ' + $ipc.Code)
+Write-Host 'Login administrativo convencional: VALIDACAO MANUAL PENDENTE.'
+Write-Host 'Senha Windows esperada de Filhos: VALIDACAO MANUAL PENDENTE.'
+
+$recommendation = if (-not $worker.MatchingSid) {
+    'Revisar processo e registro do worker. Se nao houver outro autenticador, iniciar via -Action StartAuth/RestartAuth.'
+} elseif (-not $ipc.Responding) {
+    'Rever porta IPC, logs vm-auth-err.log e estado do autenticador antes de prosseguir.'
+} elseif ($blocked) {
+    'Corrigir itens ATENCAO antes de instalar o Credential Provider.'
+} else {
+    'Preflight tecnico aprovado. Confirmar manualmente login convencional e senha Windows de Filhos.'
+}
+Write-Host ('Resultado: ' + $status)
+Write-Host ('Proxima acao: ' + $recommendation) -ForegroundColor $(if ($blocked) {'Yellow'} else {'Green'})
+
+$report = [ordered]@{
+    timestamp_utc = [DateTime]::UtcNow.ToString('o')
+    source = 'step2_preflight'
+    action = 'diagnose'
+    status = $status
+    reason_code = $reason
+    checks = $checks
+    worker = [ordered]@{
+        reason = $worker.Reason
+        tracked_pid = $worker.TrackedPid
+        candidate_pids = @($worker.OtherAuthPids)
+        owner_sid_matches_current = [bool]$worker.MatchingSid
+    }
+    ipc = $ipc.Code
+    manual_login_check = 'NOT_VERIFIED_BY_SCRIPT'
+    manual_filhos_password_check = 'NOT_VERIFIED_BY_SCRIPT'
+    remediation = $recommendation
+}
+Save-Diagnostic -Report $report
+if ($blocked) {
+    Write-Warning 'PRECHECK_BLOQUEADO: nao execute ActivateCP. O motivo e o codigo acima; nenhum componente Windows foi alterado.'
+} else {
+    Write-Host 'Preflight tecnico aprovado. Ainda NAO autoriza ActivateCP sem as confirmacoes manuais.' -ForegroundColor Green
+}
+) {
             $data.Reason = 'WORKER_EXECUTABLE_MISMATCH_OR_UNREADABLE'
             return [pscustomobject]$data
         }
-        if (-not $p.CommandLine -or $p.CommandLine -notmatch 'facekids[.]auth_service') {
+        if (-not $p.CommandLine -or $p.CommandLine -notmatch 'facekids[.]auth_service' -or
+            $p.CommandLine -notlike ('*'+$serverStatusFile+'*')) {
             $data.Reason = 'WORKER_COMMANDLINE_MISMATCH_OR_UNREADABLE'
+            return [pscustomobject]$data
+        }
+        try {
+            $reported = Get-Content -LiteralPath $serverStatusFile -Raw -ErrorAction Stop |
+                ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            $data.Reason = 'SERVER_STATUS_MISSING_OR_UNREADABLE'
+            return [pscustomobject]$data
+        }
+        if ([int]$reported.pid -ne $trackedPid) {
+            $data.Reason = 'WORKER_TRACKED_PID_DIFFERS_FROM_SERVER'
             return [pscustomobject]$data
         }
         try {
