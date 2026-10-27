@@ -52,7 +52,7 @@ class VmLogonStageTests(unittest.TestCase):
 
     def test_cp_requires_real_opt_ins_and_peer_identity(self):
         for needle in [
-            "-SnapshotConfirmed", "-RecoveryConfirmed",
+            "-RecoveryConfirmed",
             "-FixedPasswordConfirmed", "Require-Admin $current",
             "EnforceAuthServiceSid", "AuthServiceSid",
             "VmInstallerMarker", "TargetUserSid",
@@ -60,10 +60,24 @@ class VmLogonStageTests(unittest.TestCase):
             "GetValue('')",
         ]:
             with self.subTest(needle=needle):
-                if needle.startswith("-") and needle != "-SnapshotConfirmed":
-                    self.assertIn(needle[1:], self.source)
-                else:
-                    self.assertIn(needle.removeprefix("-") if needle == "-SnapshotConfirmed" else needle, self.source)
+                self.assertIn(needle.lstrip("-"), self.source)
+
+    def test_step2_preflight_only_reads_live_lab_state(self):
+        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+            encoding="utf-8")
+        guide = (ROOT / "docs" / "VM-PASSO2-PREFLIGHT-20261027.md").read_text(
+            encoding="utf-8")
+        for needle in ["VirtualBox|innotek", "Get-LocalUser", "GetOwnerSid",
+                       "vm-auth-worker.json", "CredentialProviderNotRegistered",
+                       "Preflight tecnico aprovado"]:
+            with self.subTest(needle=needle):
+                self.assertIn(needle, preflight)
+        self.assertNotIn("New-LocalUser", preflight)
+        self.assertNotIn("Register-ScheduledTask", preflight)
+        self.assertNotIn("regsvr32", preflight)
+        self.assertNotIn("exit 2", preflight)
+        self.assertIn("-RecoveryConfirmed", guide)
+        self.assertIn("-FixedPasswordConfirmed", guide)
 
     def test_one_line_driver_refreshes_lab_and_never_installs_login(self):
         wrapper = (ROOT / "scripts" / "Preparar-FaceKids-Autenticacao-VM.ps1").read_text(
@@ -100,7 +114,8 @@ class VmLogonStageTests(unittest.TestCase):
             with self.subTest(needle=needle):
                 if needle != "Banco":
                     self.assertIn(needle, self.source)
-        self.assertIn("snapshot externo", self.docs)
+        self.assertIn("login administrativo", self.docs)
+        self.assertNotIn("SnapshotConfirmed", self.source)
         self.assertIn("NAO e servico SCM", self.docs)
         self.assertIn("senha fixa Windows", self.docs)
 
