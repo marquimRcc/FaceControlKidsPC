@@ -79,6 +79,29 @@ class VmLogonStageTests(unittest.TestCase):
         self.assertIn("-RecoveryConfirmed", guide)
         self.assertIn("-FixedPasswordConfirmed", guide)
 
+    def test_step2_diagnostics_record_success_and_failure_with_reason_codes(self):
+        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+            encoding="utf-8")
+        for needle in [
+            "function Get-WorkerDiagnostics", "function Test-AuthPipePing",
+            "function Save-Diagnostic", "WORKER_RECORD_MISSING",
+            "WORKER_EXITED_OR_STALE_PID", "WORKER_OWNER_SID_MISMATCH",
+            "WORKER_SID_QUERY_FAILED", "WORKER_SID_QUERY_EXCEPTION",
+            "IPC_PONG", "PIPE_UNAVAILABLE", "reason_code",
+            "facekids-vm-events.jsonl", "passo2-ultimo.json",
+            "Add-Content -LiteralPath $historyFile",
+            "Set-Content -LiteralPath $lastFile",
+            "PRECHECK_BLOQUEADO", "Preflight tecnico aprovado",
+            "VALIDACAO MANUAL PENDENTE",
+        ]:
+            with self.subTest(needle=needle):
+                self.assertIn(needle, preflight)
+        self.assertNotIn("throw 'Preflight VM: uma ou mais verificacoes tecnicas falharam.'",
+                         preflight)
+        self.assertNotIn("exit 2", preflight)
+        self.assertNotIn("result.password", preflight)
+        self.assertNotIn("New-LocalUser", preflight)
+
     def test_one_line_driver_refreshes_lab_and_never_installs_login(self):
         wrapper = (ROOT / "scripts" / "Preparar-FaceKids-Autenticacao-VM.ps1").read_text(
             encoding="utf-8")
