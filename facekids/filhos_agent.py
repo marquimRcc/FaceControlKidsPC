@@ -39,6 +39,7 @@ from .storage import Storage
 from .quota_agent_accounting import LegacyLedgerQuota
 from .unlock_event import validated_unlock_event, enrolled_display_name
 from .ipc_json import parse_local_json
+from .ipc_reply import validated_pipe_allow
 from .windows_pipe_api import configure_kernel32
 
 AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
@@ -648,9 +649,9 @@ def run_agent():
                 if pipe_resp:
                     status = pipe_resp.get("status")
                     data_block = pipe_resp.get("data", {})
-                    if status == "ALLOW":
-                        cid = pipe_resp.get("child_id") or data_block.get("child_id")
-                        cname = pipe_resp.get("child_name") or data_block.get("child_name", f"Crianca {cid}")
+                    decision = validated_pipe_allow(pipe_resp) if status == "ALLOW" else None
+                    if status == "ALLOW" and decision is not None:
+                        cid, cname, _authorization_ts = decision
                         detected_ids = pipe_resp.get("detected_ids") or data_block.get("detected_ids", [])
                         face_count = pipe_resp.get("face_count") or data_block.get("face_count", 1)
 
