@@ -259,8 +259,8 @@ switch ($Action) {
             $installed=Start-Process -FilePath $regsvr -ArgumentList ('/s "'+$dllTarget+'"') -Wait -PassThru
             if($installed.ExitCode -ne 0){throw ('regsvr32 retornou '+$installed.ExitCode)}
             if(-not (Test-Path -LiteralPath $cpKey)){throw 'Credential Provider nao foi registrado.'}
-            $inproc=Get-ItemProperty -LiteralPath (Join-Path $comKey 'InprocServer32') -ErrorAction SilentlyContinue
-            if(-not $inproc -or $inproc.'(default)' -ne $dllTarget){
+            $inproc=(Get-Item -LiteralPath (Join-Path $comKey 'InprocServer32') -ErrorAction Stop).GetValue('')
+            if($inproc -ne $dllTarget){
                 throw 'InprocServer32 nao aponta para a DLL exclusiva da VM.'
             }
             Write-Host 'DLL registrada na VM, sem Win+L/logoff automatico.' -ForegroundColor Green
