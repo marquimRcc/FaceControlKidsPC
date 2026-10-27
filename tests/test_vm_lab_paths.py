@@ -8,6 +8,7 @@ from unittest.mock import patch
 from facekids.vm_lab_paths import vm_lab_root
 from facekids.platform_paths import application_data_dir
 from facekids.children_pilot import child_pilot_database
+from facekids.storage import default_data_path
 
 
 class VmLabPathTests(unittest.TestCase):
@@ -29,6 +30,8 @@ class VmLabPathTests(unittest.TestCase):
                 self.assertEqual(vm_lab_root(), root.resolve())
                 self.assertEqual(
                     child_pilot_database(), root.resolve() / "data" / "criancas.sqlite3")
+                self.assertEqual(
+                    default_data_path(), root.resolve() / "data" / "criancas.sqlite3")
                 self.assertEqual(application_data_dir(), root.resolve() / "appdata")
 
     def test_refuses_missing_ack_or_escape_outside_local_appdata(self):

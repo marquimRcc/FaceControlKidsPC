@@ -12,6 +12,14 @@ import numpy as np
 
 
 def default_data_path() -> Path:
+    # Keep every entry point on the same explicitly opted-in VM database.
+    # In particular, gate_webcam_preview calls this function directly while
+    # the parent dashboard uses children_pilot.child_pilot_database().
+    from .vm_lab_paths import vm_lab_root
+
+    vm_root = vm_lab_root()
+    if vm_root is not None:
+        return vm_root / "data" / "criancas.sqlite3"
     base = os.environ.get("LOCALAPPDATA") if os.name == "nt" else os.environ.get("XDG_DATA_HOME")
     if not base:
         base = str(Path.home() / ("AppData/Local" if os.name == "nt" else ".local/share"))
