@@ -70,6 +70,28 @@ jobs:
               throw ('Unexpected VM logon staging mutation: ' + $command)
             }
           }
+      - name: Windows VM step2 read-only preflight PowerShell syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = (Resolve-Path 'scripts/Validar-Passo2-FaceKids-VM.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'VM step2 read-only preflight PowerShell syntax failed'
+          }
+          $code = Get-Content -LiteralPath $file -Raw
+          $blocked = @('regsvr32', 'Register-ScheduledTask', 'New-Service',
+                       'Set-LocalUser', 'New-LocalUser', 'Set-ItemProperty')
+          foreach ($verb in $blocked) {
+            if ($code.Contains($verb)) {
+              throw ('VM step2 preflight must be read-only; found: ' + $verb)
+            }
+          }
       - name: Windows VM one-command auth driver parse
         if: runner.os == 'Windows'
         shell: pwsh
