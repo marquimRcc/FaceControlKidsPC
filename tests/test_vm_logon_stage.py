@@ -57,7 +57,7 @@ class VmLogonStageTests(unittest.TestCase):
         # The Windows virtualenv Python redirector can change the process PID.
         # Resolve the real server from its own status and verify its SID and CLI.
         for token in [
-            "$actualPid=[int]$status.pid",
+            "$actualPid=[int]$s.pid",
             "launcherPid=$p.Id",
             "processId=$actualPid",
             "Get-WorkerSid -ProcessId $actualPid",
@@ -67,6 +67,9 @@ class VmLogonStageTests(unittest.TestCase):
         ]:
             with self.subTest(token=token):
                 self.assertIn(token, source)
+        self.assertNotIn("$actualPid=[int]$status.pid", source)
+        self.assertIn("$s=Get-Content -LiteralPath $statusFile -Raw | ConvertFrom-Json", source)
+        self.assertIn("if($s.phase -eq 'listening')", source)
         for token in [
             "vm-auth-status.json",
             "WORKER_TRACKED_PID_DIFFERS_FROM_SERVER",
