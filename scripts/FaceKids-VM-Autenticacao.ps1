@@ -6,7 +6,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Status','StartAuth','Ping','FaceProbe','ActivateCP','Rollback')]
+    [ValidateSet('Status','StartAuth','RestartAuth','Ping','FaceProbe','ActivateCP','Rollback')]
     [string]$Action = 'Status',
     [switch]$SnapshotConfirmed,
     [switch]$RecoveryConfirmed,
@@ -141,6 +141,20 @@ function Remove-OurCp {
     }
 }
 $current=Assert-Guest
+if ($Action -eq 'RestartAuth') {
+    # Do not stop the verified worker unless the replacement can be launched.
+    Require-Assets
+    $null=Require-Filhos
+    $existing=Get-Worker
+    if ($existing) {
+        $sid=Get-WorkerSid -ProcessId ([int]$existing.ProcessId)
+        if ($sid -ne [string]$current.User.Value) {
+            throw 'Recusado reiniciar autenticador pertencente a outro SID.'
+        }
+        Stop-OurWorker
+    }
+    $Action='StartAuth'
+}
 switch ($Action) {
     'Status' {
         $p=Get-Worker
@@ -172,7 +186,7 @@ switch ($Action) {
         $env:FACEKIDS_VM_SHADOW='0'
         Remove-Item -LiteralPath $statusFile -Force -ErrorAction SilentlyContinue
         $cmd='-m facekids.auth_service --camera-backend dshow --status-file "'+$statusFile+'"'
-        $p=Start-Process -FilePath $python -ArgumentList $cmd -WorkingDirectory $root -PassThru -RedirectStandardOutput (Join-Path $lab 'vm-auth-out.log') -RedirectStandardError (Join-Path $lab 'vm-auth-err.log')
+        $p=Start-Process -FilePath $python -ArgumentList $cmd -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $lab 'vm-auth-out.log') -RedirectStandardError (Join-Path $lab 'vm-auth-err.log')
         try {
             $sid=Get-WorkerSid -ProcessId $p.Id
             if($sid -ne [string]$current.User.Value){throw 'Worker com SID inesperado.'}
@@ -188,7 +202,7 @@ switch ($Action) {
                 }
             }
             if(-not $ready){throw 'Nao entrou no estado listening em 15 s.'}
-            Write-Host ('Autenticador interativo iniciado, PID '+$p.Id) -ForegroundColor Green
+            Write-Host ('Autenticador interativo iniciado em segundo plano (janela oculta), PID '+$p.Id) -ForegroundColor Green
             Write-Warning 'NAO E SCM; depende da sessao administrativa permanecer aberta.'
         } catch {
             $p.Refresh()
