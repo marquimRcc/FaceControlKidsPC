@@ -33,7 +33,7 @@ static DWORD WINAPI Serve(LPVOID context) {
         if (WaitForSingleObject(server.releaseReply, 5000) != WAIT_OBJECT_0) return 4;
         std::string response = i + 1 == server.replies
             ? "{\"status\":\"ALLOW\",\"user\":\"Filhos\",\"child_id\":2,\"child_name\":\"TestChild\","
-              "\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"timestamp\":" + std::to_string(time(nullptr)) + "}"
+              "\"protocol_marker\":\"FACEKIDS_IPC_V1\",\"remaining\":7200,\"timestamp\":" + std::to_string(time(nullptr)) + "}"
             : "{\"status\":\"DENY_UNKNOWN\"}";
         if (!WriteFile(pipe, response.data(), static_cast<DWORD>(response.size()), &count, nullptr)) return 5;
         FlushFileBuffers(pipe);
