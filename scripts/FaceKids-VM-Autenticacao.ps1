@@ -191,19 +191,22 @@ switch ($Action) {
         if($other.Count -gt 0){
             # A failed launcher may leave the real Python interpreter alive.
             # Never kill unknown processes or compete for the camera.
-            if ($other.Count -ne 1) {
-                throw 'Multiplos autenticadores encontrados. Reconciliacao recusada.'
-            }
-            $existing=$other[0]
             $state=if (Test-Path -LiteralPath $statusFile -PathType Leaf) {
                 Get-Content -LiteralPath $statusFile -Raw -ErrorAction Stop | ConvertFrom-Json
             } else { $null }
-            if (-not $state -or $state.phase -ne 'listening' -or
-                [int]$state.pid -ne [int]$existing.ProcessId -or
-                -not $existing.CommandLine -or
-                $existing.CommandLine -notlike ('*'+$statusFile+'*')) {
-                throw 'Autenticador existente nao corresponde ao status do laboratorio; nenhum PID foi encerrado.'
+            if (-not $state -or $state.phase -ne 'listening' -or [int]$state.pid -lt 1) {
+                throw 'Servidor facial nao publicou estado listening com PID valido; nenhum PID foi encerrado.'
             }
+            # The venv Python launcher and its real interpreter can both
+            # appear with the same -m command: select the PID from server status.
+            $matches=@($other | Where-Object { [int]$_.ProcessId -eq [int]$state.pid })
+            $foreign=@($other | Where-Object {
+                -not $_.CommandLine -or $_.CommandLine -notlike ('*'+$statusFile+'*')
+            })
+            if ($matches.Count -ne 1 -or $foreign.Count -gt 0) {
+                throw 'Servidores adicionais ou PID nao correspondente ao laboratorio; nenhum PID foi encerrado.'
+            }
+            $existing=$matches[0]
             $existingSid=Get-WorkerSid -ProcessId ([int]$existing.ProcessId)
             if ($existingSid -ne [string]$current.User.Value) {
                 throw 'Autenticador existente pertence a outra conta; nenhum PID foi encerrado.'
