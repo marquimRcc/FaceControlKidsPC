@@ -49,6 +49,27 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'VM native dependency probe failed'
           }
+      - name: Windows VM staged CP install PowerShell parse and guardrails
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $file = (Resolve-Path 'scripts/FaceKids-VM-Autenticacao.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'VM auth staging installer PowerShell syntax failed'
+          }
+          $source = Get-Content -LiteralPath $file -Raw
+          $blocked = @(('Register' + '-ScheduledTask'), ('New' + '-Service'))
+          foreach ($command in $blocked) {
+            if ($source.Contains($command)) {
+              throw ('Unexpected VM logon staging mutation: ' + $command)
+            }
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh
