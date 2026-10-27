@@ -36,6 +36,20 @@ class VmLogonStageTests(unittest.TestCase):
             with self.subTest(needle=needle):
                 self.assertIn(needle, self.source)
 
+    def test_worker_starts_hidden_with_explicit_sid_checked_restart(self):
+        source = self.source
+        self.assertIn("'RestartAuth'", source)
+        self.assertIn("if ($Action -eq 'RestartAuth')", source)
+        self.assertIn("Require-Assets", source)
+        self.assertIn("Get-WorkerSid -ProcessId ([int]$existing.ProcessId)", source)
+        self.assertIn("Recusado reiniciar autenticador pertencente a outro SID.", source)
+        self.assertIn("Stop-OurWorker", source)
+        self.assertIn("$Action='StartAuth'", source)
+        self.assertIn("-WindowStyle Hidden", source)
+        self.assertIn("-RedirectStandardOutput", source)
+        self.assertIn("-RedirectStandardError", source)
+        self.assertNotIn("Stop-Process -Name python", source)
+
     def test_cp_requires_real_opt_ins_and_peer_identity(self):
         for needle in [
             "-SnapshotConfirmed", "-RecoveryConfirmed",
