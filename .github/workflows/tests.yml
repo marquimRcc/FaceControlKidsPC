@@ -85,7 +85,7 @@ jobs:
             throw 'VM step2 read-only preflight PowerShell syntax failed'
           }
           $code = Get-Content -LiteralPath $file -Raw
-          $blocked = @('regsvr32', 'Register-ScheduledTask', 'New-Service',
+          $blocked = @(('reg' + 'svr32'), 'Register-ScheduledTask', 'New-Service',
                        'Set-LocalUser', 'New-LocalUser', 'Set-ItemProperty')
           foreach ($verb in $blocked) {
             if ($code.Contains($verb)) {
