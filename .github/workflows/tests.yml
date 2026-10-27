@@ -16,6 +16,20 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      - name: Windows P6 VM harness PowerShell syntax check only
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/Testar-P5-P6-VM-FaceKids.ps1').Path,
+            [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'P6 harness PowerShell syntax failed'
+          }
       - name: Hosted Windows - real Tk three-theme switch with synthetic profiles
         if: runner.os == 'Windows' && github.event_name == 'pull_request'
         shell: pwsh
