@@ -91,13 +91,17 @@ class ServiceOwnedQuotaBrokerTests(unittest.TestCase):
         self.assertEqual(self.storage.used(self.second, self.day), 0)
         self.assertEqual(self.tick(106).remaining_seconds, 54)
 
-    def test_win_lock_pause_and_resume_does_not_charge_locked_period(self):
+    def test_win_lock_revokes_lease_and_requires_new_face_verification(self):
         self.activate()
         self.assertEqual(self.tick(103, active=False).charged_seconds, 0)
-        self.assertEqual(self.tick(106, active=True).charged_seconds, 3)
+        self.assertEqual(self.tick(106, active=True).reason, "no-verified-lease")
+        self.assertEqual(self.storage.used(self.first, self.day), 0)
+        self.clock.now = 106
+        self.activate()  # independent trusted WTS + facial re-verification
+        self.assertEqual(self.tick(109).charged_seconds, 3)
         self.assertEqual(self.tick(50_000, active=False).charged_seconds, 0)
-        self.assertEqual(self.tick(50_003, active=True).charged_seconds, 3)
-        self.assertEqual(self.storage.used(self.first, self.day), 6)
+        self.assertEqual(self.tick(50_003, active=True).reason, "no-verified-lease")
+        self.assertEqual(self.storage.used(self.first, self.day), 3)
 
     def test_session_switch_revokes_previous_lease(self):
         self.activate()
