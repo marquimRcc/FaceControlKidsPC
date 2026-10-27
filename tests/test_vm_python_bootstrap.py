@@ -41,6 +41,8 @@ class VmPythonBootstrapTests(unittest.TestCase):
         self.assertIn("-m facekids.vm_guest_diagnostics camera", preflight)
         self.assertNotIn("-c 'import tkinter,cv2,numpy;print(", launcher)
         self.assertNotIn("-c $code", preflight)
+        self.assertIn("Push-Location $repo", launcher)
+        self.assertIn("Push-Location $root", preflight)
 
     def test_p6_finds_same_workspace_venv_before_global_python(self):
         preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
