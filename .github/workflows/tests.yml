@@ -40,6 +40,15 @@ jobs:
               throw ('VM launcher contains forbidden operation: ' + $command)
             }
           }
+      - name: Windows VM native Python module smoke (no quote stripping)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m facekids.vm_guest_diagnostics dependencies
+          if ($LASTEXITCODE -ne 0) {
+            throw 'VM native dependency probe failed'
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh
