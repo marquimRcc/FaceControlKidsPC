@@ -20,6 +20,21 @@ O modulo quota_broker_writer_scm_win.py e um OUTRO servico, exclusivo de fixture
 A DLL legada usa a senha fixa Windows "1" de Filhos; este script nao altera a senha nem tenta verifica-la por login.
 Nao confundir reconhecimento ALLOW com desbloqueio do Windows.
 
+## Comando recomendado (uma unica linha, sem registrar o CP)
+
+Feche primeiro o Painel dos Pais e o aplicativo Camera do Windows.
+Na conta administrativa da VM, abra PowerShell e execute:
+
+~~~powershell
+irm https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/Preparar-FaceKids-Autenticacao-VM.ps1 | iex
+~~~
+
+Este wrapper baixa os scripts mais novos, sincroniza codigo developer sem abrir
+o Painel, reutiliza o Python e a base existentes e executa StartAuth, Ping e
+FaceProbe em ordem. Ele NAO registra Credential Provider, nao instala SCM,
+nao cria tarefas nem faz Win+L. Se FaceProbe falhar, pare antes de ActivateCP.
+Os scripts persistentes ficam na pasta FaceKids-VM-Lab\scripts.
+
 ## Comandos em ordem, na conta administrativa da VM
 
 Obter script e ver estado (sem alterar o login):
