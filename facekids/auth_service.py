@@ -116,9 +116,11 @@ def create_security_attributes() -> SECURITY_ATTRIBUTES:
         ):
             sa.lpSecurityDescriptor = p_sd
         else:
-            logger.warning("Falha ao criar SDDL customizado; usando seguranca padrao.")
-            sa.lpSecurityDescriptor = None
+            logger.error("Falha ao criar SDDL para o pipe; recusando fallback.")
+            raise RuntimeError("Named Pipe SDDL conversion failed")
     else:
+        if sys.platform == "win32":
+            raise RuntimeError("Named Pipe security API unavailable")
         sa.lpSecurityDescriptor = None
     return sa
 
