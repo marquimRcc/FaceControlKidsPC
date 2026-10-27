@@ -63,6 +63,18 @@ class VmLogonStageTests(unittest.TestCase):
                 self.assertIn(needle, wrapper)
         self.assertIn("[switch]$NoDashboard", bootstrap)
         self.assertIn("if ($NoDashboard)", bootstrap)
+        # The PowerShell 5.1 VM may be Restricted. The remote iex entrypoint
+        # is allowed, but direct invocation of downloaded .ps1 files is not.
+        # The helper must use process-scoped Bypass for EVERY nested stage,
+        # and must fail fast when any nested PowerShell exits nonzero.
+        self.assertIn("function Invoke-LabStep", wrapper)
+        self.assertIn("& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @StepArguments", wrapper)
+        self.assertIn("if ($LASTEXITCODE -ne 0)", wrapper)
+        self.assertIn("Invoke-LabStep -ScriptPath $bootstrap", wrapper)
+        self.assertGreaterEqual(wrapper.count("Invoke-LabStep -ScriptPath $stage"), 3)
+        self.assertNotIn("& $bootstrap", wrapper)
+        self.assertNotIn("& $stage", wrapper)
+        self.assertNotIn("Set-ExecutionPolicy", wrapper)
         self.assertNotIn("-Action ActivateCP", wrapper)
         self.assertNotIn("Register-ScheduledTask", wrapper)
         self.assertNotIn("New-Service", wrapper)
