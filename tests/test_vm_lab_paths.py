@@ -12,7 +12,10 @@ from facekids.children_pilot import child_pilot_database
 
 class VmLabPathTests(unittest.TestCase):
     def test_no_optin_preserves_existing_default(self):
-        with patch.dict(os.environ, {}, clear=True):
+        # Keep Windows HOMEDRIVE/HOMEPATH/LOCALAPPDATA intact; removing them
+        # breaks pathlib's user-home lookup independently of VM isolation.
+        with patch.dict(os.environ, {
+            "FACEKIDS_VM_LAB_DIR": "", "FACEKIDS_VM_LAB_ACK": ""}):
             self.assertIsNone(vm_lab_root())
             self.assertNotIn("dados-isolados", str(child_pilot_database()))
 
