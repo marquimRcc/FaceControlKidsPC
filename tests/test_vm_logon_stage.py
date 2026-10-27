@@ -51,6 +51,22 @@ class VmLogonStageTests(unittest.TestCase):
                 else:
                     self.assertIn(needle.removeprefix("-") if needle == "-SnapshotConfirmed" else needle, self.source)
 
+    def test_one_line_driver_refreshes_lab_and_never_installs_login(self):
+        wrapper = (ROOT / "scripts" / "Preparar-FaceKids-Autenticacao-VM.ps1").read_text(
+            encoding="utf-8")
+        bootstrap = (ROOT / "scripts" / "Iniciar-FaceKids-VM-Developer.ps1").read_text(
+            encoding="utf-8")
+        for needle in ["VirtualBox|innotek", "scripts/", "-NoDashboard",
+                       "-SkipTests", "-NoCameraProbe", "-Action StartAuth",
+                       "-Action Ping", "-Action FaceProbe"]:
+            with self.subTest(needle=needle):
+                self.assertIn(needle, wrapper)
+        self.assertIn("[switch]$NoDashboard", bootstrap)
+        self.assertIn("if ($NoDashboard)", bootstrap)
+        self.assertNotIn("-Action ActivateCP", wrapper)
+        self.assertNotIn("Register-ScheduledTask", wrapper)
+        self.assertNotIn("New-Service", wrapper)
+
     def test_rollback_rejects_foreign_cp_and_preserves_data(self):
         for needle in ["Assert-OurCp", "Remove-OurCp", "Stop-OurWorker",
                        "ProviderDaVM", "if($p)", "Banco"]:
