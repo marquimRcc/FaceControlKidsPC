@@ -16,6 +16,18 @@ from facekids.windows_pipe_api import configure_kernel32
 
 
 class BootAuthTests(unittest.TestCase):
+    @staticmethod
+    def synthetic_pipe_security_attributes():
+        # Inject a harmless synthetic descriptor only for mocked mutex tests.
+        # Production must fail closed if its explicit Windows DACL is missing.
+        return auth_service.SECURITY_ATTRIBUTES()
+
+    def test_windows_pipe_acl_missing_must_fail_closed(self):
+        with patch.object(auth_service.sys, "platform", "win32"), \
+             patch.object(ctypes, "windll", types.SimpleNamespace(kernel32=MagicMock()), create=True):
+            with self.assertRaisesRegex(RuntimeError, "security API unavailable"):
+                auth_service.create_security_attributes()
+
     def test_deadline_policy_including_long_idle_and_driver_hang(self):
         self.assertTrue(boot_auth.worker_expired({}, 30, 30))
         self.assertFalse(boot_auth.worker_expired({"phase": "listening"}, 86400, 86400))
@@ -90,6 +102,8 @@ class BootAuthTests(unittest.TestCase):
         kernel.CreateMutexW.return_value = 0x100000042
         kernel.GetLastError.return_value = 183
         with patch.object(ctypes, "windll", types.SimpleNamespace(kernel32=kernel), create=True), \
+             patch.object(auth_service, "create_security_attributes",
+                          return_value=self.synthetic_pipe_security_attributes()), \
              patch.object(auth_service, "probe_camera_access") as probe:
             self.assertEqual(auth_service.run_pipe_server(), 20)
         probe.assert_not_called()
@@ -100,6 +114,8 @@ class BootAuthTests(unittest.TestCase):
         kernel.CreateMutexW.return_value = 0
         kernel.GetLastError.return_value = 5  # ERROR_ACCESS_DENIED
         with patch.object(ctypes, "windll", types.SimpleNamespace(kernel32=kernel), create=True), \
+             patch.object(auth_service, "create_security_attributes",
+                          return_value=self.synthetic_pipe_security_attributes()), \
              patch.object(auth_service, "probe_camera_access") as probe:
             self.assertEqual(auth_service.run_pipe_server(), 20)
         probe.assert_not_called()
@@ -110,6 +126,8 @@ class BootAuthTests(unittest.TestCase):
         kernel.CreateMutexW.return_value = 42
         kernel.GetLastError.return_value = 0
         with patch.object(ctypes, "windll", types.SimpleNamespace(kernel32=kernel), create=True), \
+             patch.object(auth_service, "create_security_attributes",
+                          return_value=self.synthetic_pipe_security_attributes()), \
              patch.object(auth_service, "is_session_zero_or_system", return_value=True), \
              patch.object(auth_service, "probe_camera_access", return_value=False):
             self.assertEqual(auth_service.run_pipe_server(camera_backend="msmf"), 21)
