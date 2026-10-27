@@ -94,12 +94,17 @@ if ($CameraProbe) {
     # Only the guest's interactive camera; NOT SYSTEM Session 0 or LogonUI.
     # Windows PowerShell 5.1 can strip nested quotes in Python -c.
     # Execute the checked-in module instead; it always releases the camera.
-    if ($python -eq 'py.exe') {
-        & py.exe -3.11 -m facekids.vm_guest_diagnostics camera --index $CameraIndex
-    } else {
-        & $python -m facekids.vm_guest_diagnostics camera --index $CameraIndex
+    Push-Location $root
+    try {
+        if ($python -eq 'py.exe') {
+            & py.exe -3.11 -m facekids.vm_guest_diagnostics camera --index $CameraIndex
+        } else {
+            & $python -m facekids.vm_guest_diagnostics camera --index $CameraIndex
+        }
+        $report.CameraProbeExitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
     }
-    $report.CameraProbeExitCode = $LASTEXITCODE
 }
 $report | ConvertTo-Json -Depth 5
 if ($RunUnitTests -and $report.UnitTestsExitCode -ne 0) {
