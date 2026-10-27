@@ -84,6 +84,20 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             throw 'VM authentication one-command driver PowerShell syntax failed'
           }
+      - name: Windows PowerShell 5.1 restricted-policy nested script smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixture = Join-Path $env:RUNNER_TEMP 'facekids-nested-exec-policy.ps1'
+          Set-Content -LiteralPath $fixture -Encoding ASCII -Value 'Write-Output FACEKIDS_NESTED_SCRIPT_OK'
+          # Simulate the VM's Restricted host and run the nested file via
+          # a child with process-scoped Bypass, with no persistent policy changes.
+          $cmd = '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $fixture + '"'
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Restricted -Command $cmd
+          if ($LASTEXITCODE -ne 0 -or $output -notcontains 'FACEKIDS_NESTED_SCRIPT_OK') {
+            throw ('Nested script was blocked by execution policy: ' + ($output -join '; '))
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh
