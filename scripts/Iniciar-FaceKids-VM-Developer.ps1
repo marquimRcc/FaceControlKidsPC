@@ -170,9 +170,15 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 }
 & $venvPython -m pip install --disable-pip-version-check --quiet -r (Join-Path $repo 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar OpenCV/NumPy dentro da VM.' }
-# Avoid Python -c quoting: Windows PowerShell 5.1 strips nested double quotes.
-& $venvPython -m facekids.vm_guest_diagnostics dependencies
-if ($LASTEXITCODE -ne 0) { throw 'Bibliotecas nao funcionais na VM.' }
+# Run the module from the repository root so Python can import facekids.
+# Windows PowerShell 5.1 strips nested quotes in Python -c arguments.
+Push-Location $repo
+try {
+    & $venvPython -m facekids.vm_guest_diagnostics dependencies
+    if ($LASTEXITCODE -ne 0) { throw 'Bibliotecas nao funcionais na VM.' }
+} finally {
+    Pop-Location
+}
 
 # Both the parent dashboard and pilot database must use ONLY VM data paths.
 $env:FACEKIDS_VM_LAB_DIR = $dataDir
