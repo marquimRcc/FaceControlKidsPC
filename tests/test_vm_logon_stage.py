@@ -50,6 +50,32 @@ class VmLogonStageTests(unittest.TestCase):
         self.assertIn("-RedirectStandardError", source)
         self.assertNotIn("Stop-Process -Name python", source)
 
+    def test_launcher_pid_can_differ_from_real_named_pipe_server_pid(self):
+        source = self.source
+        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+            encoding="utf-8")
+        # The Windows virtualenv Python redirector can change the process PID.
+        # Resolve the real server from its own status and verify its SID and CLI.
+        for token in [
+            "$actualPid=[int]$status.pid",
+            "launcherPid=$p.Id",
+            "processId=$actualPid",
+            "Get-WorkerSid -ProcessId $actualPid",
+            "$actual.CommandLine -notmatch 'facekids[.]auth_service'",
+            "$p.CommandLine -notlike ('*'+$statusFile+'*')",
+            "[int]$serverState.pid -ne [int]$p.ProcessId",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, source)
+        for token in [
+            "vm-auth-status.json",
+            "WORKER_TRACKED_PID_DIFFERS_FROM_SERVER",
+            "$p.CommandLine -notlike ('*'+$serverStatusFile+'*')",
+            "[int]$reported.pid -ne $trackedPid",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, preflight)
+
     def test_cp_requires_real_opt_ins_and_peer_identity(self):
         for needle in [
             "-RecoveryConfirmed",
