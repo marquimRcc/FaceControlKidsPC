@@ -143,7 +143,7 @@ class FaceAuthenticator:
         return self._recognizer
 
     def evaluate(self, camera_index: int = 0, timeout_seconds: float = 3.0,
-                 camera_backend: str = "dshow") -> Tuple[str, dict]:
+                 camera_backend: str = "dshow", publish_unlock_event: bool = True) -> Tuple[str, dict]:
         """Tenta reconhecer um filho e verificar sua quota restante."""
         if not self.db_path.exists():
             return "ERROR", {"message": "Banco de dados nao encontrado"}
@@ -190,11 +190,14 @@ class FaceAuthenticator:
                         # Ordena os rostos detectados do maior (mais proximo) para o menor
                         sorted_faces = sorted(faces, key=lambda f: float(f[2]) * float(f[3]), reverse=True)
                         current_frame_detected_ids = []
+                        candidate_face_box = None
                         for f_box in sorted_faces[:3]:
                             feat = rec.features(frame, f_box)
                             cid, sc = rec.identify(feat, references, threshold=0.38, min_margin=0.04)
                             if cid is not None and cid not in current_frame_detected_ids:
                                 current_frame_detected_ids.append(cid)
+                                if candidate_face_box is None:
+                                    candidate_face_box = f_box
 
                         largest_face = sorted_faces[0]
                         candidate_id = current_frame_detected_ids[0] if current_frame_detected_ids else None
@@ -209,7 +212,7 @@ class FaceAuthenticator:
                             if candidate_id == best_candidate:
                                 consecutive_matches += 1
                                 best_frame = frame.copy()
-                                best_face_box = largest_face
+                                best_face_box = candidate_face_box
                                 best_detected_ids = list(current_frame_detected_ids)
                                 best_face_count = len(faces)
                                 if consecutive_matches >= 2:
@@ -218,7 +221,7 @@ class FaceAuthenticator:
                                 best_candidate = candidate_id
                                 consecutive_matches = 1
                                 best_frame = frame.copy()
-                                best_face_box = largest_face
+                                best_face_box = candidate_face_box
                                 best_detected_ids = list(current_frame_detected_ids)
                                 best_face_count = len(faces)
                         else:
@@ -242,6 +245,8 @@ class FaceAuthenticator:
                     "child_name": child_name,
                     "remaining": 0,
                     "message": curfew_msg,
+                    "detected_ids": best_detected_ids or [best_candidate],
+                    "face_count": best_face_count or 1,
                 }
 
             # 2. Verificar quota diaria restante
@@ -261,7 +266,7 @@ class FaceAuthenticator:
             logger.info("Filho autorizado: %s (Saldo: %ds)", child_name, remaining_seconds)
 
             # Salva avatar apenas se a crianca ainda nao tiver foto oficial/cadastrada
-            if best_frame is not None:
+            if publish_unlock_event and best_frame is not None:
                 try:
                     from .avatar_utils import get_child_avatar_path
                     if not get_child_avatar_path(best_candidate):
@@ -272,21 +277,21 @@ class FaceAuthenticator:
                     logger.warning("Falha ao salvar avatar do filho: %s", e)
 
             # Grava ultimo evento de desbloqueio para a tela de boas-vindas
-            try:
-                unlock_data = {
-                    "child_id": best_candidate,
-                    "child_name": child_name,
-                    "remaining_seconds": remaining_seconds,
-                    "timestamp": time.time(),
-                }
-                unlock_path = Path("C:/ProgramData/FaceKids/last_unlock.json") if sys.platform == "win32" else (log_dir / "last_unlock.json")
-                unlock_path.parent.mkdir(parents=True, exist_ok=True)
-                unlock_path.write_text(
-                    json.dumps(unlock_data, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-            except Exception as e:
-                logger.warning("Falha ao salvar last_unlock.json: %s", e)
+            if publish_unlock_event:
+                try:
+                    unlock_data = {
+                        "child_id": best_candidate,
+                        "child_name": child_name,
+                        "remaining_seconds": remaining_seconds,
+                        "timestamp": time.time(),
+                    }
+                    unlock_path = (Path("C:/ProgramData/FaceKids/last_unlock.json")
+                                   if sys.platform == "win32" else (log_dir / "last_unlock.json"))
+                    unlock_path.parent.mkdir(parents=True, exist_ok=True)
+                    unlock_path.write_text(
+                        json.dumps(unlock_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                except Exception as e:
+                    logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
             return "ALLOW", {
                 "child_id": best_candidate,
@@ -476,8 +481,10 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 status, data = "INVALID_REQUEST", {"message": "Enquadramento IPC invalido"}
             elif error == "INVALID_COMMAND":
                 status, data = "INVALID_COMMAND", {"message": "Comando IPC desconhecido"}
-            elif command in ("AUTH_QUERY", "QUERY"):
-                status, data = auth.evaluate(camera_backend=camera_backend)
+            elif command in ("AUTH_QUERY", "QUERY", "SESSION_QUERY"):
+                status, data = auth.evaluate(
+                    camera_backend=camera_backend,
+                    publish_unlock_event=command != "SESSION_QUERY")
             elif command == "PING":
                 status, data = "PONG", {"version": "1.0"}
             else:
@@ -490,12 +497,13 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 "data": data,
                 "timestamp": time.time(),
             }
-            if status == "ALLOW":
+            if status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
                 response_payload["child_id"] = data.get("child_id")
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")
                 response_payload["protocol_marker"] = IPC_PROTOCOL_MARKER
-                report("allow")
+                if status == "ALLOW":
+                    report("allow")
 
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")
