@@ -33,6 +33,15 @@ class VmPythonBootstrapTests(unittest.TestCase):
         self.assertIn("Get-CimInstance Win32_Processor", text)
         self.assertIn("[Environment]::Is64BitOperatingSystem", text)
 
+    def test_vm_launcher_avoids_powershell_native_python_quote_fragility(self):
+        launcher = LAUNCHER.read_text(encoding="utf-8")
+        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
+            encoding="utf-8")
+        self.assertIn("-m facekids.vm_guest_diagnostics dependencies", launcher)
+        self.assertIn("-m facekids.vm_guest_diagnostics camera", preflight)
+        self.assertNotIn("-c 'import tkinter,cv2,numpy;print(", launcher)
+        self.assertNotIn("-c $code", preflight)
+
     def test_p6_finds_same_workspace_venv_before_global_python(self):
         preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
             encoding="utf-8")
