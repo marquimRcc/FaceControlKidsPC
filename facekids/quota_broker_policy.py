@@ -47,6 +47,8 @@ class ServiceOwnedQuotaBroker:
         self._today = today
         self._new_receipt_id = new_receipt_id
         self._lease: Optional[ServerObservedQuotaClock] = None
+        self._rechecking = False
+        self._grace_until: float | None = None
 
     def _now(self) -> float:
         value = self._mono()
@@ -61,6 +63,8 @@ class ServiceOwnedQuotaBroker:
         A caller must never map an IPC child_id to a verified identity.
         """
         self._lease = None
+        self._rechecking = False
+        self._grace_until = None
         if type(console_active) is not bool or not console_active:
             return BrokerTick(None, 0.0, 0.0, False, "not-active")
         if type(child_id) is not int or child_id <= 0 or type(session_id) is not int or session_id <= 0:
@@ -93,6 +97,31 @@ class ServiceOwnedQuotaBroker:
 
     def end_verified_session(self) -> None:
         self._lease = None
+        self._rechecking = False
+        self._grace_until = None
+
+    def begin_recheck(self, *, session_id: int) -> bool:
+        """Pause charging while retaining the last verified identity."""
+        lease = self._lease
+        if lease is None or type(session_id) is not int or lease.session_id != session_id:
+            return False
+        lease.last_mono = self._now()
+        self._rechecking = True
+        self._grace_until = None
+        return True
+
+    def allow_transient_grace(self, *, session_id: int, seconds: float = 30.0) -> bool:
+        """Bounded *non-charging* grace. Not a renewed authentication."""
+        lease = self._lease
+        if (lease is None or type(session_id) is not int or lease.session_id != session_id
+                or not self._rechecking or type(seconds) not in (int, float)
+                or not math.isfinite(seconds) or not 0 < seconds <= 30):
+            return False
+        now = self._now()
+        lease.last_mono = now
+        self._rechecking = False
+        self._grace_until = now + float(seconds)
+        return True
 
     def observe(self, *, observed_wts_session_id: int,
                 observed_console_active: bool) -> BrokerTick:
@@ -102,10 +131,18 @@ class ServiceOwnedQuotaBroker:
             return BrokerTick(None, 0.0, 0.0, False, "no-verified-lease")
         if type(observed_wts_session_id) is not int or observed_wts_session_id <= 0:
             raise ValueError("Invalid WTS session ID")
-        if observed_wts_session_id != lease.session_id:
-            self._lease = None
+        if observed_wts_session_id != lease.session_id or not observed_console_active:
+            self.end_verified_session()
             return BrokerTick(None, 0.0, 0.0, False, "session-switched")
         now = self._now()
+        if self._rechecking or self._grace_until is not None:
+            lease.last_mono = now  # never charge the camera capture or grace
+            if self._grace_until is not None and now >= self._grace_until:
+                self.end_verified_session()
+                return BrokerTick(None, 0.0, 0.0, False, "face-grace-expired")
+            return BrokerTick(lease.child_id, 0.0,
+                              self._store.remaining(lease.child_id, self._today().isoformat()),
+                              False, "rechecking" if self._rechecking else "face-grace")
         delta = lease.sample(
             observed_child_id=lease.child_id,
             observed_wts_session_id=observed_wts_session_id,
