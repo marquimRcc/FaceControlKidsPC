@@ -2,10 +2,10 @@
 <#
 .SYNOPSIS
   Passo 2: preflight somente leitura antes de registrar Credential Provider
-  na VM VirtualBox. Nao altera usuarios, senhas, snapshots, Winlogon ou SCM.
+  na VM VirtualBox. Nao altera usuarios, senhas, Winlogon ou SCM.
 .DESCRIPTION
-  Snapshot e login por senha nao sao validaveis automaticamente dentro do
-  convidado. Sao obrigatoriamente evidencias MANUAIS do operador no host/VM.
+  Login por senha nao e validado por leitura de configuracao.
+  A confirmacao do usuario e um portao manual do laboratorio.
 #>
 [CmdletBinding()]
 param()
@@ -86,17 +86,14 @@ foreach ($name in $checks.Keys) {
     Write-Host (('[{0}] {1}' -f $(if ($value) {'OK'} else {'ATENCAO'}), $name))
 }
 Write-Host ('Worker PID: ' + $(if ($workerPid) { $workerPid } else { 'NAO CONFIRMADO' }))
-Write-Host 'Snapshot externo novo: NAO VERIFICADO (somente VirtualBox no HOST).' -ForegroundColor Yellow
-Write-Host 'Restauracao do novo snapshot: NAO VERIFICADA (teste manual).' -ForegroundColor Yellow
 Write-Host 'Login administrativo por senha/PIN: NAO VERIFICADO (teste manual).' -ForegroundColor Yellow
 Write-Host 'Senha Windows da conta Filhos = 1: NAO VERIFICADA (teste manual).' -ForegroundColor Yellow
 Write-Host 'Nenhuma senha foi lida ou testada; nenhum arquivo foi criado/alterado.'
 if (@($checks.Values | Where-Object { -not $_ }).Count -gt 0) {
     Write-Warning 'Existem precondicoes tecnicas pendentes; NAO execute ActivateCP.'
-    exit 2
+    throw 'Preflight VM: uma ou mais verificacoes tecnicas falharam.'
 }
 Write-Host ''
 Write-Host 'Preflight tecnico aprovado. Ainda NAO autoriza ActivateCP.' -ForegroundColor Green
-Write-Host 'No HOST VirtualBox: salve um NOVO snapshot antes de registrar a DLL.'
-Write-Host 'Depois confirme manualmente a recuperacao administrativa e a senha real de Filhos.'
+Write-Host 'Confirme manualmente o login convencional de Marcos e a senha Windows real da conta Filhos.'
 Write-Host 'Ao desligar/reiniciar a VM, worker interativo para; reinicie-o e repita PING/ALLOW.'
