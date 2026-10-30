@@ -91,31 +91,34 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
             ok, frame = cap.read()
             if not ok or frame is None:
                 raise RuntimeError("A webcam deixou de fornecer quadros.")
-            faces = recognizer.faces(frame)
+            clean_frame = frame.copy()
+            preview = frame.copy()
+            faces = recognizer.faces(clean_frame)
             now = time.monotonic()
             if len(faces) == 1:
                 fx, fy, fw, fh = int(faces[0][0]), int(faces[0][1]), int(faces[0][2]), int(faces[0][3])
-                cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), (50, 230, 80), 2)
+                # Desenha retangulo verde visual apenas na visualizacao (preview)
+                cv2.rectangle(preview, (fx, fy), (fx + fw, fy + fh), (50, 230, 80), 2)
                 if now >= next_frame:
-                    vector = recognizer.features(frame, faces[0])
+                    vector = recognizer.features(clean_frame, faces[0])
                     if _valid_features(vector):
                         vectors.append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
-                        best_enroll_frame = frame.copy()
+                        best_enroll_frame = clean_frame.copy()
                         best_enroll_face = faces[0]
-                        # Recorta o rosto com margem e guarda para galeria das 12 fotos
-                        H, W = frame.shape[:2]
+                        # Recorta o rosto da imagem limpa (SEM o retangulo verde da tela)
+                        H, W = clean_frame.shape[:2]
                         x, y, w, h = fx, fy, fw, fh
                         mx, my = int(w * 0.30), int(h * 0.30)
                         x1, y1 = max(0, x - mx), max(0, y - my)
                         x2, y2 = min(W, x + w + mx), min(H, y + h + my)
-                        cropped = frame[y1:y2, x1:x2].copy()
+                        cropped = clean_frame[y1:y2, x1:x2].copy()
                         enroll_samples.append(cropped)
                         next_frame = now + 0.55
-            cv2.putText(frame, f"FaceKids PERFIL {index} - {len(vectors)}/{REQUIRED_SAMPLES} fotos",
+            cv2.putText(preview, f"FaceKids PERFIL {index} - {len(vectors)}/{REQUIRED_SAMPLES} fotos",
                         (15,35), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (25,240,235),2)
-            cv2.putText(frame,"Mova levemente o rosto. Q ou ESC cancela.",
+            cv2.putText(preview,"Mova levemente o rosto. Q ou ESC cancela.",
                         (15,68), cv2.FONT_HERSHEY_SIMPLEX, 0.56,(25,240,235),2)
-            cv2.imshow("FaceKids - cadastro acompanhado", frame)
+            cv2.imshow("FaceKids - cadastro acompanhado", preview)
             if cv2.waitKey(40) & 0xFF in (ord("q"),27):
                 print("Cadastro cancelado; nenhum dado parcial gravado.")
                 return False
