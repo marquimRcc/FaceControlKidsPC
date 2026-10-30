@@ -1333,13 +1333,16 @@ class AdminDashboard(tk.Tk):
         win = tk.Toplevel(self)
         win.title(f"Escolher Foto do Perfil — {child_name}")
         win.configure(bg=BG_MAIN)
-        win.geometry("640x580")
+        win.geometry("700x630")
         win.resizable(False, False)
         win.transient(self)
         win.grab_set()
 
+        # Mantem referencias das imagens em win para impedir garbage collection
+        win._gallery_images = []
+
         header = tk.Frame(win, bg=BG_MAIN)
-        header.pack(fill=tk.X, padx=20, pady=(16, 8))
+        header.pack(fill=tk.X, padx=20, pady=(16, 6))
 
         tk.Label(
             header,
@@ -1355,134 +1358,218 @@ class AdminDashboard(tk.Tk):
             font=("Segoe UI", 9),
             fg=TEXT_SUB,
             bg=BG_MAIN,
-            wraplength=580,
+            wraplength=640,
             justify="left",
         ).pack(anchor="w", pady=(2, 0))
 
         content_frame = tk.Frame(win, bg=BG_MAIN)
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=8)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=6)
 
-        samples = get_child_sample_photos(child_id, store=self.store)
-        gallery_images = []  # Previne garbage collection do PhotoImage
+        feedback_lbl = tk.Label(
+            header,
+            text="",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT_GREEN,
+            bg=BG_MAIN,
+        )
+        feedback_lbl.pack(anchor="w", pady=(3, 0))
 
-        def _select_sample(s_info):
+        def _render_cards():
+            # Limpa widgets anteriores e imagens
+            for w in content_frame.winfo_children():
+                w.destroy()
+            win._gallery_images.clear()
+
+            samples = get_child_sample_photos(child_id, store=self.store)
+
+            if len(samples) < 12:
+                # Banner informativo para perfis antigos sem as 12 fotos salvas
+                legacy_box = tk.Frame(
+                    content_frame,
+                    bg=BG_CARD,
+                    padx=16,
+                    pady=12,
+                    highlightbackground=ACCENT_BLUE,
+                    highlightthickness=1,
+                )
+                legacy_box.pack(fill=tk.X, pady=(0, 10))
+
+                tk.Label(
+                    legacy_box,
+                    text=f"ℹ️ Este perfil possui apenas {len(samples)} foto salva (cadastro legado anterior).",
+                    font=("Segoe UI", 10, "bold"),
+                    fg=ACCENT_CYAN,
+                    bg=BG_CARD,
+                ).pack(anchor="w")
+
+                tk.Label(
+                    legacy_box,
+                    text="Para disponibilizar todas as 12 fotos da webcam para escolha, capture as 12 fotos agora:",
+                    font=("Segoe UI", 9),
+                    fg=TEXT_SUB,
+                    bg=BG_CARD,
+                ).pack(anchor="w", pady=(2, 8))
+
+                tk.Button(
+                    legacy_box,
+                    text="📷 Tirar as 12 Fotos na Webcam Agora",
+                    font=("Segoe UI", 9, "bold"),
+                    bg=ACCENT_BLUE,
+                    fg="#0B0B12",
+                    activebackground=ACCENT_CYAN,
+                    activeforeground="#0B0B12",
+                    relief=tk.FLAT,
+                    cursor="hand2",
+                    padx=14,
+                    pady=6,
+                    command=lambda: [win.destroy(), self._enroll_webcam(child_id)],
+                ).pack(anchor="w")
+
+            if samples:
+                grid_frame = tk.Frame(content_frame, bg=BG_MAIN)
+                grid_frame.pack(fill=tk.BOTH, expand=True)
+
+                cols = 4
+                for idx, s_info in enumerate(samples):
+                    row = idx // cols
+                    col = idx % cols
+                    is_active = bool(s_info.get("selected"))
+
+                    card_border = ACCENT_CYAN if is_active else BORDER_DEFAULT
+                    border_thick = 2 if is_active else 1
+                    card_bg = "#1A1D2E" if is_active else BG_CARD
+
+                    card_box = tk.Frame(
+                        grid_frame,
+                        bg=card_bg,
+                        highlightthickness=border_thick,
+                        highlightbackground=card_border,
+                        cursor="hand2",
+                    )
+                    card_box.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+                    grid_frame.columnconfigure(col, weight=1)
+
+                    # Carrega thumbnail circular
+                    src = s_info.get("path")
+                    src_bytes = s_info.get("bytes")
+                    thumb_img = None
+                    try:
+                        import cv2
+                        import numpy as np
+                        from .avatar_utils import generate_circular_png, load_image_any_path
+                        if src is not None:
+                            raw = load_image_any_path(str(src))
+                        elif src_bytes is not None:
+                            arr = np.frombuffer(src_bytes, dtype=np.uint8)
+                            raw = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        else:
+                            raw = None
+
+                        if raw is not None and raw.size > 0:
+                            circ = generate_circular_png(raw, 76)
+                            ok_enc, buf_enc = cv2.imencode(".png", circ)
+                            if ok_enc:
+                                thumb_img = tk.PhotoImage(master=win, data=buf_enc.tobytes())
+                                win._gallery_images.append(thumb_img)
+                    except Exception as e:
+                        logger.debug("Falha ao gerar miniatura: %s", e)
+
+                    btn_frame = tk.Frame(card_box, bg=card_bg, cursor="hand2")
+                    btn_frame.pack(padx=6, pady=6)
+
+                    def _make_handler(s=s_info):
+                        return lambda e: _on_photo_clicked(s)
+
+                    if thumb_img:
+                        lbl_pic = tk.Label(btn_frame, image=thumb_img, bg=card_bg, cursor="hand2")
+                        lbl_pic.image = thumb_img
+                        lbl_pic.pack(pady=(2, 2))
+                        lbl_pic.bind("<Button-1>", _make_handler())
+                    else:
+                        lbl_alt = tk.Label(
+                            btn_frame,
+                            text=f"Foto {s_info.get('index', idx+1)}",
+                            font=("Segoe UI", 9, "bold"),
+                            fg=ACCENT_BLUE,
+                            bg=card_bg,
+                            cursor="hand2",
+                        )
+                        lbl_alt.pack(pady=10)
+                        lbl_alt.bind("<Button-1>", _make_handler())
+
+                    lbl_text = f"✓ Foto #{s_info.get('index', idx+1)} (Ativa)" if is_active else f"Foto #{s_info.get('index', idx+1)}"
+                    lbl_color = ACCENT_GREEN if is_active else TEXT_TITLE
+                    lbl_name = tk.Label(
+                        btn_frame,
+                        text=lbl_text,
+                        font=("Segoe UI", 8, "bold" if is_active else "normal"),
+                        fg=lbl_color,
+                        bg=card_bg,
+                        cursor="hand2",
+                    )
+                    lbl_name.pack(pady=(2, 0))
+                    lbl_name.bind("<Button-1>", _make_handler())
+
+                    btn_frame.bind("<Button-1>", _make_handler())
+                    card_box.bind("<Button-1>", _make_handler())
+
+            else:
+                no_photos_box = tk.Frame(content_frame, bg=BG_CARD, padx=24, pady=24)
+                no_photos_box.pack(fill=tk.BOTH, expand=True)
+
+                tk.Label(
+                    no_photos_box,
+                    text="📷 Nenhuma foto das 12 amostras encontrada",
+                    font=("Segoe UI", 12, "bold"),
+                    fg=TEXT_TITLE,
+                    bg=BG_CARD,
+                ).pack(pady=(12, 6))
+
+                tk.Label(
+                    no_photos_box,
+                    text="Este perfil foi cadastrado anteriormente sem salvar as 12 fotos.\nClique no botão abaixo para ligar a webcam, capturar as 12 fotos e escolher a sua favorita!",
+                    font=("Segoe UI", 9),
+                    fg=TEXT_SUB,
+                    bg=BG_CARD,
+                    justify="center",
+                ).pack(pady=(0, 20))
+
+                tk.Button(
+                    no_photos_box,
+                    text="📷 Iniciar Cadastro e Tirar as 12 Fotos",
+                    font=("Segoe UI", 10, "bold"),
+                    bg=ACCENT_BLUE,
+                    fg="#0B0B12",
+                    activebackground=ACCENT_CYAN,
+                    activeforeground="#0B0B12",
+                    relief=tk.FLAT,
+                    cursor="hand2",
+                    padx=16,
+                    pady=8,
+                    command=lambda: [win.destroy(), self._enroll_webcam(child_id)],
+                ).pack()
+
+        def _on_photo_clicked(s_info):
             src = s_info.get("path") or s_info.get("bytes")
             if src is not None:
-                ok = select_child_sample_photo(child_id, src, store=self.store)
+                ok = select_child_sample_photo(
+                    child_id,
+                    src,
+                    store=self.store,
+                    sample_index=s_info.get("index"),
+                    photo_id=s_info.get("photo_id"),
+                )
                 if ok:
-                    win.destroy()
-                    messagebox.showinfo(
-                        "Foto de Perfil Atualizada",
-                        f"Foto #{s_info.get('index', 1)} selecionada com sucesso para {child_name}!\nEsta foto agora representará o perfil no painel e na tela de desbloqueio.",
-                        parent=self,
+                    idx_num = s_info.get("index", 1)
+                    feedback_lbl.config(
+                        text=f"✓ Foto #{idx_num} definida com sucesso como foto oficial do perfil e do desbloqueio!"
                     )
                     self.refresh()
+                    _render_cards()
                 else:
                     messagebox.showerror("Erro", "Falha ao aplicar foto selecionada.", parent=win)
 
-        if samples:
-            grid_frame = tk.Frame(content_frame, bg=BG_MAIN)
-            grid_frame.pack(fill=tk.BOTH, expand=True)
-
-            # Grid de ate 4 colunas x 3 linhas
-            cols = 4
-            for idx, s_info in enumerate(samples):
-                row = idx // cols
-                col = idx % cols
-
-                card_box = tk.Frame(grid_frame, bg=BG_CARD, highlightthickness=1, highlightbackground=BORDER_DEFAULT)
-                card_box.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
-                grid_frame.columnconfigure(col, weight=1)
-
-                # Carrega thumbnail circular
-                src = s_info.get("path")
-                src_bytes = s_info.get("bytes")
-                thumb_img = None
-                try:
-                    import cv2
-                    import numpy as np
-                    from .avatar_utils import generate_circular_png, load_image_any_path
-                    if src is not None:
-                        raw = load_image_any_path(str(src))
-                    elif src_bytes is not None:
-                        arr = np.frombuffer(src_bytes, dtype=np.uint8)
-                        raw = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    else:
-                        raw = None
-
-                    if raw is not None and raw.size > 0:
-                        circ = generate_circular_png(raw, 76)
-                        rgb = cv2.cvtColor(circ, cv2.COLOR_BGRA2RGBA)
-                        # Gera PPM para PhotoImage
-                        rgb_sub = cv2.cvtColor(circ, cv2.COLOR_BGRA2BGR)
-                        ok_enc, buf_enc = cv2.imencode(".ppm", rgb_sub)
-                        if ok_enc:
-                            thumb_img = tk.PhotoImage(data=buf_enc.tobytes())
-                            gallery_images.append(thumb_img)
-                except Exception as e:
-                    logger.debug("Falha ao gerar miniatura: %s", e)
-
-                btn_frame = tk.Frame(card_box, bg=BG_CARD, cursor="hand2")
-                btn_frame.pack(padx=8, pady=8)
-
-                if thumb_img:
-                    lbl_pic = tk.Label(btn_frame, image=thumb_img, bg=BG_CARD, cursor="hand2")
-                    lbl_pic.pack()
-                    lbl_pic.bind("<Button-1>", lambda e, s=s_info: _select_sample(s))
-                else:
-                    lbl_alt = tk.Label(btn_frame, text=f"Foto {s_info.get('index', idx+1)}", font=("Segoe UI", 9, "bold"), fg=ACCENT_BLUE, bg=BG_CARD)
-                    lbl_alt.pack(pady=10)
-                    lbl_alt.bind("<Button-1>", lambda e, s=s_info: _select_sample(s))
-
-                lbl_name = tk.Label(
-                    btn_frame,
-                    text=f"Foto #{s_info.get('index', idx+1)}",
-                    font=("Segoe UI", 8, "bold"),
-                    fg=TEXT_TITLE,
-                    bg=BG_CARD,
-                    cursor="hand2",
-                )
-                lbl_name.pack(pady=(4, 0))
-                lbl_name.bind("<Button-1>", lambda e, s=s_info: _select_sample(s))
-
-                btn_frame.bind("<Button-1>", lambda e, s=s_info: _select_sample(s))
-                card_box.bind("<Button-1>", lambda e, s=s_info: _select_sample(s))
-
-        else:
-            no_photos_box = tk.Frame(content_frame, bg=BG_CARD, padx=24, pady=24)
-            no_photos_box.pack(fill=tk.BOTH, expand=True)
-
-            tk.Label(
-                no_photos_box,
-                text="📷 Nenhuma foto das 12 amostras encontrada",
-                font=("Segoe UI", 12, "bold"),
-                fg=TEXT_TITLE,
-                bg=BG_CARD,
-            ).pack(pady=(12, 6))
-
-            tk.Label(
-                no_photos_box,
-                text="Este perfil foi cadastrado anteriormente sem salvar as 12 fotos.\nClique no botão abaixo para ligar a webcam, capturar as 12 fotos e escolher a sua favorita!",
-                font=("Segoe UI", 9),
-                fg=TEXT_SUB,
-                bg=BG_CARD,
-                justify="center",
-            ).pack(pady=(0, 20))
-
-            tk.Button(
-                no_photos_box,
-                text="📷  Iniciar Cadastro e Tirar as 12 Fotos",
-                font=("Segoe UI", 10, "bold"),
-                bg=ACCENT_BLUE,
-                fg="#0B0B12",
-                activebackground=ACCENT_CYAN,
-                activeforeground="#0B0B12",
-                relief=tk.FLAT,
-                cursor="hand2",
-                padx=16,
-                pady=8,
-                command=lambda: [win.destroy(), self._enroll_webcam(child_id)],
-            ).pack()
+        _render_cards()
 
         # Barra inferior de acoes
         bot_bar = tk.Frame(win, bg=BG_MAIN)
@@ -1518,14 +1605,15 @@ class AdminDashboard(tk.Tk):
 
         tk.Button(
             bot_bar,
-            text="✕ Fechar",
-            font=("Segoe UI", 9),
-            bg=BG_BOX,
-            fg=TEXT_TITLE,
-            activebackground=BG_BOX_HOVER,
+            text="✓ Concluir",
+            font=("Segoe UI", 9, "bold"),
+            bg=ACCENT_BLUE,
+            fg="#0B0B12",
+            activebackground=ACCENT_CYAN,
+            activeforeground="#0B0B12",
             relief=tk.FLAT,
             cursor="hand2",
-            padx=14,
+            padx=16,
             pady=5,
             command=win.destroy,
         ).pack(side=tk.RIGHT)
@@ -1609,8 +1697,20 @@ class AdminDashboard(tk.Tk):
     def _on_enrollment_finished(self, child_id: int, exit_code: int = 0):
         if exit_code == 0:
             self.status_text.set(f"Cadastro via webcam finalizado com sucesso para o Perfil #{child_id}.")
+            self.refresh()
+            # Abre a galeria automaticamente para o usuario escolher a foto oficial entre as 12 fotos capturadas
+            child_name = ""
+            try:
+                for p in self.store.people():
+                    if p[0] == child_id:
+                        child_name = p[1]
+                        break
+            except Exception:
+                pass
+            self.after(350, lambda: self._open_photo_gallery(child_id, child_name or f"Perfil #{child_id}"))
         elif exit_code == 2:
             self.status_text.set(f"Cadastro via webcam cancelado para o Perfil #{child_id}.")
+            self.refresh()
         else:
             self.status_text.set(f"Falha no cadastro via webcam (código {exit_code}).")
             messagebox.showerror(
@@ -1619,7 +1719,7 @@ class AdminDashboard(tk.Tk):
                 "Verifique se a câmera não está em uso por outro aplicativo.",
                 parent=self,
             )
-        self.refresh()
+            self.refresh()
 
     def _rename_child(self, child_id: int, current_name: str):
         """Permite alterar o nome do filho no SQLite."""

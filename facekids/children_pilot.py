@@ -81,6 +81,11 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
     best_enroll_face = None
     print(f"CADASTRO CONSENTIDO: perfil {index}, {REQUIRED_SAMPLES} amostras.")
     print("Um rosto por vez. Q/ESC cancela SEM substituir cadastro anterior.")
+    cv2.namedWindow("FaceKids - cadastro acompanhado", cv2.WINDOW_AUTOSIZE)
+    try:
+        cv2.setWindowProperty("FaceKids - cadastro acompanhado", cv2.WND_PROP_TOPMOST, 1)
+    except Exception:
+        pass
     try:
         while len(vectors) < REQUIRED_SAMPLES:
             ok, frame = cap.read()
@@ -88,21 +93,24 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
                 raise RuntimeError("A webcam deixou de fornecer quadros.")
             faces = recognizer.faces(frame)
             now = time.monotonic()
-            if len(faces) == 1 and now >= next_frame:
-                vector = recognizer.features(frame, faces[0])
-                if _valid_features(vector):
-                    vectors.append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
-                    best_enroll_frame = frame.copy()
-                    best_enroll_face = faces[0]
-                    # Recorta o rosto com margem e guarda para galeria das 12 fotos
-                    H, W = frame.shape[:2]
-                    x, y, w, h = int(faces[0][0]), int(faces[0][1]), int(faces[0][2]), int(faces[0][3])
-                    mx, my = int(w * 0.30), int(h * 0.30)
-                    x1, y1 = max(0, x - mx), max(0, y - my)
-                    x2, y2 = min(W, x + w + mx), min(H, y + h + my)
-                    cropped = frame[y1:y2, x1:x2].copy()
-                    enroll_samples.append(cropped)
-                    next_frame = now + 0.55
+            if len(faces) == 1:
+                fx, fy, fw, fh = int(faces[0][0]), int(faces[0][1]), int(faces[0][2]), int(faces[0][3])
+                cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), (50, 230, 80), 2)
+                if now >= next_frame:
+                    vector = recognizer.features(frame, faces[0])
+                    if _valid_features(vector):
+                        vectors.append(np.asarray(vector, dtype=np.float32).reshape(128).copy())
+                        best_enroll_frame = frame.copy()
+                        best_enroll_face = faces[0]
+                        # Recorta o rosto com margem e guarda para galeria das 12 fotos
+                        H, W = frame.shape[:2]
+                        x, y, w, h = fx, fy, fw, fh
+                        mx, my = int(w * 0.30), int(h * 0.30)
+                        x1, y1 = max(0, x - mx), max(0, y - my)
+                        x2, y2 = min(W, x + w + mx), min(H, y + h + my)
+                        cropped = frame[y1:y2, x1:x2].copy()
+                        enroll_samples.append(cropped)
+                        next_frame = now + 0.55
             cv2.putText(frame, f"FaceKids PERFIL {index} - {len(vectors)}/{REQUIRED_SAMPLES} fotos",
                         (15,35), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (25,240,235),2)
             cv2.putText(frame,"Mova levemente o rosto. Q ou ESC cancela.",
@@ -115,8 +123,8 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
         replace_templates(store, target, vectors)
 
         # Salva todas as 12 fotos amostradas no disco e no SQLite
-        from .avatar_utils import save_child_photo, get_child_samples_dir
-        samples_dir = get_child_samples_dir(index)
+        from .avatar_utils import get_child_samples_dir, select_child_sample_photo
+        samples_dir = get_child_samples_dir(target)
         samples_dir.mkdir(parents=True, exist_ok=True)
         for old_f in samples_dir.glob("amostra_*.jpg"):
             try:
@@ -124,19 +132,23 @@ def _enroll(store: Storage, index: int, models: Path, camera: int):
             except Exception:
                 pass
 
+        if hasattr(store, "clear_profile_photos"):
+            store.clear_profile_photos(target)
+
         for i, sample_crop in enumerate(enroll_samples, start=1):
             sample_p = samples_dir / f"amostra_{i}.jpg"
             cv2.imwrite(str(sample_p), sample_crop)
             try:
                 ok_enc, buf_enc = cv2.imencode(".jpg", sample_crop)
                 if ok_enc and hasattr(store, "add_profile_photo"):
-                    store.add_profile_photo(index, buf_enc.tobytes(), select=(i == 1))
+                    store.add_profile_photo(target, buf_enc.tobytes(), select=(i == 1))
             except Exception:
                 pass
 
-        if best_enroll_frame is not None:
+        # Define a primeira foto como a foto oficial inicial
+        if enroll_samples:
             try:
-                save_child_photo(index, best_enroll_frame, best_enroll_face, store=store)
+                select_child_sample_photo(target, enroll_samples[0], store=store, sample_index=1)
             except Exception:
                 pass
         print(f"CADASTRO_CONCLUIDO: perfil {index}, {len(vectors)} modelos e {len(enroll_samples)} fotos salvas com sucesso.")

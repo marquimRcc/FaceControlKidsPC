@@ -110,6 +110,38 @@ class TestAdminDashboard(unittest.TestCase):
                 self.assertTrue(res.name.endswith(".png"))
                 self.assertTrue(res.exists())
 
+    def test_sample_photos_gallery_and_selection(self):
+        import cv2
+        import numpy as np
+        from facekids.avatar_utils import get_child_sample_photos, select_child_sample_photo
+        with tempfile.TemporaryDirectory() as td:
+            avatar_dir = Path(td) / "fotos"
+            samples_dir = avatar_dir / "amostras_7"
+            samples_dir.mkdir(parents=True, exist_ok=True)
+
+            # Cria 12 amostras ficticias
+            for i in range(1, 13):
+                img = np.zeros((80, 80, 3), dtype=np.uint8)
+                img[:] = (i * 20 % 255, 100, 150)
+                cv2.imwrite(str(samples_dir / f"amostra_{i}.jpg"), img)
+
+            with patch("facekids.avatar_utils.AVATAR_DIR", avatar_dir):
+                samples = get_child_sample_photos(7)
+                self.assertEqual(len(samples), 12)
+                self.assertTrue(samples[0]["selected"])
+
+                # Seleciona a amostra 5
+                ok = select_child_sample_photo(7, samples[4]["path"], sample_index=5)
+                self.assertTrue(ok)
+                self.assertTrue((avatar_dir / "crianca_7.jpg").exists())
+                self.assertTrue((avatar_dir / "crianca_7_avatar.png").exists())
+                self.assertEqual((samples_dir / "selecionada.txt").read_text().strip(), "5")
+
+                # Verifica que apos a selecao, a foto 5 esta marcada como selected=True
+                samples_updated = get_child_sample_photos(7)
+                self.assertFalse(samples_updated[0]["selected"])
+                self.assertTrue(samples_updated[4]["selected"])
+
 
 if __name__ == "__main__":
     unittest.main()

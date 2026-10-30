@@ -27,6 +27,11 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(db.enrollment_count(child), 12)
             with self.assertRaises(KeyError):
                 db.select_profile_photo(child, 9999)
+            # Testa clear_profile_photos
+            cleared = db.clear_profile_photos(child)
+            self.assertEqual(cleared, 3)
+            self.assertEqual(len(db.profile_photos(child)), 0)
+            self.assertEqual(db.enrollment_count(child), 12)  # embeddings intact
             db.close()
 
     def test_user_independent_usage_and_daily_reset(self):

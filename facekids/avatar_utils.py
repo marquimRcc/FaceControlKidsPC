@@ -217,6 +217,23 @@ def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
     """Retorna lista das fotos das amostras da crianca (ate 12 fotos)."""
     samples = []
     s_dir = AVATAR_DIR / f"amostras_{child_id}"
+
+    # Identifica indice da foto atualmente selecionada
+    selected_idx = 1
+    sel_file = s_dir / "selecionada.txt"
+    if sel_file.exists():
+        try:
+            selected_idx = int(sel_file.read_text().strip())
+        except Exception:
+            pass
+    elif store is not None and hasattr(store, "get_setting"):
+        try:
+            val = store.get_setting(f"selected_sample_{child_id}")
+            if val:
+                selected_idx = int(val)
+        except Exception:
+            pass
+
     if s_dir.exists():
         for i in range(1, 13):
             p = s_dir / f"amostra_{i}.jpg"
@@ -225,6 +242,7 @@ def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
                     "index": i,
                     "path": p,
                     "label": f"Foto {i}",
+                    "selected": (i == selected_idx),
                 })
 
     if not samples and store is not None and hasattr(store, "profile_photos"):
@@ -236,7 +254,7 @@ def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
                     "photo_id": photo_id,
                     "bytes": jpeg_bytes,
                     "label": f"Foto {idx}",
-                    "selected": selected,
+                    "selected": bool(selected or (idx == selected_idx)),
                 })
         except Exception as e:
             logger.debug("Erro ao ler amostras do SQLite: %s", e)
@@ -248,12 +266,19 @@ def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
                 "index": 1,
                 "path": curr,
                 "label": "Foto Atual",
+                "selected": True,
             })
 
     return samples
 
 
-def select_child_sample_photo(child_id: int, sample_path_or_bytes, store=None) -> bool:
+def select_child_sample_photo(
+    child_id: int,
+    sample_path_or_bytes,
+    store=None,
+    sample_index: Optional[int] = None,
+    photo_id: Optional[int] = None,
+) -> bool:
     """Aplica a amostra selecionada como a foto de perfil oficial da crianca."""
     try:
         ensure_avatar_dir()
@@ -274,13 +299,33 @@ def select_child_sample_photo(child_id: int, sample_path_or_bytes, store=None) -
         png = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
         cv2.imwrite(str(png), circle)
 
-        if store is not None and hasattr(store, "add_profile_photo"):
+        # Salva marcador do indice selecionado
+        s_dir = AVATAR_DIR / f"amostras_{child_id}"
+        if sample_index is not None:
             try:
-                ok_enc, buf_enc = cv2.imencode(".jpg", img)
-                if ok_enc:
-                    store.add_profile_photo(child_id, buf_enc.tobytes(), select=True)
-            except Exception as e:
-                logger.debug("Erro ao atualizar profile_photo no SQLite: %s", e)
+                s_dir.mkdir(parents=True, exist_ok=True)
+                (s_dir / "selecionada.txt").write_text(str(sample_index))
+            except Exception:
+                pass
+
+        if store is not None:
+            if sample_index is not None and hasattr(store, "set_setting"):
+                try:
+                    store.set_setting(f"selected_sample_{child_id}", str(sample_index))
+                except Exception:
+                    pass
+            if photo_id is not None and hasattr(store, "select_profile_photo"):
+                try:
+                    store.select_profile_photo(child_id, photo_id)
+                except Exception:
+                    pass
+            elif hasattr(store, "add_profile_photo"):
+                try:
+                    ok_enc, buf_enc = cv2.imencode(".jpg", img)
+                    if ok_enc:
+                        store.add_profile_photo(child_id, buf_enc.tobytes(), select=True)
+                except Exception as e:
+                    logger.debug("Erro ao atualizar profile_photo no SQLite: %s", e)
 
         logger.info("Foto de perfil da crianca %d atualizada com sucesso.", child_id)
         return True

@@ -222,10 +222,15 @@ class Storage:
                   ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET 15)
             """, (person_id, person_id))
 
+    def clear_profile_photos(self, person_id: int) -> int:
+        """Remove todas as fotos de perfil registradas para a crianca."""
+        with self.db:
+            return self.db.execute("DELETE FROM profile_photos WHERE person_id=?", (person_id,)).rowcount
+
     def profile_photos(self, person_id: int) -> list[tuple[int, bytes, bool]]:
         rows = self.db.execute(
             "SELECT id,jpeg,selected FROM profile_photos WHERE person_id=? "
-            "ORDER BY created_at DESC,id DESC LIMIT 24", (person_id,)
+            "ORDER BY id ASC LIMIT 24", (person_id,)
         ).fetchall()
         return [(int(photo_id), bytes(jpeg), bool(selected))
                 for photo_id, jpeg, selected in rows]
