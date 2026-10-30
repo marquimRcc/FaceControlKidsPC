@@ -28,6 +28,7 @@ from typing import Optional
 
 from .avatar_utils import (
     get_child_avatar_path,
+    save_child_photo,
     set_child_photo_from_file,
     remove_child_avatar_files,
     AVATAR_DIR,
@@ -1043,12 +1044,13 @@ class AdminDashboard(tk.Tk):
             try:
                 img = tk.PhotoImage(file=str(avatar_path))
                 self.avatar_images[child_id] = img  # Armazena referencia viva
-                avatar_lbl = tk.Label(avatar_col, image=img, bg=BG_CARD)
+                avatar_lbl = tk.Label(avatar_col, image=img, bg=BG_CARD, cursor="hand2")
                 avatar_lbl.pack()
+                avatar_lbl.bind("<Button-1>", lambda e, cid=child_id, cname=name: self._change_profile_photo(cid, cname))
             except Exception:
-                self._draw_fallback_avatar(avatar_col, name)
+                self._draw_fallback_avatar(avatar_col, name, child_id)
         else:
-            self._draw_fallback_avatar(avatar_col, name)
+            self._draw_fallback_avatar(avatar_col, name, child_id)
 
         # Coluna de Informacoes e Controles
         info_col = tk.Frame(body, bg=BG_CARD)
@@ -1080,14 +1082,17 @@ class AdminDashboard(tk.Tk):
         )
         rename_btn.pack(side=tk.LEFT, padx=(12, 0))
 
-        tk.Label(
+        change_lbl = tk.Label(
             avatar_col,
-            text="Foto da\nboas-vindas",
-            font=("Segoe UI", 8, "bold"),
-            fg=TEXT_SUB,
+            text="Foto do Perfil\n(clique para mudar)",
+            font=("Segoe UI", 8),
+            fg=ACCENT_BLUE,
             bg=BG_CARD,
             justify="center",
-        ).pack(pady=(5, 0))
+            cursor="hand2",
+        )
+        change_lbl.pack(pady=(5, 0))
+        change_lbl.bind("<Button-1>", lambda e, cid=child_id, cname=name: self._change_profile_photo(cid, cname))
 
         # A foto visual e a biometria sao controles independentes.
         photo_btn_row = tk.Frame(info_col, bg=BG_CARD)
@@ -1095,7 +1100,7 @@ class AdminDashboard(tk.Tk):
 
         pick_file_btn = tk.Button(
             photo_btn_row,
-            text="🖼️ Escolher Foto da Boas-Vindas",
+            text="🖼️ Escolher Foto (Arquivo)",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_CYAN,
@@ -1109,14 +1114,29 @@ class AdminDashboard(tk.Tk):
         )
         pick_file_btn.pack(side=tk.LEFT, padx=(0, 8))
 
-        webcam_btn = tk.Button(
+        cam_photo_btn = tk.Button(
             photo_btn_row,
-            text="📷 Cadastrar com Webcam",
+            text="📸 Tirar Foto (Webcam)",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_BLUE,
             activebackground=BG_BOX_HOVER,
             activeforeground=ACCENT_BLUE,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=lambda cid=child_id, cname=name: self._capture_photo_webcam(cid, cname),
+        )
+        cam_photo_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+        webcam_btn = tk.Button(
+            photo_btn_row,
+            text="👤 Cadastrar Biometria",
+            font=("Segoe UI", 9),
+            bg=BG_BOX,
+            fg=TEXT_MAIN,
+            activebackground=BG_BOX_HOVER,
             relief=tk.FLAT,
             cursor="hand2",
             padx=10,
@@ -1311,13 +1331,224 @@ class AdminDashboard(tk.Tk):
         apply_btn.pack(side=tk.LEFT, padx=1)
         bonus_entry.bind("<Return>", lambda e: _apply_custom_bonus())
 
-    def _draw_fallback_avatar(self, parent, name: str):
+    def _draw_fallback_avatar(self, parent, name: str, child_id: Optional[int] = None):
         """Desenha avatar circular placeholder com a inicial quando nao ha foto."""
-        canvas = tk.Canvas(parent, width=100, height=100, bg=BG_CARD, highlightthickness=0)
+        canvas = tk.Canvas(parent, width=100, height=100, bg=BG_CARD, highlightthickness=0, cursor="hand2" if child_id else "")
         canvas.pack()
         canvas.create_oval(6, 6, 94, 94, fill=BG_BOX, outline=ACCENT_BLUE, width=2)
         initial = name[0].upper() if name else "F"
         canvas.create_text(50, 50, text=initial, font=("Segoe UI", 32, "bold"), fill=ACCENT_CYAN)
+        if child_id is not None:
+            canvas.bind("<Button-1>", lambda e, cid=child_id, cname=name: self._change_profile_photo(cid, cname))
+
+    def _change_profile_photo(self, child_id: int, child_name: str):
+        """Exibe menu para o usuario escolher a foto do perfil por arquivo ou webcam."""
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Foto do Perfil — {child_name}")
+        dialog.configure(bg=BG_CARD)
+        dialog.geometry("380x210")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        tk.Label(
+            dialog,
+            text=f"Foto do Perfil: {child_name}",
+            font=("Segoe UI", 12, "bold"),
+            fg=TEXT_TITLE,
+            bg=BG_CARD,
+        ).pack(pady=(16, 4))
+
+        tk.Label(
+            dialog,
+            text="Esta foto representará o perfil no painel e na tela de desbloqueio.",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_CARD,
+        ).pack(pady=(0, 16))
+
+        btn_box = tk.Frame(dialog, bg=BG_CARD)
+        btn_box.pack(fill=tk.X, padx=24)
+
+        def _pick_file():
+            dialog.destroy()
+            self._pick_photo_file(child_id)
+
+        def _pick_cam():
+            dialog.destroy()
+            self._capture_photo_webcam(child_id, child_name)
+
+        tk.Button(
+            btn_box,
+            text="📁  Escolher Arquivo do Computador",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_CYAN,
+            activebackground=BG_BOX_HOVER,
+            relief=tk.FLAT,
+            cursor="hand2",
+            pady=7,
+            command=_pick_file,
+        ).pack(fill=tk.X, pady=(0, 8))
+
+        tk.Button(
+            btn_box,
+            text="📸  Tirar Foto Agora com a Webcam",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_BLUE,
+            activebackground=BG_BOX_HOVER,
+            relief=tk.FLAT,
+            cursor="hand2",
+            pady=7,
+            command=_pick_cam,
+        ).pack(fill=tk.X)
+
+    def _capture_photo_webcam(self, child_id: int, child_name: str):
+        """Abre janela com visualização da webcam para capturar a foto oficial do perfil."""
+        try:
+            import cv2
+        except ImportError:
+            messagebox.showerror("Erro", "OpenCV não está disponível.", parent=self)
+            return
+
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW if sys.platform == "win32" else 0)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            messagebox.showerror("Câmera Indisponível", "Não foi possível acessar a webcam. Verifique se outro aplicativo está usando a câmera.", parent=self)
+            return
+
+        win = tk.Toplevel(self)
+        win.title(f"Tirar Foto do Perfil — {child_name}")
+        win.configure(bg=BG_MAIN)
+        win.geometry("540x530")
+        win.resizable(False, False)
+        win.transient(self)
+        win.grab_set()
+
+        header = tk.Frame(win, bg=BG_MAIN)
+        header.pack(fill=tk.X, padx=16, pady=(12, 6))
+        tk.Label(
+            header,
+            text=f"📷 Foto do Perfil: {child_name}",
+            font=("Segoe UI", 13, "bold"),
+            fg=TEXT_TITLE,
+            bg=BG_MAIN,
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="Centralize o rosto no círculo e clique em 'Capturar Foto' (ou aperte Espaço).",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(2, 0))
+
+        preview_canvas = tk.Canvas(win, width=480, height=360, bg="#0B0B12", highlightthickness=1, highlightbackground=BORDER_CARD)
+        preview_canvas.pack(pady=8)
+
+        btn_bar = tk.Frame(win, bg=BG_MAIN)
+        btn_bar.pack(fill=tk.X, padx=28, pady=(8, 12))
+
+        is_running = [True]
+        current_frame = [None]
+        photo_ref = [None]
+
+        def _close():
+            is_running[0] = False
+            try:
+                cap.release()
+            except Exception:
+                pass
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", _close)
+
+        def _capture():
+            if current_frame[0] is None:
+                return
+            frame = current_frame[0].copy()
+            _close()
+
+            self.status_text.set(f"Processando foto capturada para {child_name}...")
+            self.update_idletasks()
+
+            face_box = None
+            if MODELS_DIR.exists():
+                try:
+                    from .recognition import Recognizer
+                    rec = Recognizer(MODELS_DIR)
+                    faces = rec.faces(frame)
+                    if len(faces) >= 1:
+                        face_box = max(faces, key=lambda f: float(f[2]) * float(f[3]))
+                except Exception:
+                    pass
+
+            png_path = save_child_photo(child_id, frame, face_box, store=self.store)
+            if png_path and png_path.exists():
+                messagebox.showinfo("Foto Atualizada", f"Foto do perfil de {child_name} atualizada com sucesso!\nEsta mesma foto aparecerá no painel e na tela de boas-vindas.", parent=self)
+                self.status_text.set(f"Foto do perfil de {child_name} atualizada com sucesso!")
+            else:
+                messagebox.showerror("Aviso", "Falha ao salvar foto do perfil.", parent=self)
+                self.status_text.set("Falha ao salvar foto.")
+
+            self.refresh()
+
+        capture_btn = tk.Button(
+            btn_bar,
+            text="📸  Capturar Foto",
+            font=("Segoe UI", 10, "bold"),
+            bg=ACCENT_BLUE,
+            fg="#0B0B12",
+            activebackground=ACCENT_CYAN,
+            activeforeground="#0B0B12",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=16,
+            pady=6,
+            command=_capture,
+        )
+        capture_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+
+        cancel_btn = tk.Button(
+            btn_bar,
+            text="✕ Cancelar",
+            font=("Segoe UI", 10),
+            bg=BG_BOX,
+            fg=TEXT_MAIN,
+            activebackground=BG_BOX_HOVER,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=6,
+            command=_close,
+        )
+        cancel_btn.pack(side=tk.RIGHT)
+
+        win.bind("<space>", lambda e: _capture())
+        win.bind("<Return>", lambda e: _capture())
+        win.bind("<Escape>", lambda e: _close())
+
+        def _update_feed():
+            if not is_running[0]:
+                return
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                frame = cv2.flip(frame, 1)
+                current_frame[0] = frame
+                disp = cv2.resize(frame, (480, 360))
+                cv2.circle(disp, (240, 180), 110, (240, 180, 56), 2, cv2.LINE_AA)
+                rgb = cv2.cvtColor(disp, cv2.COLOR_BGR2RGB)
+                ok_enc, buf = cv2.imencode(".ppm", rgb)
+                if ok_enc:
+                    photo_ref[0] = tk.PhotoImage(data=buf.tobytes())
+                    preview_canvas.delete("all")
+                    preview_canvas.create_image(0, 0, anchor="nw", image=photo_ref[0])
+
+            if is_running[0]:
+                win.after(33, _update_feed)
+
+        _update_feed()
 
     def _pick_photo_file(self, child_id: int):
         """Seleciona apenas a foto visual; a biometria continua independente."""

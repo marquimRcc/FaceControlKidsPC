@@ -255,6 +255,19 @@ class Storage:
                 (photo_id, person_id),
             )
 
+    def add_profile_photo(self, person_id: int, jpeg_bytes: bytes, select: bool = True) -> int:
+        """Adiciona uma foto de perfil e a define como selecionada/ativa se select=True."""
+        with self.db:
+            if select:
+                self.db.execute(
+                    "UPDATE profile_photos SET selected=0 WHERE person_id=?", (person_id,)
+                )
+            cur = self.db.execute(
+                "INSERT INTO profile_photos(person_id,jpeg,selected) VALUES (?,?,?)",
+                (person_id, jpeg_bytes, int(select)),
+            )
+            return int(cur.lastrowid)
+
     def get_person(self, name: str):
         return self.db.execute("SELECT id,name,daily_limit_seconds FROM people WHERE name=?", (name,)).fetchone()
 

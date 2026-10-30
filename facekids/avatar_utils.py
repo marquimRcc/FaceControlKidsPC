@@ -31,7 +31,7 @@ def load_image_any_path(path: str) -> Optional[np.ndarray]:
         return None
 
 
-def save_child_photo(child_id: int, frame: np.ndarray, face_box: Optional[list | np.ndarray] = None) -> Optional[Path]:
+def save_child_photo(child_id: int, frame: np.ndarray, face_box: Optional[list | np.ndarray] = None, store=None) -> Optional[Path]:
     """Salva a foto cortada do rosto da crianca e gera o PNG circular correspondente."""
     try:
         ensure_avatar_dir()
@@ -58,6 +58,15 @@ def save_child_photo(child_id: int, frame: np.ndarray, face_box: Optional[list |
         circle_png = generate_circular_png(cropped, 120)
         png_path = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
         cv2.imwrite(str(png_path), circle_png)
+
+        # 3. Salvar no banco SQLite se store for fornecido
+        if store is not None and hasattr(store, "add_profile_photo"):
+            try:
+                ok_enc, buf_enc = cv2.imencode(".jpg", cropped)
+                if ok_enc:
+                    store.add_profile_photo(child_id, buf_enc.tobytes(), select=True)
+            except Exception as e:
+                logger.debug("Aviso ao salvar profile_photo no SQLite: %s", e)
 
         logger.info("Avatar da crianca %d salvo com sucesso em %s", child_id, png_path)
         return png_path
@@ -134,7 +143,7 @@ def set_child_photo_from_file(
             logger.warning("Aviso ao extrair biometria da foto selecionada: %s", e)
             bio_msg = f" Foto salva como avatar (aviso biometria: {e})."
 
-    res = save_child_photo(child_id, img, face_box)
+    res = save_child_photo(child_id, img, face_box, store=store)
     if res is not None:
         return PhotoUpdateResult(True, f"Foto atualizada!{bio_msg}", res)
     return PhotoUpdateResult(False, "Falha ao processar e salvar imagem recortada.")
