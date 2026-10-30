@@ -219,13 +219,13 @@ class Storage:
                 DELETE FROM profile_photos
                 WHERE person_id=? AND selected=0 AND id IN (
                   SELECT id FROM profile_photos WHERE person_id=? AND selected=0
-                  ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET 5)
+                  ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET 15)
             """, (person_id, person_id))
 
     def profile_photos(self, person_id: int) -> list[tuple[int, bytes, bool]]:
         rows = self.db.execute(
             "SELECT id,jpeg,selected FROM profile_photos WHERE person_id=? "
-            "ORDER BY created_at DESC,id DESC LIMIT 6", (person_id,)
+            "ORDER BY created_at DESC,id DESC LIMIT 24", (person_id,)
         ).fetchall()
         return [(int(photo_id), bytes(jpeg), bool(selected))
                 for photo_id, jpeg, selected in rows]

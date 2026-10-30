@@ -206,3 +206,84 @@ def get_child_avatar_path(child_id: int) -> Optional[Path]:
         logger.debug("Nao foi possivel carregar foto da crianca %d do SQLite: %s", child_id, e)
 
     return None
+
+def get_child_samples_dir(child_id: int) -> Path:
+    d = AVATAR_DIR / f"amostras_{child_id}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
+    """Retorna lista das fotos das amostras da crianca (ate 12 fotos)."""
+    samples = []
+    s_dir = AVATAR_DIR / f"amostras_{child_id}"
+    if s_dir.exists():
+        for i in range(1, 13):
+            p = s_dir / f"amostra_{i}.jpg"
+            if p.exists() and p.stat().st_size > 0:
+                samples.append({
+                    "index": i,
+                    "path": p,
+                    "label": f"Foto {i}",
+                })
+
+    if not samples and store is not None and hasattr(store, "profile_photos"):
+        try:
+            db_photos = store.profile_photos(child_id)
+            for idx, (photo_id, jpeg_bytes, selected) in enumerate(db_photos, start=1):
+                samples.append({
+                    "index": idx,
+                    "photo_id": photo_id,
+                    "bytes": jpeg_bytes,
+                    "label": f"Foto {idx}",
+                    "selected": selected,
+                })
+        except Exception as e:
+            logger.debug("Erro ao ler amostras do SQLite: %s", e)
+
+    if not samples:
+        curr = AVATAR_DIR / f"crianca_{child_id}.jpg"
+        if curr.exists() and curr.stat().st_size > 0:
+            samples.append({
+                "index": 1,
+                "path": curr,
+                "label": "Foto Atual",
+            })
+
+    return samples
+
+
+def select_child_sample_photo(child_id: int, sample_path_or_bytes, store=None) -> bool:
+    """Aplica a amostra selecionada como a foto de perfil oficial da crianca."""
+    try:
+        ensure_avatar_dir()
+        if isinstance(sample_path_or_bytes, (str, Path)):
+            img = load_image_any_path(str(sample_path_or_bytes))
+        elif isinstance(sample_path_or_bytes, bytes):
+            arr = np.frombuffer(sample_path_or_bytes, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        else:
+            return False
+
+        if img is None or img.size == 0:
+            return False
+
+        jpg = AVATAR_DIR / f"crianca_{child_id}.jpg"
+        cv2.imwrite(str(jpg), img)
+        circle = generate_circular_png(img, 120)
+        png = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
+        cv2.imwrite(str(png), circle)
+
+        if store is not None and hasattr(store, "add_profile_photo"):
+            try:
+                ok_enc, buf_enc = cv2.imencode(".jpg", img)
+                if ok_enc:
+                    store.add_profile_photo(child_id, buf_enc.tobytes(), select=True)
+            except Exception as e:
+                logger.debug("Erro ao atualizar profile_photo no SQLite: %s", e)
+
+        logger.info("Foto de perfil da crianca %d atualizada com sucesso.", child_id)
+        return True
+    except Exception as e:
+        logger.warning("Falha ao selecionar amostra da crianca %d: %s", child_id, e)
+        return False
