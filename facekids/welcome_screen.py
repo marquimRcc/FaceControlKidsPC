@@ -610,8 +610,17 @@ class WelcomeWindow:
 
 def show_welcome():
     if not is_active_console_user_filhos():
-        logger.info("Tela de boas-vindas ignorada: sessao de console ativa nao e 'Filhos'.")
-        return
+        if sys.platform == "win32" and not os.environ.get("FACEKIDS_TEST_ACTIVE_USER"):
+            for _ in range(4):
+                time.sleep(0.5)
+                if is_active_console_user_filhos():
+                    break
+            else:
+                logger.info("Tela de boas-vindas ignorada: sessao de console ativa nao e 'Filhos'.")
+                return
+        else:
+            logger.info("Tela de boas-vindas ignorada: sessao de console ativa nao e 'Filhos'.")
+            return
 
     # Mutex de sessao para impedir janelas sobrepostas
     h_mutex = None

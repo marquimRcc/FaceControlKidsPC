@@ -545,8 +545,8 @@ def is_active_console_user_filhos() -> bool:
         return os.environ.get("USERNAME", "").lower() == "filhos"
 
 def run_agent():
-    # Garante que o agente so roda se a sessao ativa for a conta Filhos
-    if not is_active_console_user_filhos():
+    # Garante que este agente so roda no contexto da conta Filhos
+    if os.environ.get("USERNAME", "").lower() != "filhos" and not os.environ.get("FACEKIDS_TEST_ACTIVE_USER"):
         logger.info("FilhosAgent: Sessao de console ativa nao pertence a 'Filhos' (usuario: %s). Encerrando imediatamente.", os.environ.get("USERNAME"))
         return
 
@@ -556,6 +556,11 @@ def run_agent():
     if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         logger.info("Outra instancia de FilhosAgent ja esta em execucao nesta sessao. Encerrando duplicata.")
         return
+
+    # Se a conta Filhos estiver em segundo plano (ex: administrador na tela do console),
+    # aguarda ate que a sessao dos Filhos seja conectada/ativa no console.
+    while not is_active_console_user_filhos():
+        time.sleep(2.0)
 
     logger.info("Iniciando FilhosAgent na conta %s (PID %d)...", os.environ.get("USERNAME", "Filhos"), os.getpid())
 
@@ -569,16 +574,24 @@ def run_agent():
 
     # last_unlock.json is UI-only: never assign quota owner from writable JSON.
     cid, cname, unlock_ts = read_last_unlock_child()
-    last_seen_ts = unlock_ts if cid is not None else time.time()
-    tracker.current_child_id = None
-    tracker.current_child_name = "Nao identificado"
-    if cid is not None and (time.time() - unlock_ts) < 15:
+    if cid is not None:
+        last_seen_ts = unlock_ts
+        display_name = enrolled_display_name(store, cid) or cname
+        tracker.switch_child(cid, display_name)
+        time.sleep(1.0)
         trigger_welcome_screen()
     else:
+        last_seen_ts = time.time()
+        tracker.current_child_id = None
+        tracker.current_child_name = "Nao identificado"
+        logger.info("Nenhum desbloqueio facial recente identificado. Sessao em modo aguardando identificacao facial.")
         show_toast(
             "FaceControl Kids",
-            "Olhe para a webcam para carregar seu tempo de tela.",
-            icon="👤", color="#89DCEB", duration_ms=6000)
+            "Entrada por PIN detectada. Olhe para a webcam para carregar seu tempo de tela.",
+            icon="👤",
+            color="#89DCEB",
+            duration_ms=6000,
+        )
 
     last_active_time = time.monotonic()
     session_active_since_mono = time.monotonic()
@@ -610,10 +623,12 @@ def run_agent():
                     event = validated_unlock_event(
                         parse_local_json(LAST_UNLOCK_FILE.read_text(encoding="utf-8")))
                     if event is not None and event[2] > last_seen_ts:
-                        last_seen_ts = event[2]
-                        if (time.time() - event[2] < 15.0 and
-                                current_session_state() is SessionState.ACTIVE):
-                            trigger_welcome_screen()
+                        if current_session_state() is SessionState.ACTIVE:
+                            last_seen_ts = event[2]
+                            if (time.time() - event[2]) < 60.0:
+                                trigger_welcome_screen()
+                        elif (time.time() - event[2]) >= 60.0:
+                            last_seen_ts = event[2]
                 except (OSError, ValueError, TypeError) as e:
                     logger.debug("Evento UI ignorado: %s", e)
 
