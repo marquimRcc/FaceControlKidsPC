@@ -437,14 +437,16 @@ class WelcomeWindow:
         # 5. Dica de uso informativa (o tempo ja esta contando)
         self.hint_label = tk.Label(
             container,
-            text="⏱️ Seu tempo já começou a contar! Esta janela pode ser minimizada a qualquer momento.",
+            text="⏱️ Seu tempo já começou a contar! Esta janela fechará em 4 segundos.",
             font=("Segoe UI", 9),
             fg=self.text_sub,
             bg=self.bg_card,
         )
         self.hint_label.pack(pady=(8, 10))
 
-        # Mantem em primeiro plano (topmost) por 30 segundos; apos isso aceita segundo plano
+        # Auto-fechamento em 4 segundos para nao cobrir video/jogos das criancas
+        self._auto_close_job = self.root.after(4000, self.dismiss)
+        # Mantem em primeiro plano durante a exibicao
         self._topmost_job = self.root.after(30000, self._drop_topmost)
         self._tick_countdown()
 
@@ -547,6 +549,13 @@ class WelcomeWindow:
                 self.root.deiconify()
             self.root.attributes("-topmost", True)
             self.root.lift()
+            if hasattr(self, "_auto_close_job") and self._auto_close_job:
+                try:
+                    self.root.after_cancel(self._auto_close_job)
+                except Exception:
+                    pass
+            self._auto_close_job = self.root.after(4000, self.dismiss)
+
             if hasattr(self, "_topmost_job") and self._topmost_job:
                 try:
                     self.root.after_cancel(self._topmost_job)
@@ -588,6 +597,12 @@ class WelcomeWindow:
             pass
 
     def dismiss(self):
+        if hasattr(self, "_auto_close_job") and self._auto_close_job:
+            try:
+                self.root.after_cancel(self._auto_close_job)
+            except Exception:
+                pass
+            self._auto_close_job = None
         if hasattr(self, "_topmost_job") and self._topmost_job:
             try:
                 self.root.after_cancel(self._topmost_job)

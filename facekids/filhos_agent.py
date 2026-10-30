@@ -595,6 +595,7 @@ def run_agent():
 
     last_active_time = time.monotonic()
     session_active_since_mono = time.monotonic()
+    last_welcome_reminder_mono = time.monotonic()
     check_interval = get_face_check_interval()
     identifier = InSessionFaceIdentifier(interval_seconds=check_interval)
     today = date.today().isoformat()
@@ -669,6 +670,7 @@ def run_agent():
                                                 tracker.current_child_name, registered_name)
                                     tracker.switch_child(observed.child_id, registered_name)
                                     session_active_since_mono = time.monotonic()
+                                    last_welcome_reminder_mono = time.monotonic()
                                     trigger_welcome_screen()
                                     show_toast("👋 Perfil Alternado",
                                                f"Olá, {registered_name}! Seu perfil foi carregado.",
@@ -751,6 +753,12 @@ def run_agent():
                         child_id=tracker.current_child_id, seconds=delta, day=today)
                     rem = tick.remaining_seconds
                     tracker.update_balance(rem)
+
+                    # Lembrete a cada 30 minutos (1800s) de uso ativo: exibe card por 4 segundos
+                    if (now_mono - last_welcome_reminder_mono) >= 1800.0 and rem > 60:
+                        last_welcome_reminder_mono = now_mono
+                        logger.info("Lembrete de 30 minutos: exibindo card de tempo para %s", tracker.current_child_name)
+                        trigger_welcome_screen()
 
                     # Shadow may observe this child, but NEVER change rem,
                     # trigger a lock, or select a facial identity.
