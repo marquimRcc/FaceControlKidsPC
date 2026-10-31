@@ -1,174 +1,95 @@
 # FaceControlKidsPC — Desbloqueio Facial Automático e Controle de Quotas
 
-## Regata OS / Linux
+Sistema doméstico de controle parental e autenticação biométrica facial para computadores compartilhados com **Windows 10 e Windows 11**.
 
-O trabalho Linux está na branch `feature/regataos-linux-implementation-20261022`.
-Ela inclui um controlador protegido por `systemd`, reconhecimento local
-YuNet/SFace, quotas individuais para uma ou mais crianças na mesma conta, observação
-de bloqueio via `systemd-logind`, retratos locais opcionais de perfil e instalador para
-Regata OS. Consulte [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md).
-Para retomar o trabalho ou transferi-lo a outra IA, consulte também o
-[documento de continuidade](docs/CONTINUIDADE-REGATAOS.md), que deve ser
-atualizado e commitado antes de cada pausa planejada.
-
-O controlador Linux já contabiliza e bloqueia a sessão KDE. Após três
-confirmações faciais na tela bloqueada, ele revalida as regras e solicita o
-desbloqueio pelo logind. A integração PAM opcional permanece desativada até o
-responsável testar reconhecimento, recuperação e fallback por senha. O login
-inicial pelo SDDM ainda pode exigir integração gráfica específica.
-
-### Painel dos pais no Regata OS
-
-O painel Electron comunica-se com o serviço protegido pelo socket Unix
-`/run/facekids/admin.sock`. Somente `root` e membros do grupo administrativo
-configurado (por padrão `wheel`) conseguem consultar ou alterar cadastros. A
-interface não abre o banco SQLite diretamente.
-
-Depois de instalar ou atualizar o serviço, crie o aplicativo no menu KDE:
-
-```bash
-./scripts/Criar-Atalho-Painel-RegataOS.sh
-```
-
-Abra **FaceKids — Painel dos pais** no menu de aplicativos. O botão **Nova
-criança** cria o perfil no serviço e inicia a captura real de 12 amostras pela
-webcam. Três retratos recortados são guardados localmente para o painel; o
-responsável pode capturar outros e escolher qual será exibido. Vídeos não são
-persistidos e o reconhecimento continua usando somente os vetores faciais.
-
-Para a conta compartilhada, instale a tela de tempo e boas-vindas:
-
-```bash
-sudo bash scripts/Criar-Tela-Infantil-RegataOS.sh filhos
-```
-
-Ela abre automaticamente na sessão infantil e consulta um socket somente de
-leitura. Enquanto nenhum rosto está confirmado, a tela não revela nomes,
-fotos ou saldos de outros perfis.
-
-### Bundle desktop autocontido
-
-Para distribuir a interface sem `pnpm`, código-fonte ou dependências do
-workspace na máquina de destino, gere o bundle Linux x86-64:
-
-```bash
-./scripts/Empacotar-FaceKids-Desktop-Linux.sh
-```
-
-O comando cria `artifacts/facekids-desktop-linux-x64.tar.gz` e seu arquivo
-SHA-256. No computador de destino, confira o checksum, extraia e instale:
-
-```bash
-sha256sum --check facekids-desktop-linux-x64.tar.gz.sha256
-tar -xzf facekids-desktop-linux-x64.tar.gz
-cd facekids-desktop-linux-x64
-sudo ./install.sh
-```
-
-O instalador valida todos os arquivos internos, troca a versão anterior de
-forma atômica e instala o Electron, frontend, ícones e lançadores em
-`/opt/facekids/desktop` e `/usr/local/bin`. O serviço Python e o banco
-biométrico não são alterados por esse instalador de interface.
-
-Na branch `feature/facekids-cold-boot-auto-unlock-20261022`, consulte
-[Boot sem login previo do administrador](docs/BOOT-SEM-LOGIN-ADMIN-20261022.md).
-Inclui supervisor SYSTEM no boot e repeticao facial sem clique. Requer ativacao
-explicita pelo script e teste fisico da webcam/LogonUI; nao altera o firewall.
-
-> **Estado do Sistema:** Sistema doméstico de controle parental e desbloqueio facial automático via webcam para a conta compartilhada **Filhos** no Windows 10/11.
-> **Comprovação em Hardware:** Testado e comprovado funcional no PC doméstico pelo proprietário. A criança senta em frente à webcam, o rosto é reconhecido, a quota diária e horário permitido são verificados, e o Windows desbloqueia automaticamente sem cliques ou digitação de senha.
-> **Recuperação e Segurança:** O login convencional (PIN / senha "1" da conta Filhos e credenciais da conta administradora) permanece 100% intacto e acessível.
+> **Estado do Sistema:** Homologado e funcional no computador físico da família. A criança senta em frente à webcam, o rosto é reconhecido via IA local (YuNet + SFace), a quota diária e horários são validados e o Windows desbloqueia automaticamente a conta **Filhos** sem cliques ou digitação de senha.  
+> **Segurança e Fallback:** As contas administrativas e os métodos convencionais (PIN e senha) permanecem 100% acessíveis e intactos.
 
 ---
 
-## 1. Visão Geral da Arquitetura
+## 1. Principais Funcionalidades
 
-O sistema integra três componentes principais:
+- **Desbloqueio Facial Transparente no Logon (LogonUI):** Credential Provider nativo em C++ (`FaceKidsCredentialProvider.dll`) que atua exclusivamente na conta compartilhada `Filhos`, executando AutoLogon via `KerbInteractiveLogon` com senha fixa `"1"`.
+- **Painel dos Pais Centralizado (`abrir-facekids.bat`):** Interface Tkinter com tema moderno (Catppuccin Macchiato) para criação e gestão de perfis, quotas diárias, bônus de tempo (+15, +30, +60 min) e toque de recolher (*curfew*).
+- **Cadastro Facial com Galeria de 12 Fotos:** Captura guiada de 12 fotos da webcam (salvas limpas, sem retângulo de detecção verde sobreposto no rosto) permitindo escolher visualmente o avatar oficial da criança na galeria.
+- **Tela de Boas-Vindas Inteligente:** Exibe avatar e saldo diário imediatamente após o desbloqueio facial, fecha-se automaticamente após 4 segundos e reaparece brevemente a cada 30 minutos como lembrete suave do tempo restante.
+- **Proteção Anti-Inatividade com Reembolso (120s):** Se o computador ficar sem uso de teclado e mouse por 2 minutos, a sessão é bloqueada e o tempo de ausência é **automaticamente reembolsado** para a criança.
+- **Watchdog Anti-Burla do Agente:** O serviço do sistema monitora continuamente a sessão ativa da conta `Filhos`. Se o agente for finalizado (ex.: via Gerenciador de Tarefas), o watchdog tenta relançá-lo via Agendador de Tarefas e, caso persista fechado, executa bloqueio preventivo para impedir uso ilimitado.
+- **Tolerância a Webcam Ocupada:** Caso a criança esteja em uma videochamada ou jogo web no navegador (Brave) que retenha a webcam, as checagens periódicas em segundo plano mantêm o perfil ativo sem falsos bloqueios.
+
+---
+
+## 2. Scripts Principais no Windows
+
+Os scripts na raiz do projeto centralizam toda a operação:
+
+| Script | Finalidade |
+|---|---|
+| **`Instalar-FaceUnlock.bat`** | Instala a DLL do Credential Provider, registra no COM e agenda os serviços automáticos. |
+| **`abrir-facekids.bat`** | Abre o Painel dos Pais para cadastrar crianças, gerenciar quotas e visualizar a galeria de fotos. |
+| **`Ativar-Desbloqueio-No-Boot.bat`** | Ativa o serviço de biometria facial como `SYSTEM` no boot do Windows (antes do logon). |
+| **`Desinstalar-FaceUnlock.bat`** | Desinstala com segurança o Credential Provider e tarefas agendadas, preservando o banco de dados. |
+
+---
+
+## 3. Arquitetura e Estrutura de Código
+
+Para entender detalhadamente a divisão entre os módulos de **Produção Windows**, módulos de **Laboratório Experimental** (`quota_broker_*`, `quota_vm_*`) e **Linux** (`linux_*`), consulte:
+👉 **[Documento de Arquitetura de Produção Windows](docs/ARQUITETURA-PRODUCAO-WINDOWS.md)**
 
 ```text
        Webcam USB (XWF-1080P)
                  │
                  ▼
-   Face Kids Auth Service (Python)
-      - OpenCV YuNet (detecção) + SFace (biometria)
-      - Consulta SQLite (quotas independentes e toque de recolher)
-      - Servidor Named Pipe: \\.\pipe\FaceKidsAuthPipe
+    Face Kids Auth Service (Python SYSTEM / Admin)
+       - OpenCV YuNet (detecção) + SFace (biometria)
+       - Consulta SQLite local (kids.sqlite3)
+       - Watchdog Anti-Burla (agent_watchdog.py)
+       - Servidor Named Pipe: \\.\pipe\FaceKidsAuthPipe
                  │
                  ▼ (IPC Seguro / Status Tipado)
-   Face Kids Credential Provider V2 (C++ / COM)
-      - DLL nativa: FaceKidsCredentialProvider.dll
-      - Visível EXCLUSIVAMENTE para a conta "Filhos" (filtragem por SID)
-      - AutoLogon com serialização KerbInteractiveLogon (senha fixa "1")
+    Face Kids Credential Provider (C++ / COM)
+       - DLL nativa: FaceKidsCredentialProvider.dll
+       - Filtragem estrita por SID (apenas conta Filhos)
+       - AutoLogon transparente (senha "1")
                  │
                  ▼
-          LogonUI / Windows LSA
-      - Desbloqueia a sessão Filhos sem interação manual
+           LogonUI / Windows LSA
                  │
                  ▼
-     Agente de Sessão dos Filhos (filhos_agent.py)
-      - Exibe Tela de Boas-Vindas com Foto/Avatar e Tempo Restante
-      - Rastreamento monotônico de uso (desconta apenas da criança identificada)
-      - Pausa contagem durante Win+L ou suspensão
-      - Avisos flutuantes aos 10, 5 e 1 minutos restantes
-      - Bloqueio automático (LockWorkStation) ao esgotar a quota ou atingir o toque de recolher
+      Agente de Sessão dos Filhos (filhos_agent.py)
+       - Tela de Boas-Vindas com Avatar (welcome_screen.py)
+       - Contabilidade de Quota (quota_agent_accounting.py)
+       - Reembolso de inatividade física (120s)
+       - Heartbeat contínuo para o Watchdog
+       - Bloqueio automático ao esgotar o tempo (LockWorkStation)
 ```
 
 ---
 
-## 2. Decisões Operacionais e Diretrizes
+## 4. Testes e Validação de Qualidade
 
-1. **Conta Filhos e Senha Fixa "1":** Decisão consciente do proprietário para o computador doméstico compartilhado pelas crianças cadastradas; a quantidade de perfis não é fixa.
-2. **Conta Administradora Intacta:** O Credential Provider do FaceKids filtra estritamente pelo SID da conta `Filhos`. A conta administrativa nunca é alvo de autologon ou bloqueios do agente.
-3. **Quotas Independentes:** Cada criança possui sua quota configurável (padrão de 120 minutos/dia), bônus diários acumuláveis e horários permitidos gerenciados no Painel dos Pais.
-4. **Login Manual por PIN:** Caso a entrada seja realizada manualmente por PIN ou senha convencional, o sistema entra em modo *UNIDENTIFIED*, sem atribuir tempo arbitrário a nenhuma das crianças até haver identificação facial válida.
+O projeto possui uma suíte rigorosa de testes unitários automatizados cobrindo instaladores, contratos IPC, contabilidade de quotas, watchdog e biometria:
 
----
-
-## 3. Instruções Rápidas de Uso
-
-### A. Instalação e Atualização do Sistema
-Para instalar o Credential Provider nativo e iniciar o serviço em segundo plano:
-1. Clique com o botão direito em **`Instalar-FaceUnlock.bat`** e execute como Administrador (ou execute diretamente via prompt elevado).
-2. O instalador compila os binários nativos (se necessário), copia a DLL para `C:\ProgramData\FaceKids`, registra o CLSID COM via `regsvr32`, configura a inicialização automática do serviço e agenda o agente da conta Filhos.
-
-### B. Cadastro Facial das Crianças
-Execute os atalhos correspondentes na conta dos pais:
-- **`cadastrar-filho-1.bat`**: Cadastra o rosto do Filho 1
-- **`cadastrar-filho-2.bat`**: Cadastra o rosto do Filho 2
-- **`cadastrar-filho-3.bat`**: Cadastra o rosto do Filho 3
-
-Ou abra o **Painel dos Pais**:
-```cmd
-abrir-facekids.bat
-```
-No painel, o responsável pode gerenciar fotos, limites de tempo, conceder bônus (+15, +30, +60 min) e definir horários de uso.
-
-### C. Desinstalação Segura / Rollback
-Caso queira desativar o FaceKids e restaurar o LogonUI padrão:
-1. Execute **`Desinstalar-FaceUnlock.bat`** como Administrador.
-2. O script desregistra a DLL, remove o serviço da inicialização e limpa os registros, mantendo intactos os logins normais do Windows e o banco de dados.
-
----
-
-## 4. Testes e Verificação
-
-### Execução de Testes Unitários
-Para rodar a suíte completa de 150+ testes de regressão (Windows e Linux):
 ```powershell
+# Execução completa da suíte de testes (Windows)
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-```
 
-### Testes do Credential Provider e IPC Nativo
-Na pasta `native/credential_provider_facekids`:
-```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1
-.\TestPipeClient.exe --unit-only
-.\TestProviderHost.exe
+# Validação da sintaxe dos scripts de instalação e desinstalação
+.\.venv\Scripts\python.exe -m unittest tests/test_installer_scripts.py -v
 ```
 
 ---
 
-## 5. Licença e Privacidade
+## 5. Ambientes Linux (Regata OS)
+
+O desenvolvimento para ambientes Linux (KDE Plasma, SDDM, logind e PAM) está documentado na branch `feature/regataos-linux-implementation-20261022` e em:
+- [Implementação Regata OS](docs/IMPLEMENTACAO-REGATAOS-LINUX.md)
+- [Documento de Continuidade Linux](docs/CONTINUIDADE-REGATAOS.md)
+
+---
+
+## 6. Licença e Privacidade
 
 - **Licença:** MIT — software livre e de código aberto.
-- **Privacidade Biométrica:** Nenhuma foto, vídeo, nome ou vetor facial é enviado para a internet ou versionado no Git. Todos os dados permanecem estritamente locais no PC doméstico (`C:\ProgramData\FaceKids`).
+- **Privacidade Biométrica Total:** Todo o processamento facial e dados biométricos ocorrem 100% offline no hardware local. Nenhuma imagem, vetor ou dado de uso é transmitido pela internet.
