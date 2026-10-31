@@ -11,4 +11,4 @@ dist-electron/
 artifacts/
 native/**/*.exe
 !native/**/FaceKidsCredentialProvider.dll
-auditoria_windows_main.txt
+auditoria_*.txt

@@ -130,14 +130,14 @@ def default_trigger_recovery(task_name: str = "FaceKidsFilhosAgent") -> bool:
 def default_lock_session(session_id: Optional[int] = None) -> bool:
     """Bloqueia a sessao ativa do Windows."""
     try:
+        locked = False
         if session_id is not None and sys.platform == "win32":
             wts = ctypes.WinDLL("wtsapi32", use_last_error=True)
             if hasattr(wts, "WTSDisconnectSession"):
-                wts.WTSDisconnectSession(None, session_id, False)
-                return True
-        if sys.platform == "win32":
-            return bool(ctypes.windll.user32.LockWorkStation())
-        return False
+                locked = bool(wts.WTSDisconnectSession(None, session_id, False))
+        if not locked and sys.platform == "win32":
+            locked = bool(ctypes.windll.user32.LockWorkStation())
+        return locked
     except Exception as e:
         logger.error("Falha ao bloquear estacao: %s", e)
         return False
@@ -226,11 +226,16 @@ class AgentWatchdog:
             self._recovery_fn()
             return WatchdogAction.RECOVERY_TRIGGERED
 
-        # 2 ou mais falhas consecutivas
+        # 2 ou mais falhas consecutivas: executa bloqueio preventivo e tenta relancar o agente
         logger.warning(
-            "Agente Filhos ausente/encerrado na sessao ativa; executando bloqueio preventivo"
+            "Agente Filhos ausente/encerrado na sessao ativa (falha %d); executando bloqueio preventivo e relancando tarefa",
+            self.consecutive_failures,
         )
         self._lock_fn(sid)
+        try:
+            self._recovery_fn()
+        except Exception as e:
+            logger.debug("Aviso ao tentar relancar agente apos bloqueio: %s", e)
         return WatchdogAction.PREVENTIVE_LOCK
 
 

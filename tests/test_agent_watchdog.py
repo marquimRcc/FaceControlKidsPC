@@ -113,11 +113,30 @@ class TestAgentWatchdog(unittest.TestCase):
         self.recovery_mock.assert_called_once()
         self.lock_mock.assert_not_called()
 
-        # Falha 2: Mais 15s se passaram e o heartbeat continua ausente -> Bloqueio Preventivo
+        # Falha 2: Mais 15s se passaram e o heartbeat continua ausente -> Bloqueio Preventivo + nova tentativa de recuperação
         self.current_time += 15.0
         action2 = wd.check_once()
         self.assertEqual(action2, WatchdogAction.PREVENTIVE_LOCK)
         self.lock_mock.assert_called_once_with(1)
+        self.assertEqual(self.recovery_mock.call_count, 2)
+
+    def test_default_lock_session_fallback(self):
+        from unittest.mock import patch
+        from facekids.agent_watchdog import default_lock_session
+
+        with patch("sys.platform", "win32"), \
+             patch("ctypes.WinDLL") as mock_windll, \
+             patch("ctypes.windll") as mock_cdll:
+            # WTSDisconnectSession retorna 0 (falha), deve fazer fallback para LockWorkStation
+            mock_wts = MagicMock()
+            mock_wts.WTSDisconnectSession.return_value = 0
+            mock_windll.return_value = mock_wts
+            mock_cdll.user32.LockWorkStation.return_value = 1
+
+            result = default_lock_session(session_id=2)
+            self.assertTrue(result)
+            mock_wts.WTSDisconnectSession.assert_called_once_with(None, 2, False)
+            mock_cdll.user32.LockWorkStation.assert_called_once()
 
     def test_watchdog_notify_allow_extends_grace(self):
         wd = self._create_watchdog(active_user="Filhos", startup_grace=0.0)

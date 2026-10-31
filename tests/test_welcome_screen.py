@@ -112,7 +112,8 @@ class TestWelcomeScreen(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
-            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file):
+            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
+                 patch("facekids.welcome_screen.child_pilot_database", return_value=Path(td) / "inexistente.sqlite3"):
                 cid, name, rem = get_current_child_info()
                 self.assertEqual(cid, 3)
                 self.assertEqual(name, "Crianca 3")
