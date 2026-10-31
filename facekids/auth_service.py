@@ -38,6 +38,7 @@ from .avatar_utils import save_child_photo
 from .windows_pipe_api import configure_kernel32
 from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
+from .agent_watchdog import AgentWatchdog, AgentWatchdogThread
 
 from .vm_lab_paths import vm_lab_root
 
@@ -451,7 +452,13 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
             _ = auth.recognizer
         except Exception as e:
             logger.warning("Aviso ao pre-aquecer modelos faciais: %s", e)
-        _serve_connections(kernel32, sa, auth, camera_backend, once, report)
+        watchdog = AgentWatchdog()
+        watchdog_thread = AgentWatchdogThread(watchdog, check_interval=15.0)
+        watchdog_thread.start()
+        try:
+            _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdog=watchdog)
+        finally:
+            watchdog_thread.stop()
         return 0
     finally:
         if sa is not None and sa.lpSecurityDescriptor:
@@ -459,7 +466,7 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
         kernel32.CloseHandle(h_mutex)
 
 
-def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
+def _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdog=None):
     while True:
         report("pipe_setup")
         logger.info("Aguardando conexao do LogonUI / Credential Provider em %s...", PIPE_NAME)
@@ -527,6 +534,8 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report):
                 response_payload["protocol_marker"] = IPC_PROTOCOL_MARKER
                 if status == "ALLOW" and command != "SESSION_QUERY":
                     report("allow")
+                    if watchdog is not None:
+                        watchdog.notify_allow()
 
             response_json = json.dumps(response_payload) + "\n"
             response_bytes = response_json.encode("utf-8")

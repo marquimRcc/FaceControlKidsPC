@@ -43,6 +43,7 @@ from .ipc_reply import validated_face_observation
 from .windows_pipe_api import configure_kernel32
 from .session_transition_policy import decide_child_transition, TransitionDecision
 from .quota_vm_shadow_integration import VmBoundShadow, shadow_enabled_for_vm
+from .agent_watchdog import write_agent_heartbeat
 
 AUTH_PIPE_NAME = os.environ.get("FACEKIDS_AUTH_PIPE", r"\\.\pipe\FaceKidsAuthPipe")
 
@@ -603,6 +604,8 @@ def run_agent():
     previous_session_state = None
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
+    write_agent_heartbeat()
+    last_heartbeat_mono = time.monotonic()
 
     # 2. Loop continuo de monitoramento (a cada 2 segundos)
     while True:
@@ -644,6 +647,9 @@ def run_agent():
             previous_session_state = state
 
             if state is SessionState.ACTIVE:
+                if (time.monotonic() - last_heartbeat_mono) >= 10.0:
+                    write_agent_heartbeat()
+                    last_heartbeat_mono = time.monotonic()
                 # 1. Checar inatividade fisica considerando o tempo real desde que a sessao destravou
                 active_duration = max(0.0, time.monotonic() - session_active_since_mono)
                 idle_sec = min(get_user_idle_seconds(), active_duration)
