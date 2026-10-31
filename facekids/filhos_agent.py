@@ -692,6 +692,14 @@ def run_agent():
                                 lock_current_session()
                     elif status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
                         logger.warning("Decisao facial ignorada: resposta inconsistente ou antiga")
+                    elif status == "ERROR_CAMERA":
+                        if tracker.current_child_id is not None:
+                            logger.info(
+                                "Webcam ocupada por outro aplicativo (ex.: chamada ou navegador); mantendo perfil ativo para %s",
+                                tracker.current_child_name,
+                            )
+                        else:
+                            logger.debug("Webcam ocupada ou inacessivel sem crianca previamente identificada.")
 
                 # Agenda a proxima checagem facial
                 identifier.trigger_if_due()

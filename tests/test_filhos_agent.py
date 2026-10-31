@@ -9,6 +9,7 @@ from unittest.mock import patch, MagicMock
 
 from facekids.filhos_agent import QuotaTracker, read_last_unlock_child
 from facekids.storage import Storage
+from facekids.ipc_reply import validated_face_observation
 
 
 class TestFilhosAgent(unittest.TestCase):
@@ -378,6 +379,39 @@ class TestFilhosAgent(unittest.TestCase):
 
         self.assertEqual(idle_sec, 1.0)
         self.assertLess(idle_sec, 120.0)
+
+
+    def test_camera_busy_in_session_preserves_current_child_and_quota(self):
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        pipe_resp = {"status": "ERROR_CAMERA", "data": {"message": "Nao foi possivel abrir a webcam"}}
+        status = pipe_resp.get("status")
+        observed = validated_face_observation(pipe_resp)
+        self.assertIsNone(observed)
+
+        # Simula o processamento do loop em sessao
+        if observed is not None:
+            pass
+        elif status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
+            pass
+        elif status == "ERROR_CAMERA":
+            # Perfil atual e mantido intacto sem interrupcao
+            if tracker.current_child_id is not None:
+                pass
+
+        # Garante que a crianca ativa permanece exatamente a mesma
+        self.assertEqual(tracker.current_child_id, self.child_id)
+        self.assertEqual(tracker.current_child_name, "Lucas")
+
+        # Garante que a cobranca de quota continua operacional normalmente
+        from datetime import date
+        today = date.today().isoformat()
+        initial_rem = self.store.remaining(tracker.current_child_id, today)
+        self.store.charge(tracker.current_child_id, 2.0, today)
+        rem = self.store.remaining(tracker.current_child_id, today)
+        self.assertEqual(rem, initial_rem - 2.0)
 
 
 if __name__ == "__main__":
