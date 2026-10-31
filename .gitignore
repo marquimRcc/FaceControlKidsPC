@@ -9,3 +9,6 @@ dist/
 dist-electron/
 *.tsbuildinfo
 artifacts/
+native/**/*.exe
+!native/**/FaceKidsCredentialProvider.dll
+auditoria_windows_main.txt

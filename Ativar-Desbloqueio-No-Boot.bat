@@ -2,7 +2,9 @@
 title FaceKids - Ativar Desbloqueio Facial no Boot
 set "ROOT=%~dp0"
 if not exist "%ROOT%scripts\Ativar-Desbloqueio-No-Boot.ps1" (
-    set "ROOT=C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC\"
+    echo [ERRO] O script '%ROOT%scripts\Ativar-Desbloqueio-No-Boot.ps1' nao foi encontrado.
+    pause
+    exit /b 1
 )
 cd /d "%ROOT%"
 

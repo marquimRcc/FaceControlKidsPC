@@ -2,11 +2,11 @@ name: One-click installer syntax and Python smoke check
 on:
   push:
     paths:
-      - 'FaceKids-Teste-Webcam-WinL.bat'
+      - 'scripts/legacy/FaceKids-Teste-Webcam-WinL.bat'
       - '.github/workflows/installer-check.yml'
   pull_request:
     paths:
-      - 'FaceKids-Teste-Webcam-WinL.bat'
+      - 'scripts/legacy/FaceKids-Teste-Webcam-WinL.bat'
       - '.github/workflows/installer-check.yml'
 jobs:
   bootstrap-check:
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check batch and embedded PowerShell without downloads
         shell: cmd
-        run: call FaceKids-Teste-Webcam-WinL.bat --check
+        run: call scripts\legacy\FaceKids-Teste-Webcam-WinL.bat --check
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -25,7 +25,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m pip install --disable-pip-version-check --only-binary=:all: -r requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
-          $lines = Get-Content -LiteralPath 'FaceKids-Teste-Webcam-WinL.bat'
+          $lines = Get-Content -LiteralPath 'scripts/legacy/FaceKids-Teste-Webcam-WinL.bat'
           $cmd = @($lines | Where-Object { $_ -match 'Start-Python -exe \$venvPython .*import cv2,numpy;print' })
           if ($cmd.Count -ne 1) { throw 'Expected one post-install Python version check' }
           function Start-Python([string] $exe, [string[]] $prefix, [string[]] $arguments) {
