@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceKids // Command Center (Concept B)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --background: #050510;
+      --card: rgba(13, 17, 30, 0.85);
+      --foreground: #f1f5f9;
+      --muted-foreground: #94a3b8;
+      --border: rgba(255, 255, 255, 0.08);
+      --primary: #00e5ff;
+      --primary-foreground: #001018;
+      --accent: #a855f7;
+      --secondary: #1e293b;
+      --neon-cyan: #00e5ff;
+      --neon-purple: #a855f7;
+      --neon-green: #22c55e;
+      --neon-red: #ef4444;
+      --neon-amber: #f59e0b;
+    }
+
+    body {
+      background-color: var(--background);
+      color: var(--foreground);
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Cyber scanlines overlay */
+    .scanlines {
+      background: linear-gradient(
+        rgba(18, 16, 38, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.03),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.03)
+      );
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Futuristic Cyber Grid Background */
+    .cyber-grid {
+      background-size: 40px 40px;
+      background-image: 
+        linear-gradient(to right, rgba(0, 229, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
+    }
+
+    /* Card glow and glassmorphism */
+    .glass-card {
+      background: rgba(13, 18, 33, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .glass-card:hover {
+      border-color: rgba(0, 229, 255, 0.25);
+      box-shadow: 0 10px 30px -10px rgba(0, 229, 255, 0.15);
+    }
+
+    .border-top-cyan { border-top: 2px solid #00e5ff; }
+    .border-top-purple { border-top: 2px solid #a855f7; }
+    .border-top-green { border-top: 2px solid #22c55e; }
+    .border-top-amber { border-top: 2px solid #f59e0b; }
+    .border-top-red { border-top: 2px solid #ef4444; }
+
+    /* Neon glow utility */
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(0, 229, 255, 0.35);
+    }
+    .glow-purple {
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.35);
+    }
+    .glow-green {
+      box-shadow: 0 0 15px rgba(34, 197, 94, 0.35);
+    }
+    .text-glow-cyan {
+      text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+    }
+    .text-glow-purple {
+      text-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+    }
+    .text-glow-green {
+      text-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    }
+
+    /* Custom Terminal scrollbar */
+    .terminal-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .terminal-scroll::-webkit-scrollbar-track {
+      background: rgba(5, 8, 16, 0.5);
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb {
+      background: #00e5ff44;
+      border-radius: 4px;
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb:hover {
+      background: #00e5ff88;
+    }
+
+    /* Keyframe Animations */
+    @keyframes pulse-radar {
+      0% { transform: scale(0.85); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.2; }
+      100% { transform: scale(0.85); opacity: 0.8; }
+    }
+    .animate-radar {
+      animation: pulse-radar 2.8s infinite ease-in-out;
+    }
+
+    @keyframes scan-laser {
+      0% { top: 0%; opacity: 0.8; }
+      50% { top: 100%; opacity: 1; }
+      100% { top: 0%; opacity: 0.8; }
+    }
+    .animate-laser {
+      animation: scan-laser 2.2s infinite ease-in-out;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .animate-blink {
+      animation: blink 0.8s infinite;
+    }
+
+    /* Range slider custom styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: #1e293b;
+      height: 6px;
+      border-radius: 3px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #00e5ff;
+      box-shadow: 0 0 10px #00e5ff;
+      cursor: pointer;
+      border: 2px solid #050510;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] cyber-grid selection:bg-cyan-500/30 selection:text-cyan-200">
+  
+  <!-- Subtle CRT Scanlines -->
+  <div class="fixed inset-0 scanlines pointer-events-none z-50"></div>
+
+  <!-- FLOATING DEV / SWITCHER BAR (Permite transitar entre Instalador e Painel a qualquer momento) -->
+  <header class="bg-black/80 backdrop-blur-md border-b border-white/10 px-4 py-2 flex items-center justify-between text-xs font-mono sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 font-semibold tracking-wider">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+        FACEKIDS v2.4 // PROTO
+      </span>
+      <span class="text-slate-400 hidden sm:inline">CONCEPT B: COMMAND CENTER</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="text-slate-400 mr-1 hidden md:inline">Alternar Modo:</span>
+      <button id="nav-btn-installer" onclick="switchView('installer')" class="px-3 py-1 rounded bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition flex items-center gap-1.5 border border-white/10">
+        <span>⚙️</span> Modo Instalador
+      </button>
+      <button id="nav-btn-dashboard" onclick="switchView('dashboard')" class="px-3 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-500/30 transition flex items-center gap-1.5 font-semibold">
+        <span>🚀</span> Abrir Painel Admin
+      </button>
+      <button onclick="triggerQuickLock()" class="px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition flex items-center gap-1" title="Testar Tela de Bloqueio">
+        <span>🔒</span> Bloquear
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 1. INSTALLATION FLOW (Single Page Install: Left Terminal + Right Config)   -->
+  <!-- ========================================================================= -->
+  <section id="installer-view" class="min-h-[calc(100vh-45px)] p-4 sm:p-6 lg:p-8 flex flex-col justify-between max-w-7xl mx-auto">
+    <!-- Top Installer Header -->
+    <div class="mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-2xl shadow-lg shadow-cyan-500/20 border border-cyan-400/50">
+            🛡️
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                FaceKids <span class="text-cyan-400 text-glow-cyan text-sm px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 font-mono">INSTALLER CORE</span>
+              </h1>
+            </div>
+            <p class="text-xs text-slate-400 font-mono">Setup Unificado de Nova Geração para Windows 11 // Biometria Facial & Controle de Quotas</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-white/10 text-slate-300">
+            DISPOSITIVO: <span class="text-emerald-400">WIN11-MARCOSPC</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-white/10 text-slate-300">
+            STATUS: <span id="installer-status-badge" class="text-cyan-400 font-semibold">PRONTO P/ INSTALAR</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content: Left Terminal + Right Config Panels -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+      
+      <!-- LEFT SIDE: Animated Terminal Output -->
+      <div class="lg:col-span-5 flex flex-col">
+        <div class="glass-card rounded-2xl flex-grow flex flex-col overflow-hidden border-top-cyan shadow-xl">
+          <!-- Terminal Header -->
+          <div class="bg-black/60 px-4 py-3 border-b border-white/10 flex items-center justify-between font-mono text-xs">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+              <span class="text-slate-400 ml-2 font-medium">terminal://facekids.installer.log</span>
+            </div>
+            <span class="text-cyan-400 text-[10px] tracking-widest uppercase">SYSLOG LIVE</span>
+          </div>
+
+          <!-- Terminal Body with Typewriter / Line-by-line Animation -->
+          <div id="terminal-body" class="p-4 font-mono text-xs text-emerald-400 space-y-2 flex-grow overflow-y-auto terminal-scroll bg-[#030611]/90 max-h-[480px]">
+            <div class="text-slate-500">// FACEKIDS KERNEL HOOK INITIALIZER v2.4.1</div>
+            <div>[00:00.01] <span class="text-cyan-300">SYSTEM:</span> Inicializando verificação de pré-requisitos...</div>
+            <div class="terminal-line">[00:00.12] <span class="text-emerald-300">✓ OS:</span> Windows 11 Build 22631 verificado com sucesso.</div>
+            <div class="terminal-line">[00:00.28] <span class="text-emerald-300">✓ PRIVILÉGIOS:</span> Executando sob contexto de Administrador Local.</div>
+            <div class="terminal-line">[00:00.45] <span class="text-emerald-300">✓ CONTA FILHOS:</span> Conta local restrita "Filhos" identificada no SAM.</div>
+            <div class="terminal-line">[00:00.67] <span class="text-cyan-300">✓ WEBCAM:</span> Câmera frontal detectada [HD Webcam 1080p 60Hz].</div>
+            <div class="terminal-line">[00:00.82] <span class="text-emerald-300">✓ BIOMETRIA:</span> Módulo FaceRecognition-DNN carregado com aceleração GPU.</div>
+            <div class="terminal-line text-purple-300">[00:01.05] READY: Aguardando parâmetros de segurança e perfil do usuário...</div>
+          </div>
+
+          <!-- Terminal Footer Status -->
+          <div class="p-3 bg-black/40 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <span class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Watcher Service: Standby
+            </span>
+            <button onclick="clearAndReplayTerminal()" class="text-cyan-400 hover:text-cyan-300 underline cursor-pointer">
+              Reiniciar Log
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT SIDE: Configuration Panel with 3 Collapsible / Expandable Sections -->
+      <div class="lg:col-span-7 flex flex-col gap-4">
+        
+        <!-- SECTION 1: 🔐 Segurança -->
+        <div class="glass-card rounded-2xl p-5 border-top-cyan">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <span class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 flex items-center justify-center font-bold text-sm">
+                1
+              </span>
+              <div>
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                  🔐 Segurança & Acesso dos Pais
+                </h2>
+                <p class="text-xs text-slate-400">Defina o PIN mestre de 4 dígitos para liberação rápida no PC</p>
+              </div>
+            </div>
+            <span id="pin-status-pill" class="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 border border-white/10 text-slate-300">
+              PIN NÃO DEFINIDO
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <!-- Pin Display & Visual Feedback -->
+            <div class="bg-black/40 p-4 rounded-xl border border-white/10 flex flex-col items-center justify-center">
+              <div class="text-xs text-slate-400 font-mono mb-2">DIGITE O PIN (4 DÍGITOS)</div>
+              <div class="flex gap-3 my-2" id="installer-pin-dots">
+                <div class="w-4 h-4 rounded-full border-2 border-cyan-500/40 bg-transparent flex items-center justify-center"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-cyan-500/40 bg-transparent flex items-center justify-center"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-cyan-500/40 bg-transparent flex items-center justify-center"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-cyan-500/40 bg-transparent flex items-center justify-center"></div>
+              </div>
+              <div class="text-[11px] font-mono text-cyan-400 mt-2" id="pin-feedback-txt">Clique nos números do teclado ao lado</div>
+
+              <!-- Biometric Hello Toggle -->
+              <div class="mt-4 pt-3 border-t border-white/10 w-full flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-base">🖐️</span>
+                  <div class="text-left">
+                    <div class="text-xs font-medium text-slate-200">Windows Hello</div>
+                    <div class="text-[10px] text-slate-400">Desbloqueio por biometria do PC</div>
+                  </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggle-hello" checked class="sr-only peer">
+                  <div class="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Interactive Pin Keypad -->
+            <div class="grid grid-cols-3 gap-1.5 font-mono">
+              <button onclick="pressInstallPin('1')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">1</button>
+              <button onclick="pressInstallPin('2')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">2</button>
+              <button onclick="pressInstallPin('3')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">3</button>
+              <button onclick="pressInstallPin('4')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">4</button>
+              <button onclick="pressInstallPin('5')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">5</button>
+              <button onclick="pressInstallPin('6')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">6</button>
+              <button onclick="pressInstallPin('7')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">7</button>
+              <button onclick="pressInstallPin('8')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">8</button>
+              <button onclick="pressInstallPin('9')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">9</button>
+              <button onclick="clearInstallPin()" class="py-2 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 border border-rose-500/30 rounded-lg text-xs font-semibold transition">CLR</button>
+              <button onclick="pressInstallPin('0')" class="py-2 bg-slate-900/80 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-lg text-sm font-semibold transition active:scale-95">0</button>
+              <button onclick="backspaceInstallPin()" class="py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-white/10 rounded-lg text-xs font-semibold transition">⌫</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: 👶 Primeira Criança -->
+        <div class="glass-card rounded-2xl p-5 border-top-purple">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <span class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center font-bold text-sm">
+                2
+              </span>
+              <div>
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                  👶 Primeira Criança & Reconhecimento Facial
+                </h2>
+                <p class="text-xs text-slate-400">Cadastre o primeiro perfil de uso monitorado</p>
+              </div>
+            </div>
+            <span id="face-scan-status-pill" class="text-xs font-mono px-2.5 py-1 rounded bg-purple-950/60 border border-purple-500/40 text-purple-300">
+              PRONTO P/ CAPTURA
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+            <!-- Left: Inputs -->
+            <div class="sm:col-span-7 space-y-3">
+              <div>
+                <label class="block text-xs font-mono text-slate-300 mb-1">NOME DA CRIANÇA:</label>
+                <div class="relative">
+                  <input type="text" id="child-name-input" value="Lucas" placeholder="Ex: Lucas, Sofia..." class="w-full bg-slate-900/90 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition">
+                  <span class="absolute right-3 top-2.5 text-xs text-slate-500 font-mono">10 ANOS</span>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-mono text-slate-300 mb-1">CONTA WINDOWS VINCULADA:</label>
+                <select class="w-full bg-slate-900/90 border border-white/15 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-400">
+                  <option>Filhos (Conta Padrão Restrita - Recomendado)</option>
+                  <option>Lucas_Gamer (Conta Local)</option>
+                  <option>Criar nova conta Windows automaticamente</option>
+                </select>
+              </div>
+
+              <div class="flex gap-2 pt-1">
+                <button onclick="simulateFaceCapture()" id="btn-capture-face" class="flex-1 py-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition">
+                  <span>📸</span> Capturar Biometria Agora
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Simulated Camera Preview with Cyber Scanner -->
+            <div class="sm:col-span-5 flex flex-col items-center">
+              <div class="relative w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-cyan-500 via-purple-500 to-emerald-400 shadow-lg shadow-purple-500/20 flex items-center justify-center overflow-hidden">
+                <!-- Inner Camera Feed Placeholder -->
+                <div id="camera-radar-preview" class="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
+                  <!-- Reticle Grid Lines -->
+                  <div class="absolute inset-0 border border-cyan-500/20 rounded-full"></div>
+                  <div class="absolute w-full h-[1px] bg-cyan-500/20"></div>
+                  <div class="absolute h-full w-[1px] bg-cyan-500/20"></div>
+
+                  <!-- Radar Ring -->
+                  <div class="absolute w-24 h-24 rounded-full border border-purple-500/30 animate-radar"></div>
+
+                  <!-- Face Silhouette / Avatar -->
+                  <div class="text-4xl z-10 transition-transform duration-300" id="avatar-preview-face">👦</div>
+
+                  <!-- Scanning Laser Line -->
+                  <div id="scanning-laser-line" class="absolute w-full h-[2px] bg-cyan-400 shadow-[0_0_8px_#00e5ff] animate-laser"></div>
+
+                  <!-- Target Corners -->
+                  <div class="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-cyan-400"></div>
+                  <div class="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-cyan-400"></div>
+                  <div class="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-cyan-400"></div>
+                  <div class="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-cyan-400"></div>
+                </div>
+              </div>
+              <div class="mt-2 text-center">
+                <span id="face-capture-badge" class="text-[10px] font-mono text-cyan-400 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Sensor Facial Calibrado
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: ⏱️ Limites Iniciais -->
+        <div class="glass-card rounded-2xl p-5 border-top-green">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <span class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-sm">
+                3
+              </span>
+              <div>
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                  ⏱️ Limites de Uso Diário
+                </h2>
+                <p class="text-xs text-slate-400">Escolha o preset de controle de tempo para dias de semana</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-emerald-400 font-semibold" id="preset-selected-label">2H / DIA (MODERADO)</span>
+          </div>
+
+          <!-- Preset Cards Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <!-- Leve -->
+            <button onclick="selectPreset('leve', '3h/dia', 180)" id="preset-card-leve" class="preset-btn p-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-cyan-400/50 text-left transition flex flex-col justify-between h-24">
+              <div class="flex justify-between items-center">
+                <span class="text-lg">🌱</span>
+                <span class="text-[10px] font-mono text-cyan-400">3 HORAS</span>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white">Leve</div>
+                <div class="text-[10px] text-slate-400">Uso flexível</div>
+              </div>
+            </button>
+
+            <!-- Moderado (Default Active) -->
+            <button onclick="selectPreset('moderado', '2h/dia', 120)" id="preset-card-moderado" class="preset-btn p-3 rounded-xl bg-cyan-950/40 border-2 border-cyan-400 text-left transition flex flex-col justify-between h-24 shadow-lg shadow-cyan-500/20">
+              <div class="flex justify-between items-center">
+                <span class="text-lg">⚖️</span>
+                <span class="text-[10px] font-mono text-cyan-400 font-bold">2 HORAS</span>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white">Moderado</div>
+                <div class="text-[10px] text-cyan-300">Recomendado</div>
+              </div>
+            </button>
+
+            <!-- Rigoroso -->
+            <button onclick="selectPreset('rigoroso', '1h/dia', 60)" id="preset-card-rigoroso" class="preset-btn p-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-cyan-400/50 text-left transition flex flex-col justify-between h-24">
+              <div class="flex justify-between items-center">
+                <span class="text-lg">🛡️</span>
+                <span class="text-[10px] font-mono text-amber-400">1 HORA</span>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white">Rigoroso</div>
+                <div class="text-[10px] text-slate-400">Foco em estudos</div>
+              </div>
+            </button>
+
+            <!-- Personalizado -->
+            <button onclick="selectPreset('custom', 'Custom', 90)" id="preset-card-custom" class="preset-btn p-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-cyan-400/50 text-left transition flex flex-col justify-between h-24">
+              <div class="flex justify-between items-center">
+                <span class="text-lg">⚡</span>
+                <span class="text-[10px] font-mono text-purple-400">AJUSTÁVEL</span>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white">Custom</div>
+                <div class="text-[10px] text-slate-400">Ajuste fino</div>
+              </div>
+            </button>
+          </div>
+
+          <!-- Custom Slider (Revealed if custom or fine-tuning) -->
+          <div class="mt-4 pt-3 border-t border-white/10 flex items-center gap-4">
+            <span class="text-xs font-mono text-slate-400 whitespace-nowrap">Ajuste fino:</span>
+            <input type="range" id="quota-slider" min="30" max="360" step="15" value="120" oninput="updateQuotaSlider(this.value)" class="w-full">
+            <span id="quota-slider-val" class="font-mono text-xs text-cyan-400 font-bold whitespace-nowrap px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/30">
+              120 min (2h 00m)
+            </span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR: Installation Progress & Action Button -->
+    <div class="mt-6 glass-card rounded-2xl p-4 lg:p-5 border border-white/10 shadow-2xl">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+        
+        <!-- Progress Bar and Details -->
+        <div class="w-full sm:w-2/3">
+          <div class="flex justify-between items-center text-xs font-mono mb-2">
+            <span class="text-slate-300 flex items-center gap-2">
+              <span id="install-stage-icon" class="text-cyan-400">⚙️</span>
+              <span id="install-stage-text">Aguardando confirmação dos parâmetros...</span>
+            </span>
+            <span id="install-percentage" class="text-cyan-400 font-bold text-sm">0%</span>
+          </div>
+          <!-- Progress Track -->
+          <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-white/10 relative">
+            <div id="install-progress-bar" class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 rounded-full transition-all duration-300 w-0 relative">
+              <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Big Trigger Button -->
+        <div class="w-full sm:w-auto flex items-center gap-3">
+          <button id="btn-start-installation" onclick="startInstallationProcess()" class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-cyan-500/25 transition transform active:scale-95 flex items-center justify-center gap-2">
+            <span>⚡</span> INICIAR INSTALAÇÃO
+          </button>
+
+          <!-- Completed State Button (Initially Hidden) -->
+          <button id="btn-open-command-center" onclick="switchView('dashboard')" class="hidden w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 hover:from-emerald-300 hover:to-cyan-400 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-emerald-500/30 transition transform animate-bounce flex items-center justify-center gap-2">
+            <span>🚀</span> Concluído! Abrir Painel ▶
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ========================================================================= -->
+  <!-- 2. ADMIN PANEL: MISSION CONTROL / GAMING DASHBOARD AESTHETIC              -->
+  <!-- ========================================================================= -->
+  <main id="dashboard-view" class="hidden min-h-[calc(100vh-45px)] pb-12">
+    
+    <!-- TOP NAVIGATION (NO Traditional Sidebar - Mission Control Header) -->
+    <header class="bg-[#080d1e]/90 backdrop-blur-xl border-b border-white/10 sticky top-[45px] z-30 shadow-2xl">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Primary Header Row -->
+        <div class="h-16 flex items-center justify-between gap-4">
+          
+          <!-- Logo & System Status -->
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/20 border border-cyan-400/40">
+                🛡️
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-extrabold tracking-wider text-white text-base">FACEKIDS</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">COMMAND CENTER</span>
+                </div>
+                <div class="text-[10px] font-mono text-emerald-400 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  KERNEL SHIELD: ATIVO &bull; ZERO BYPASS
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Center: Real-Time Mission Clock -->
+          <div class="hidden md:flex items-center gap-3 px-4 py-1.5 rounded-xl bg-black/40 border border-white/10 font-mono shadow-inner">
+            <span class="text-xs text-slate-400">HORA DO SISTEMA:</span>
+            <div class="text-sm font-bold text-cyan-300 tracking-widest text-glow-cyan" id="live-system-clock">
+              16:45:12
+            </div>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">GMT-3</span>
+          </div>
+
+          <!-- Right: Notification Badge, Emergency Status & Lock Button -->
+          <div class="flex items-center gap-2 sm:gap-3">
+            
+            <!-- Notifications Dropdown Button -->
+            <div class="relative">
+              <button onclick="toggleNotificationsModal()" class="relative p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-white/10 text-slate-300 hover:text-white transition">
+                <span class="text-base">🔔</span>
+                <span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-black"></span>
+              </button>
+
+              <!-- Notifications Menu -->
+              <div id="notif-dropdown" class="hidden absolute right-0 mt-2 w-80 glass-card rounded-2xl shadow-2xl p-4 border border-white/15 z-50 text-xs">
+                <div class="flex items-center justify-between pb-2 border-b border-white/10 font-mono">
+                  <span class="font-bold text-white flex items-center gap-1.5">
+                    <span>📡</span> ALERTAS RECENTES (3)
+                  </span>
+                  <span class="text-[10px] text-cyan-400 cursor-pointer hover:underline" onclick="toggleNotificationsModal()">Fechar</span>
+                </div>
+                <div class="space-y-2 mt-2 max-h-60 overflow-y-auto">
+                  <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-500/30 text-rose-200">
+                    <div class="font-semibold text-rose-300 text-[11px] flex justify-between">
+                      <span>BLOQUEIO: Steam.exe</span>
+                      <span class="font-mono text-[9px] text-slate-400">16:15</span>
+                    </div>
+                    <p class="text-[10px] mt-0.5 text-slate-300">Maria tentou executar jogo fora do horário permitido.</p>
+                  </div>
+                  <div class="p-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-200">
+                    <div class="font-semibold text-cyan-300 text-[11px] flex justify-between">
+                      <span>RECONHECIMENTO OK</span>
+                      <span class="font-mono text-[9px] text-slate-400">15:30</span>
+                    </div>
+                    <p class="text-[10px] mt-0.5 text-slate-300">Lucas identificado com 99.4% de confiança biométrica.</p>
+                  </div>
+                  <div class="p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 text-amber-200">
+                    <div class="font-semibold text-amber-300 text-[11px] flex justify-between">
+                      <span>LIMITE QUASE ESGOTADO</span>
+                      <span class="font-mono text-[9px] text-slate-400">14:50</span>
+                    </div>
+                    <p class="text-[10px] mt-0.5 text-slate-300">Maria atingiu 80% da quota diária de tela.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Settings Drawer Trigger -->
+            <button onclick="showToast('⚙️ Painel de configurações avançadas carregado.')" class="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-white/10 text-slate-300 hover:text-white transition" title="Configurações">
+              <span>⚙️</span>
+            </button>
+
+            <!-- 🔒 LOCK BUTTON (Triggers Center Blur Auth Modal) -->
+            <button onclick="triggerQuickLock()" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600/30 to-rose-600/30 hover:from-purple-600/50 hover:to-rose-600/50 border border-purple-500/50 text-white font-mono text-xs flex items-center gap-2 transition shadow-lg shadow-purple-500/20 active:scale-95">
+              <span class="text-sm">🔒</span>
+              <span class="font-bold hidden sm:inline">TRAVAR PAINEL</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Secondary Glowing Top Navigation Tabs -->
+        <nav class="flex items-center gap-1 sm:gap-2 overflow-x-auto py-2 border-t border-white/5 scrollbar-none font-mono text-xs">
+          <button onclick="switchTab(this, 'tab-overview')" class="tab-btn px-4 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 font-bold flex items-center gap-2 transition whitespace-nowrap glow-cyan">
+            <span>⚡</span> VISÃO GERAL
+          </button>
+          <button onclick="switchTab(this, 'tab-children')" class="tab-btn px-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-2 whitespace-nowrap">
+            <span>👥</span> CRIANÇAS &amp; PERFIS
+          </button>
+          <button onclick="switchTab(this, 'tab-schedule')" class="tab-btn px-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-2 whitespace-nowrap">
+            <span>📅</span> GRADE DE HORÁRIOS
+          </button>
+          <button onclick="switchTab(this, 'tab-apps')" class="tab-btn px-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-2 whitespace-nowrap">
+            <span>🛡️</span> REGRAS DE APPS
+          </button>
+          <button onclick="switchTab(this, 'tab-telemetry')" class="tab-btn px-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-2 whitespace-nowrap">
+            <span>📈</span> AUDITORIA &amp; LOGS
+          </button>
+        </nav>
+
+      </div>
+    </header>
+
+    <!-- Emergency Freeze Banner (Appears when 'Pausar Todos' is activated) -->
+    <div id="emergency-freeze-banner" class="hidden bg-rose-600/90 text-white font-mono text-xs py-2 px-4 shadow-lg border-b border-rose-400 flex items-center justify-between animate-pulse">
+      <div class="max-w-7xl mx-auto w-full flex items-center justify-between">
+        <span class="flex items-center gap-2 font-bold tracking-wider">
+          <span>🚨</span> MODO BLOQUEIO TOTAL ATIVO: Todas as contas infantis do Windows estão pausadas no momento.
+        </span>
+        <button onclick="toggleEmergencyFreeze()" class="px-3 py-1 bg-white text-rose-950 font-bold rounded-lg hover:bg-rose-100 transition text-[11px]">
+          DESATIVAR BLOQUEIO
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTENT AREA -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      
+      <!-- TAB CONTENT: VISÃO GERAL (CSS GRID ASSYMETRIC LAYOUT) -->
+      <div id="tab-overview" class="space-y-6">
+        
+        <!-- ROW 1: Hero Card (2 columns) + Camera Status Card (1 column) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- HERO CARD: Live Family Status (spans 8 cols / 2-col equivalent on lg) -->
+          <div class="lg:col-span-8 glass-card rounded-2xl p-5 border-top-cyan shadow-xl">
+            <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+              <div class="flex items-center gap-2.5">
+                <span class="p-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                  🛰️
+                </span>
+                <div>
+                  <h2 class="text-base font-bold text-white tracking-wide">STATUS FAMILIAR AO VIVO</h2>
+                  <p class="text-xs text-slate-400">Detecção facial contínua em tempo real pelo kernel do Windows</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 font-mono text-xs">
+                <span class="px-2.5 py-1 rounded bg-slate-900 border border-white/10 text-cyan-300">
+                  3 PERFIS REGISTRADOS
+                </span>
+              </div>
+            </div>
+
+            <!-- Children Live Status Cards Row -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              
+              <!-- Child 1: Lucas (ONLINE) -->
+              <div class="p-4 rounded-xl bg-slate-900/70 border border-cyan-500/30 relative overflow-hidden group hover:border-cyan-400 transition">
+                <div class="absolute top-2 right-2 flex items-center gap-1 font-mono text-[10px] text-emerald-400">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  ONLINE
+                </div>
+
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="relative">
+                    <div class="w-12 h-12 rounded-full bg-cyan-950 border-2 border-cyan-400 flex items-center justify-center text-2xl shadow-lg shadow-cyan-500/30">
+                      👦
+                    </div>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-black flex items-center justify-center text-[8px]">✓</span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-white text-sm">Lucas</div>
+                    <div class="text-[11px] text-slate-400 font-mono">10 anos &bull; Win11 Local</div>
+                  </div>
+                </div>
+
+                <div class="bg-black/40 rounded-lg p-2.5 border border-white/5 mb-3 font-mono">
+                  <div class="text-[10px] text-slate-400">TEMPO RESTANTE HOJE:</div>
+                  <div class="text-lg font-bold text-cyan-400 text-glow-cyan" id="countdown-lucas">
+                    01h 23m 44s
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1 truncate">
+                    <span>🎮</span> App ativo: <span class="text-cyan-300 font-semibold truncate">Roblox.exe</span>
+                  </div>
+                </div>
+
+                <!-- Quick Child Actions -->
+                <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                  <button onclick="openBonusModal('Lucas')" class="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-semibold text-[11px] transition">
+                    +15m Bônus
+                  </button>
+                  <button onclick="toggleChildPause('Lucas')" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-[11px] transition">
+                    Pausar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Child 2: Maria (ONLINE - WARNING ALMOST OUT) -->
+              <div class="p-4 rounded-xl bg-slate-900/70 border border-amber-500/30 relative overflow-hidden group hover:border-amber-400 transition">
+                <div class="absolute top-2 right-2 flex items-center gap-1 font-mono text-[10px] text-amber-400">
+                  <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  POUCO TEMPO
+                </div>
+
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="relative">
+                    <div class="w-12 h-12 rounded-full bg-purple-950 border-2 border-purple-400 flex items-center justify-center text-2xl shadow-lg shadow-purple-500/30">
+                      👧
+                    </div>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-black flex items-center justify-center text-[8px]">✓</span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-white text-sm">Maria</div>
+                    <div class="text-[11px] text-slate-400 font-mono">7 anos &bull; Win11 Local</div>
+                  </div>
+                </div>
+
+                <div class="bg-black/40 rounded-lg p-2.5 border border-white/5 mb-3 font-mono">
+                  <div class="text-[10px] text-slate-400">TEMPO RESTANTE HOJE:</div>
+                  <div class="text-lg font-bold text-amber-400 text-glow-amber" id="countdown-maria">
+                    00h 14m 10s
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1 truncate">
+                    <span>📺</span> App ativo: <span class="text-purple-300 font-semibold truncate">YouTube Kids</span>
+                  </div>
+                </div>
+
+                <!-- Quick Child Actions -->
+                <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                  <button onclick="openBonusModal('Maria')" class="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-[11px] transition">
+                    +15m Bônus
+                  </button>
+                  <button onclick="toggleChildPause('Maria')" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-[11px] transition">
+                    Pausar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Child 3: Sofia (OFFLINE) -->
+              <div class="p-4 rounded-xl bg-slate-900/40 border border-white/10 relative overflow-hidden opacity-75 hover:opacity-100 transition">
+                <div class="absolute top-2 right-2 flex items-center gap-1 font-mono text-[10px] text-slate-500">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                  OFFLINE
+                </div>
+
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="relative">
+                    <div class="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-2xl">
+                      👱‍♀️
+                    </div>
+                  </div>
+                  <div>
+                    <div class="font-bold text-white text-sm">Sofia</div>
+                    <div class="text-[11px] text-slate-400 font-mono">14 anos &bull; Win11 Local</div>
+                  </div>
+                </div>
+
+                <div class="bg-black/30 rounded-lg p-2.5 border border-white/5 mb-3 font-mono">
+                  <div class="text-[10px] text-slate-400">DISPONÍVEL HOJE:</div>
+                  <div class="text-lg font-bold text-slate-300">
+                    03h 00m 00s
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <span>💤</span> Desconectou há 2h 40m
+                  </div>
+                </div>
+
+                <!-- Quick Child Actions -->
+                <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                  <button onclick="openBonusModal('Sofia')" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-[11px] transition">
+                    + Bônus
+                  </button>
+                  <button onclick="showToast('Perfil de Sofia configurado para bloqueio automático após às 21h')" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-[11px] transition">
+                    Regras
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- CAMERA STATUS CARD (spans 4 cols on lg) -->
+          <div class="lg:col-span-4 glass-card rounded-2xl p-5 border-top-purple shadow-xl flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+                <div class="flex items-center gap-2">
+                  <span class="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm">
+                    📷
+                  </span>
+                  <div>
+                    <h3 class="text-sm font-bold text-white">RECONHECIMENTO FACIAL</h3>
+                    <div class="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 🟢 OPERACIONAL (1080p 60fps)
+                    </div>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-500/40">
+                  AI CAM 01
+                </span>
+              </div>
+
+              <!-- Camera Viewport Simulation with Sci-Fi Targeting -->
+              <div class="relative h-44 rounded-xl bg-slate-950 border border-white/15 overflow-hidden flex items-center justify-center group">
+                <!-- Grid background inside video -->
+                <div class="absolute inset-0 bg-[radial-gradient(#a855f7_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
+
+                <!-- Live scan line -->
+                <div id="cam-laser" class="absolute w-full h-[2px] bg-purple-400 shadow-[0_0_12px_#a855f7] animate-laser"></div>
+
+                <!-- Center Subject with Bounding Box -->
+                <div class="relative z-10 flex flex-col items-center">
+                  <div class="relative w-24 h-24 rounded-lg border-2 border-cyan-400 flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.3)] bg-cyan-950/20">
+                    <span class="text-5xl">👦</span>
+                    
+                    <!-- Corner reticles -->
+                    <span class="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-cyan-300"></span>
+                    <span class="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-cyan-300"></span>
+                    <span class="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-cyan-300"></span>
+                    <span class="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-cyan-300"></span>
+
+                    <!-- Confidence tag -->
+                    <div class="absolute -bottom-6 bg-cyan-950/90 text-cyan-300 border border-cyan-400/50 px-2 py-0.5 rounded text-[9px] font-mono whitespace-nowrap">
+                      LUCAS // 99.4% CONF.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Video telemetry overlays -->
+                <div class="absolute top-2 left-2 text-[9px] font-mono text-slate-400 bg-black/60 px-1.5 py-0.5 rounded">
+                  LAT: 12ms | ISO 400
+                </div>
+                <div class="absolute bottom-2 right-2 text-[9px] font-mono text-emerald-400 bg-black/60 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> FEED ATIVO
+                </div>
+              </div>
+
+              <!-- Last recognition event info -->
+              <div class="mt-3 text-xs font-mono text-slate-300 flex items-center justify-between">
+                <span class="text-slate-400">Última Validação:</span>
+                <span class="text-cyan-400 font-semibold">Lucas detectado há 3 min</span>
+              </div>
+            </div>
+
+            <!-- Test Recognition Button -->
+            <button onclick="runFaceScanTest()" id="btn-test-recognition" class="mt-4 w-full py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-mono font-bold transition flex items-center justify-center gap-2">
+              <span>🎯</span> TESTAR RECONHECIMENTO AGORA
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ROW 2: Time Distribution Card + Quick Actions + Schedule Card -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- TIME DISTRIBUTION CARD (spans 6 cols) -->
+          <div class="lg:col-span-6 glass-card rounded-2xl p-5 border-top-cyan shadow-xl">
+            <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <div class="flex items-center gap-2">
+                <span class="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-sm">
+                  📊
+                </span>
+                <div>
+                  <h3 class="text-sm font-bold text-white">DISTRIBUIÇÃO DE TEMPO HOJE</h3>
+                  <p class="text-xs text-slate-400">Consumo consolidado de horas de tela por perfil</p>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-cyan-400">TOTAL: 3h 25m / 6h</span>
+            </div>
+
+            <!-- Horizontal Stacked Bar Chart -->
+            <div class="my-4">
+              <div class="w-full h-7 bg-slate-950 rounded-xl overflow-hidden p-1 border border-white/10 flex gap-1">
+                <!-- Lucas Segment (40%) -->
+                <div style="width: 38%;" class="h-full bg-cyan-400 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold text-slate-950 shadow-sm relative group cursor-pointer" title="Lucas: 2h 15m">
+                  Lucas (2h 15m)
+                </div>
+                <!-- Maria Segment (22%) -->
+                <div style="width: 22%;" class="h-full bg-purple-400 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold text-slate-950 shadow-sm relative group cursor-pointer" title="Maria: 1h 10m">
+                  Maria (1h 10m)
+                </div>
+                <!-- Sofia Segment (0%) -->
+                <!-- Remaining Allowed Quota (40%) -->
+                <div style="width: 40%;" class="h-full bg-slate-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[9px] font-mono text-slate-400">
+                  Restante (2h 35m)
+                </div>
+              </div>
+            </div>
+
+            <!-- Legend & Category Breakdown -->
+            <div class="grid grid-cols-3 gap-2 font-mono text-xs mb-4">
+              <div class="p-2 rounded-lg bg-black/40 border border-white/5">
+                <div class="flex items-center gap-1.5 text-cyan-400 text-[11px]">
+                  <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Lucas
+                </div>
+                <div class="text-sm font-bold text-white mt-1">2h 15m</div>
+                <div class="text-[9px] text-slate-400">62% da quota usada</div>
+              </div>
+              <div class="p-2 rounded-lg bg-black/40 border border-white/5">
+                <div class="flex items-center gap-1.5 text-purple-400 text-[11px]">
+                  <span class="w-2 h-2 rounded-full bg-purple-400"></span> Maria
+                </div>
+                <div class="text-sm font-bold text-white mt-1">1h 10m</div>
+                <div class="text-[9px] text-slate-400">83% da quota usada</div>
+              </div>
+              <div class="p-2 rounded-lg bg-black/40 border border-white/5">
+                <div class="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span> Sofia
+                </div>
+                <div class="text-sm font-bold text-white mt-1">0h 00m</div>
+                <div class="text-[9px] text-slate-400">Ainda não acessou</div>
+              </div>
+            </div>
+
+            <!-- Category Pills -->
+            <div class="pt-3 border-t border-white/10 flex items-center justify-between text-xs font-mono text-slate-400">
+              <span>Categorias:</span>
+              <div class="flex gap-2">
+                <span class="px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 text-[10px]">🎮 Jogos: 55%</span>
+                <span class="px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-500/30 text-[10px]">📺 Vídeos: 30%</span>
+                <span class="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 text-[10px]">📚 Estudo: 15%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- QUICK ACTIONS CARD (spans 6 cols) -->
+          <div class="lg:col-span-6 glass-card rounded-2xl p-5 border-top-green shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <div class="flex items-center gap-2">
+                <span class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-sm">
+                  ⚡
+                </span>
+                <div>
+                  <h3 class="text-sm font-bold text-white">AÇÕES RÁPIDAS DE COMANDO</h3>
+                  <p class="text-xs text-slate-400">Intervenções instantâneas de controle parental</p>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-emerald-400">CONTROLE DIRETO</span>
+            </div>
+
+            <!-- 4 Big Futuristic Icon Buttons -->
+            <div class="grid grid-cols-2 gap-3.5 my-auto">
+              
+              <!-- Action 1: Bônus -->
+              <button onclick="openBonusModal('Todos')" class="p-4 rounded-xl bg-gradient-to-br from-cyan-950/50 to-slate-900 border border-cyan-500/40 hover:border-cyan-400 hover:glow-cyan text-left transition group active:scale-98">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-2xl p-2 rounded-lg bg-cyan-500/20 text-cyan-300 group-hover:scale-110 transition">➕</span>
+                  <span class="text-[10px] font-mono text-cyan-400 font-bold px-1.5 py-0.5 rounded bg-cyan-950">OVERLAY</span>
+                </div>
+                <div class="font-bold text-white text-sm">Adicionar Bônus</div>
+                <div class="text-[11px] text-slate-400">Liberar +15m, +30m ou +1h agora</div>
+              </button>
+
+              <!-- Action 2: Pausar Todos -->
+              <button onclick="toggleEmergencyFreeze()" id="btn-pause-all" class="p-4 rounded-xl bg-gradient-to-br from-rose-950/50 to-slate-900 border border-rose-500/40 hover:border-rose-400 text-left transition group active:scale-98">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-2xl p-2 rounded-lg bg-rose-500/20 text-rose-300 group-hover:scale-110 transition">⏸️</span>
+                  <span class="text-[10px] font-mono text-rose-400 font-bold px-1.5 py-0.5 rounded bg-rose-950">EMERGÊNCIA</span>
+                </div>
+                <div class="font-bold text-white text-sm" id="btn-pause-all-text">Pausar Todos</div>
+                <div class="text-[11px] text-slate-400">Bloqueio imediato da tela</div>
+              </button>
+
+              <!-- Action 3: Relatório -->
+              <button onclick="openTelemetryReport()" class="p-4 rounded-xl bg-gradient-to-br from-purple-950/50 to-slate-900 border border-purple-500/40 hover:border-purple-400 hover:glow-purple text-left transition group active:scale-98">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-2xl p-2 rounded-lg bg-purple-500/20 text-purple-300 group-hover:scale-110 transition">📊</span>
+                  <span class="text-[10px] font-mono text-purple-400 font-bold px-1.5 py-0.5 rounded bg-purple-950">PDF / DADOS</span>
+                </div>
+                <div class="font-bold text-white text-sm">Relatório Semanal</div>
+                <div class="text-[11px] text-slate-400">Exportar métricas de tela</div>
+              </button>
+
+              <!-- Action 4: Nova Criança -->
+              <button onclick="openNewChildModal()" class="p-4 rounded-xl bg-gradient-to-br from-emerald-950/50 to-slate-900 border border-emerald-500/40 hover:border-emerald-400 hover:glow-green text-left transition group active:scale-98">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-2xl p-2 rounded-lg bg-emerald-500/20 text-emerald-300 group-hover:scale-110 transition">👶</span>
+                  <span class="text-[10px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-950">CADASTRO</span>
+                </div>
+                <div class="font-bold text-white text-sm">Nova Criança</div>
+                <div class="text-[11px] text-slate-400">Escanear novo rosto biométrico</div>
+              </button>
+
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <span>Atalhos de teclado: <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Ctrl+Shift+L</kbd> trava instantaneamente</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ROW 3: Schedule Card + Activity Feed Card -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- SCHEDULE CARD: Visual Weekly Grid (spans 7 cols) -->
+          <div class="lg:col-span-7 glass-card rounded-2xl p-5 border-top-amber shadow-xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 mb-4 gap-2">
+              <div class="flex items-center gap-2">
+                <span class="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-sm">
+                  📅
+                </span>
+                <div>
+                  <h3 class="text-sm font-bold text-white">GRADE HORÁRIA SEMANAL</h3>
+                  <p class="text-xs text-slate-400">Clique em qualquer bloco para alternar Permitido / Bloqueado</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-[11px] font-mono">
+                <span class="flex items-center gap-1 text-emerald-400">
+                  <span class="w-2.5 h-2.5 rounded bg-emerald-500/80"></span> Permitido
+                </span>
+                <span class="flex items-center gap-1 text-rose-400">
+                  <span class="w-2.5 h-2.5 rounded bg-rose-500/80"></span> Bloqueado
+                </span>
+              </div>
+            </div>
+
+            <!-- Simplified Visual Time Grid: 7 days x 4 key time blocks (Manhã, Tarde, Noite, Madrugada) -->
+            <div class="overflow-x-auto">
+              <div class="min-w-[480px]">
+                <!-- Grid Header (Days) -->
+                <div class="grid grid-cols-8 gap-1.5 text-center font-mono text-xs text-slate-400 mb-1.5">
+                  <div class="text-left text-[10px] pl-1">HORA</div>
+                  <div class="py-1 rounded bg-slate-900/60 font-semibold text-slate-300">SEG</div>
+                  <div class="py-1 rounded bg-slate-900/60 font-semibold text-slate-300">TER</div>
+                  <div class="py-1 rounded bg-slate-900/60 font-semibold text-slate-300">QUA</div>
+                  <div class="py-1 rounded bg-slate-900/60 font-semibold text-slate-300">QUI</div>
+                  <div class="py-1 rounded bg-slate-900/60 font-semibold text-slate-300">SEX</div>
+                  <div class="py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-bold">SÁB</div>
+                  <div class="py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-bold">DOM</div>
+                </div>
+
+                <!-- Block 1: Madrugada (00h - 06h) - Usually All Blocked -->
+                <div class="grid grid-cols-8 gap-1.5 text-center font-mono text-xs mb-1.5 items-center">
+                  <div class="text-left text-[10px] text-slate-400 pl-1">00-06h</div>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">🔒</button>
+                </div>
+
+                <!-- Block 2: Manhã (06h - 12h) - School time / Restricted -->
+                <div class="grid grid-cols-8 gap-1.5 text-center font-mono text-xs mb-1.5 items-center">
+                  <div class="text-left text-[10px] text-slate-400 pl-1">06-12h</div>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Escola</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Escola</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Escola</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Escola</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Escola</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold">Livre</button>
+                </div>
+
+                <!-- Block 3: Tarde (12h - 18h) - CURRENT TIME ACTIVE WITH LASER HIGHLIGHT -->
+                <div class="grid grid-cols-8 gap-1.5 text-center font-mono text-xs mb-1.5 items-center relative">
+                  <!-- Glowing line representing current time position (ex: Friday 16h) -->
+                  <div class="text-left text-[10px] text-cyan-400 font-bold pl-1 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span> 12-18h
+                  </div>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <!-- Current Day Highlight (SEX) -->
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-cyan-950 border-2 border-cyan-400 text-cyan-200 text-[10px] hover:brightness-125 transition flex items-center justify-center font-bold shadow-[0_0_10px_#00e5ff]">
+                    AGORA ⚡
+                  </button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold">Livre</button>
+                </div>
+
+                <!-- Block 4: Noite (18h - 22h) -->
+                <div class="grid grid-cols-8 gap-1.5 text-center font-mono text-xs items-center">
+                  <div class="text-left text-[10px] text-slate-400 pl-1">18-22h</div>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold">Livre</button>
+                  <button onclick="toggleSlot(this)" class="h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center">Dormir</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Schedule Footer -->
+            <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-mono text-slate-400">
+              <span>Linha neon indica a hora atual no Windows</span>
+              <button onclick="showToast('Horários sincronizados com as tarefas do sistema.')" class="text-cyan-400 hover:underline">
+                Salvar Regras da Grade
+              </button>
+            </div>
+          </div>
+
+          <!-- ACTIVITY FEED CARD (spans 5 cols) -->
+          <div class="lg:col-span-5 glass-card rounded-2xl p-5 border-top-purple shadow-xl flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+                <div class="flex items-center gap-2">
+                  <span class="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm">
+                    📜
+                  </span>
+                  <div>
+                    <h3 class="text-sm font-bold text-white">FEED DE ATIVIDADES EM TEMPO REAL</h3>
+                    <p class="text-xs text-slate-400">Eventos de segurança e auditoria do Windows</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                  LIVE STREAM
+                </span>
+              </div>
+
+              <!-- Filter tags -->
+              <div class="flex gap-1.5 mb-3 font-mono text-[10px]">
+                <button class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold">Todos</button>
+                <button class="px-2 py-1 rounded bg-slate-900 text-slate-400 hover:text-white border border-white/5">Bloqueios</button>
+                <button class="px-2 py-1 rounded bg-slate-900 text-slate-400 hover:text-white border border-white/5">Biometria</button>
+                <button class="px-2 py-1 rounded bg-slate-900 text-slate-400 hover:text-white border border-white/5">Sessões</button>
+              </div>
+
+              <!-- Scrollable Event List -->
+              <div class="space-y-2.5 max-h-[220px] overflow-y-auto terminal-scroll pr-1 font-mono text-xs">
+                
+                <!-- Event 1 -->
+                <div class="p-2.5 rounded-xl bg-slate-900/80 border border-white/5 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2">
+                    <span class="text-cyan-400 mt-0.5">👤</span>
+                    <div>
+                      <div class="text-white font-medium text-[11px]">Lucas fez login na sessão Windows</div>
+                      <div class="text-[10px] text-slate-400">Reconhecimento facial biométrico validado</div>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-slate-500 whitespace-nowrap">14:32:10</span>
+                </div>
+
+                <!-- Event 2 -->
+                <div class="p-2.5 rounded-xl bg-slate-900/80 border border-white/5 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2">
+                    <span class="text-purple-400 mt-0.5">🎮</span>
+                    <div>
+                      <div class="text-white font-medium text-[11px]">Lucas iniciou processo 'Roblox.exe'</div>
+                      <div class="text-[10px] text-slate-400">Classificação: Jogos Permitidos</div>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-slate-500 whitespace-nowrap">14:35:45</span>
+                </div>
+
+                <!-- Event 3: Block -->
+                <div class="p-2.5 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2">
+                    <span class="text-rose-400 mt-0.5">🚫</span>
+                    <div>
+                      <div class="text-rose-300 font-semibold text-[11px]">Maria: Tentativa bloqueada</div>
+                      <div class="text-[10px] text-rose-200/70">Execução de Steam.exe rejeitada pelo Watchdog</div>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-rose-400 whitespace-nowrap">16:15:02</span>
+                </div>
+
+                <!-- Event 4 -->
+                <div class="p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/30 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2">
+                    <span class="text-amber-400 mt-0.5">⚠️</span>
+                    <div>
+                      <div class="text-amber-300 font-medium text-[11px]">Maria atingiu 80% do limite de tela</div>
+                      <div class="text-[10px] text-amber-200/70">Aviso sonoro sutil exibido no desktop infantil</div>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-amber-400 whitespace-nowrap">16:30:00</span>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <span id="log-counter-txt">32 eventos hoje</span>
+              <button onclick="injectSimulatedLog()" class="text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                <span>⚡</span> Simular Novo Evento
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- TAB CONTENT: CRIANÇAS & PERFIS (Placeholder Tab) -->
+      <div id="tab-children" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-6 border-top-purple shadow-xl">
+          <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
+            <div>
+              <h2 class="text-lg font-bold text-white">GERENCIAMENTO DE PERFIS INFANTIS</h2>
+              <p class="text-xs text-slate-400">Contas vinculadas, fotos de referência biométrica e limites individuais</p>
+            </div>
+            <button onclick="openNewChildModal()" class="px-4 py-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono text-xs font-semibold hover:bg-purple-500/30 transition flex items-center gap-2">
+              <span>➕</span> CADASTRAR NOVA CRIANÇA
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Lucas Card -->
+            <div class="p-5 rounded-2xl bg-slate-900/80 border border-cyan-500/30 relative">
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full bg-cyan-950 border-2 border-cyan-400 flex items-center justify-center text-3xl">👦</div>
+                <div>
+                  <h3 class="font-bold text-white text-base">Lucas</h3>
+                  <div class="text-xs font-mono text-cyan-400">10 anos &bull; Perfil Ativo</div>
+                  <div class="text-[11px] text-slate-400">Conta: <code class="text-slate-300">.\Filhos</code></div>
+                </div>
+              </div>
+              <div class="space-y-2 text-xs font-mono border-t border-white/10 pt-3">
+                <div class="flex justify-between text-slate-300">
+                  <span>Quota Diária:</span>
+                  <span class="text-white font-semibold">2h 00m</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Pontos Biométricos:</span>
+                  <span class="text-emerald-400 font-semibold">128 pontos (Excelente)</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Jogos Autorizados:</span>
+                  <span class="text-cyan-400 font-semibold">Roblox, Minecraft</span>
+                </div>
+              </div>
+              <button onclick="showToast('Editor de regras de Lucas aberto')" class="mt-4 w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono border border-white/10 transition">
+                Editar Restrições
+              </button>
+            </div>
+
+            <!-- Maria Card -->
+            <div class="p-5 rounded-2xl bg-slate-900/80 border border-purple-500/30 relative">
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full bg-purple-950 border-2 border-purple-400 flex items-center justify-center text-3xl">👧</div>
+                <div>
+                  <h3 class="font-bold text-white text-base">Maria</h3>
+                  <div class="text-xs font-mono text-purple-400">7 anos &bull; Perfil Ativo</div>
+                  <div class="text-[11px] text-slate-400">Conta: <code class="text-slate-300">.\Filhos</code></div>
+                </div>
+              </div>
+              <div class="space-y-2 text-xs font-mono border-t border-white/10 pt-3">
+                <div class="flex justify-between text-slate-300">
+                  <span>Quota Diária:</span>
+                  <span class="text-white font-semibold">1h 30m</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Pontos Biométricos:</span>
+                  <span class="text-emerald-400 font-semibold">112 pontos (Excelente)</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Filtro de Navegação:</span>
+                  <span class="text-purple-400 font-semibold">Whitelist Kids</span>
+                </div>
+              </div>
+              <button onclick="showToast('Editor de regras de Maria aberto')" class="mt-4 w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono border border-white/10 transition">
+                Editar Restrições
+              </button>
+            </div>
+
+            <!-- Sofia Card -->
+            <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-700 relative">
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-3xl">👱‍♀️</div>
+                <div>
+                  <h3 class="font-bold text-white text-base">Sofia</h3>
+                  <div class="text-xs font-mono text-slate-400">14 anos &bull; Perfil Standby</div>
+                  <div class="text-[11px] text-slate-400">Conta: <code class="text-slate-300">.\Sofia_PC</code></div>
+                </div>
+              </div>
+              <div class="space-y-2 text-xs font-mono border-t border-white/10 pt-3">
+                <div class="flex justify-between text-slate-300">
+                  <span>Quota Diária:</span>
+                  <span class="text-white font-semibold">3h 00m</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Pontos Biométricos:</span>
+                  <span class="text-emerald-400 font-semibold">134 pontos (Excelente)</span>
+                </div>
+                <div class="flex justify-between text-slate-300">
+                  <span>Horário Limite:</span>
+                  <span class="text-amber-400 font-semibold">Até 22:00</span>
+                </div>
+              </div>
+              <button onclick="showToast('Editor de regras de Sofia aberto')" class="mt-4 w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono border border-white/10 transition">
+                Editar Restrições
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT: GRADE DE HORÁRIOS (Placeholder Full View) -->
+      <div id="tab-schedule" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-6 border-top-amber shadow-xl">
+          <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
+            <div>
+              <h2 class="text-lg font-bold text-white">GRADE DETALHADA DE HORÁRIOS (24 HORAS x 7 DIAS)</h2>
+              <p class="text-xs text-slate-400">Ajuste o cronograma hora a hora para bloquear automaticamente o PC</p>
+            </div>
+            <button onclick="showToast('Grade horária salva com sucesso!')" class="px-4 py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono text-xs font-semibold hover:bg-amber-500/30 transition">
+              💾 APLICAR AO WINDOWS
+            </button>
+          </div>
+          <p class="text-xs font-mono text-slate-300 mb-4">
+            Dica de Mission Control: Você pode arrastar o mouse ou clicar em blocos inteiros para liberar ou travar faixas horárias.
+          </p>
+          <div class="p-8 text-center border border-dashed border-white/15 rounded-xl bg-black/40">
+            <span class="text-4xl block mb-2">📅</span>
+            <p class="text-sm font-semibold text-white">Grade Horária em Modo Avançado</p>
+            <p class="text-xs text-slate-400 font-mono mt-1">Sincronizado diretamente com a Central de Notificações e Tela de Bloqueio do Windows.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT: REGRAS DE APPS & TELEMETRIA -->
+      <div id="tab-apps" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-6 border-top-cyan shadow-xl">
+          <h2 class="text-lg font-bold text-white mb-2">REGRAS DE PROCESSOS &amp; EXECUTÁVEIS (.EXE)</h2>
+          <p class="text-xs text-slate-400 font-mono mb-4">Filtro de bloqueio por nome de processo no Windows Task Manager</p>
+          <div class="space-y-3 font-mono text-xs">
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-white/10">
+              <span class="text-white font-semibold flex items-center gap-2"><span>🎮</span> RobloxPlayerBeta.exe</span>
+              <span class="px-2.5 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">PERMITIDO (DENTRO DA QUOTA)</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-white/10">
+              <span class="text-white font-semibold flex items-center gap-2"><span>🎮</span> Steam.exe</span>
+              <span class="px-2.5 py-1 rounded bg-rose-950 text-rose-300 border border-rose-500/30">BLOQUEADO PERMANENTEMENTE</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-white/10">
+              <span class="text-white font-semibold flex items-center gap-2"><span>🌐</span> msedge.exe / chrome.exe</span>
+              <span class="px-2.5 py-1 rounded bg-purple-950 text-purple-300 border border-purple-500/30">COM FILTRO DNS KIDS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-telemetry" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-6 border-top-green shadow-xl font-mono text-xs">
+          <h2 class="text-lg font-bold text-white mb-2 font-sans">REGISTRO DE AUDITORIA FORENSE // KERNEL HOOKS</h2>
+          <p class="text-slate-400 mb-4">Log criptografado de inicializações, trocas de usuário e bloqueios biométricos.</p>
+          <div class="bg-black/60 p-4 rounded-xl text-emerald-400 space-y-1.5 terminal-scroll max-h-60 overflow-y-auto">
+            <div>[2026-11-06 14:30:00] [AUTH] Sessão Windows 'Filhos' desbloqueada. Biometria: Lucas.</div>
+            <div>[2026-11-06 14:35:12] [PROCESS] Hook interceptou criação de processo: 'Roblox.exe'. Permitido.</div>
+            <div>[2026-11-06 16:15:02] [SECURITY] Hook interceptou 'Steam.exe'. Ação: TerminateProcess(STATUS_ACCESS_DENIED).</div>
+            <div>[2026-11-06 16:45:00] [WATCHDOG] Quota status Lucas: 83m restante. Watchdog operacional.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+
+  <!-- ========================================================================= -->
+  <!-- 3. AUTHENTICATION CONCEPT: CENTER BLUR MODAL (WINDOWS HELLO + PIN ENTRY)   -->
+  <!-- ========================================================================= -->
+  <div id="auth-lock-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <!-- Deep blur backdrop overlay -->
+    <div class="absolute inset-0 bg-black/85 backdrop-blur-2xl transition-all duration-500"></div>
+
+    <!-- Center Card -->
+    <div class="relative w-full max-w-md glass-card rounded-3xl p-7 border-2 border-cyan-500/40 shadow-[0_0_50px_rgba(0,229,255,0.25)] flex flex-col items-center text-center">
+      
+      <!-- Pulsing Biometric Fingerprint Icon -->
+      <div class="relative my-4 cursor-pointer group" onclick="simulateBiometricUnlock()">
+        <!-- Multi-layer pulsing rings -->
+        <div class="absolute -inset-4 rounded-full bg-cyan-500/10 animate-ping"></div>
+        <div class="absolute -inset-2 rounded-full border border-cyan-400/30 animate-pulse"></div>
+
+        <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-cyan-950 to-slate-900 border-2 border-cyan-400 flex items-center justify-center text-4xl shadow-lg shadow-cyan-500/40 group-hover:scale-105 transition">
+          <span class="animate-pulse">🖐️</span>
+        </div>
+        
+        <!-- Biometric laser scan line across the fingerprint -->
+        <div class="absolute inset-x-0 h-1 bg-cyan-300 shadow-[0_0_10px_#00e5ff] rounded animate-laser pointer-events-none"></div>
+      </div>
+
+      <h2 class="text-xl font-bold text-white tracking-wide mt-2">Central de Autenticação</h2>
+      <p class="text-xs text-slate-400 font-mono mt-1">Toque no sensor biométrico ou use Windows Hello</p>
+
+      <button onclick="simulateBiometricUnlock()" class="mt-3 px-4 py-1.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-mono hover:bg-cyan-500/30 transition flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span> Simular Toque no Leitor Biométrico
+      </button>
+
+      <!-- Divider -->
+      <div class="w-full flex items-center gap-3 my-5">
+        <div class="flex-grow h-[1px] bg-white/10"></div>
+        <span class="text-xs font-mono text-slate-500">OU DIGITE SEU PIN</span>
+        <div class="flex-grow h-[1px] bg-white/10"></div>
+      </div>
+
+      <!-- PIN Digits with underscore placeholders -->
+      <div class="flex gap-4 mb-5" id="auth-pin-slots">
+        <div class="w-12 h-14 rounded-xl bg-slate-950/80 border-2 border-white/20 flex items-center justify-center text-2xl font-mono font-bold text-cyan-400 transition transform" id="slot-0">_</div>
+        <div class="w-12 h-14 rounded-xl bg-slate-950/80 border-2 border-white/20 flex items-center justify-center text-2xl font-mono font-bold text-cyan-400 transition transform" id="slot-1">_</div>
+        <div class="w-12 h-14 rounded-xl bg-slate-950/80 border-2 border-white/20 flex items-center justify-center text-2xl font-mono font-bold text-cyan-400 transition transform" id="slot-2">_</div>
+        <div class="w-12 h-14 rounded-xl bg-slate-950/80 border-2 border-white/20 flex items-center justify-center text-2xl font-mono font-bold text-cyan-400 transition transform" id="slot-3">_</div>
+      </div>
+
+      <!-- Keypad Buttons -->
+      <div class="w-full grid grid-cols-3 gap-2 font-mono max-w-xs mb-3">
+        <button onclick="pressAuthKey('1')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">1</button>
+        <button onclick="pressAuthKey('2')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">2</button>
+        <button onclick="pressAuthKey('3')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">3</button>
+        <button onclick="pressAuthKey('4')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">4</button>
+        <button onclick="pressAuthKey('5')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">5</button>
+        <button onclick="pressAuthKey('6')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">6</button>
+        <button onclick="pressAuthKey('7')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">7</button>
+        <button onclick="pressAuthKey('8')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">8</button>
+        <button onclick="pressAuthKey('9')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">9</button>
+        <button onclick="clearAuthPin()" class="py-2.5 bg-slate-950 text-rose-400 hover:bg-rose-950/40 border border-rose-500/30 rounded-xl text-xs font-semibold transition">LIMPAR</button>
+        <button onclick="pressAuthKey('0')" class="py-2.5 bg-slate-900/90 hover:bg-cyan-500/20 hover:border-cyan-500/50 border border-white/10 rounded-xl text-base font-semibold transition active:scale-95">0</button>
+        <button onclick="backspaceAuthPin()" class="py-2.5 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-white/10 rounded-xl text-sm font-semibold transition">⌫</button>
+      </div>
+
+      <div class="text-[11px] font-mono text-slate-400 mt-2">
+        Dica: Digite qualquer 4 números no teclado ou clique acima para destravar.
+      </div>
+
+      <!-- Quick cancel/unlock button -->
+      <button onclick="unlockDashboard()" class="mt-3 text-xs font-mono text-cyan-400 hover:underline">
+        Pular / Forçar Desbloqueio (Modo Demo)
+      </button>
+
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- 4. MODALS: BONUS TIME OVERLAY & NEW CHILD REGISTRATION                     -->
+  <!-- ========================================================================= -->
+  
+  <!-- BONUS TIME MODAL -->
+  <div id="bonus-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeBonusModal()"></div>
+    <div class="relative w-full max-w-md glass-card rounded-2xl p-6 border-top-cyan shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>➕</span> CONCEDER TEMPO BÔNUS
+        </h3>
+        <button onclick="closeBonusModal()" class="text-slate-400 hover:text-white font-mono text-sm">✕</button>
+      </div>
+
+      <div class="space-y-4 font-mono text-xs">
+        <div>
+          <label class="block text-slate-300 mb-1">SELECIONAR CRIANÇA:</label>
+          <select id="bonus-child-select" class="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-white">
+            <option value="Lucas">Lucas (10 anos - 1h 23m restante)</option>
+            <option value="Maria">Maria (7 anos - 14m restante - Urgente!)</option>
+            <option value="Sofia">Sofia (14 anos)</option>
+            <option value="Todos">Todos os Filhos</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-2">ESCOLHA A QUANTIDADE DE TEMPO:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="applyBonusTime(15)" class="py-3 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:bg-cyan-500/30 text-cyan-300 font-bold transition">
+              +15 MIN
+            </button>
+            <button onclick="applyBonusTime(30)" class="py-3 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:bg-cyan-500/30 text-cyan-300 font-bold transition">
+              +30 MIN
+            </button>
+            <button onclick="applyBonusTime(60)" class="py-3 rounded-xl bg-purple-950/60 border border-purple-500/40 hover:bg-purple-500/30 text-purple-300 font-bold transition">
+              +1 HORA
+            </button>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-black/40 border border-white/5 text-slate-400 text-[11px]">
+          ℹ️ O tempo bônus será injetado imediatamente na sessão atual do Windows e registrado na auditoria.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW CHILD MODAL -->
+  <div id="new-child-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeNewChildModal()"></div>
+    <div class="relative w-full max-w-lg glass-card rounded-2xl p-6 border-top-green shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>👶</span> REGISTRAR NOVA CRIANÇA // BIOMETRIA FACIAL
+        </h3>
+        <button onclick="closeNewChildModal()" class="text-slate-400 hover:text-white font-mono text-sm">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-mono text-slate-300 mb-1">NOME COMPLETO:</label>
+          <input type="text" id="new-child-name" placeholder="Ex: Gabriel" class="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-mono text-slate-300 mb-1">IDADE:</label>
+            <input type="number" value="8" class="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400">
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-slate-300 mb-1">LIMITE DIÁRIO:</label>
+            <select class="w-full bg-slate-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white">
+              <option>1h 30m / dia</option>
+              <option>2h 00m / dia</option>
+              <option>3h 00m / dia</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-black/50 border border-emerald-500/30 flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full bg-emerald-950 border-2 border-emerald-400 flex items-center justify-center text-3xl">
+            🧒
+          </div>
+          <div class="flex-grow">
+            <div class="text-xs font-mono text-white font-semibold">Captura Facial via Câmera</div>
+            <p class="text-[11px] text-slate-400">A webcam registrará 5 ângulos em 3 segundos.</p>
+            <button onclick="showToast('📸 Amostras biométricas capturadas com sucesso!'); closeNewChildModal();" class="mt-2 px-3 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono hover:bg-emerald-500/30 transition">
+              Iniciar Captura Rápida
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT: LOGIC, INTERACTIVITY & ANIMATIONS                             -->
+  <!-- ========================================================================= -->
+  <script>
+    // System State Variables
+    let currentView = 'installer';
+    let installPin = '';
+    let authPin = '';
+    let installationCompleted = false;
+    let emergencyFreezeActive = false;
+    let lucasSeconds = 5024; // 1h 23m 44s
+    let mariaSeconds = 850;   // 14m 10s
+
+    // 1. Terminal lines for animated typewriter on Installer
+    const terminalLines = [
+      "[00:01.30] CONFIG: Vinculando regras de kernel ao Security Center...",
+      "[00:01.55] CORE: Registrando driver de intercepção de processos...",
+      "[00:01.80] FIREWALL: Bloqueando portas de telemetria não autorizadas...",
+      "[00:02.10] BIOMETRICS: Treinando classificador facial local (Offline)...",
+      "[00:02.40] SUCCESS: Mapeamento de 128 pontos faciais concluído.",
+      "[00:02.75] WATCHDOG: Ativando proteção anti-encerramento no Task Manager...",
+      "[00:03.00] READY: Sistema pronto para inicialização."
+    ];
+
+    // Real-time Clock
+    function updateClock() {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      const clockEl = document.getElementById('live-system-clock');
+      if (clockEl) clockEl.innerText = timeStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Live Countdown Simulation for Children
+    setInterval(() => {
+      if (!emergencyFreezeActive) {
+        if (lucasSeconds > 0) lucasSeconds--;
+        if (mariaSeconds > 0) mariaSeconds--;
+      }
+
+      const formatTime = (secs) => {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+      };
+
+      const cdLucas = document.getElementById('countdown-lucas');
+      const cdMaria = document.getElementById('countdown-maria');
+      if (cdLucas) cdLucas.innerText = formatTime(lucasSeconds);
+      if (cdMaria) cdMaria.innerText = formatTime(mariaSeconds);
+    }, 1000);
+
+    // Switch View between Installer and Dashboard
+    function switchView(view) {
+      currentView = view;
+      const installerView = document.getElementById('installer-view');
+      const dashboardView = document.getElementById('dashboard-view');
+      const btnInst = document.getElementById('nav-btn-installer');
+      const btnDash = document.getElementById('nav-btn-dashboard');
+
+      if (view === 'installer') {
+        installerView.classList.remove('hidden');
+        dashboardView.classList.add('hidden');
+        btnInst.classList.add('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/50');
+        btnInst.classList.remove('bg-slate-800', 'text-slate-300');
+        btnDash.classList.remove('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/50');
+        btnDash.classList.add('bg-slate-800', 'text-slate-300');
+      } else {
+        installerView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+        btnDash.classList.add('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/50');
+        btnDash.classList.remove('bg-slate-800', 'text-slate-300');
+        btnInst.classList.remove('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/50');
+        btnInst.classList.add('bg-slate-800', 'text-slate-300');
+        showToast('🚀 Central de Comando Carregada com Sucesso.');
+      }
+    }
+
+    // Tab switcher in Dashboard
+    function switchTab(btn, targetTabId) {
+      // Update buttons
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.className = 'tab-btn px-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-2 whitespace-nowrap';
+      });
+      btn.className = 'tab-btn px-4 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 font-bold flex items-center gap-2 transition whitespace-nowrap glow-cyan';
+
+      // Hide all tabs
+      ['tab-overview', 'tab-children', 'tab-schedule', 'tab-apps', 'tab-telemetry'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+
+      // Show targeted
+      const target = document.getElementById(targetTabId);
+      if (target) target.classList.remove('hidden');
+    }
+
+    // --- INSTALLER PIN KEYPAD LOGIC ---
+    function pressInstallPin(digit) {
+      if (installPin.length < 4) {
+        installPin += digit;
+        renderInstallPin();
+      }
+    }
+
+    function clearInstallPin() {
+      installPin = '';
+      renderInstallPin();
+    }
+
+    function backspaceInstallPin() {
+      if (installPin.length > 0) {
+        installPin = installPin.slice(0, -1);
+        renderInstallPin();
+      }
+    }
+
+    function renderInstallPin() {
+      const dots = document.getElementById('installer-pin-dots').children;
+      for (let i = 0; i < 4; i++) {
+        if (i < installPin.length) {
+          dots[i].className = 'w-4 h-4 rounded-full border-2 border-cyan-400 bg-cyan-400 shadow-[0_0_8px_#00e5ff] flex items-center justify-center transform scale-110 transition';
+        } else {
+          dots[i].className = 'w-4 h-4 rounded-full border-2 border-cyan-500/40 bg-transparent flex items-center justify-center transition';
+        }
+      }
+      const pill = document.getElementById('pin-status-pill');
+      const feedback = document.getElementById('pin-feedback-txt');
+      if (installPin.length === 4) {
+        pill.innerText = 'PIN DEFINIDO ✓';
+        pill.className = 'text-xs font-mono px-2.5 py-1 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300';
+        feedback.innerText = 'PIN de 4 dígitos pronto e criptografado!';
+        feedback.className = 'text-[11px] font-mono text-emerald-400 mt-2';
+      } else {
+        pill.innerText = 'PIN NÃO DEFINIDO';
+        pill.className = 'text-xs font-mono px-2.5 py-1 rounded bg-slate-800 border border-white/10 text-slate-300';
+        feedback.innerText = `${installPin.length}/4 dígitos inseridos`;
+        feedback.className = 'text-[11px] font-mono text-cyan-400 mt-2';
+      }
+    }
+
+    // Simulated Face Capture
+    function simulateFaceCapture() {
+      const btn = document.getElementById('btn-capture-face');
+      const pill = document.getElementById('face-scan-status-pill');
+      const badge = document.getElementById('face-capture-badge');
+      const face = document.getElementById('avatar-preview-face');
+
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳</span> Mapeando 128 pontos...`;
+      pill.innerText = 'ESCANEANDO ROSTO...';
+      pill.className = 'text-xs font-mono px-2.5 py-1 rounded bg-cyan-950 border border-cyan-400 text-cyan-300 animate-pulse';
+
+      face.classList.add('scale-125');
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = `<span>✓</span> Biometria Salva`;
+        btn.className = 'flex-1 py-2 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition';
+        pill.innerText = 'ROSTO RECONHECIDO (100%)';
+        pill.className = 'text-xs font-mono px-2.5 py-1 rounded bg-emerald-950 border border-emerald-400 text-emerald-300';
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span> 128 Pontos Registrados`;
+        face.classList.remove('scale-125');
+        showToast('📸 Rosto de Lucas cadastrado no banco biométrico local.');
+      }, 1500);
+    }
+
+    // Preset Selection Logic
+    function selectPreset(type, label, minutes) {
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.className = 'preset-btn p-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-cyan-400/50 text-left transition flex flex-col justify-between h-24';
+      });
+      const activeBtn = document.getElementById(`preset-card-${type}`);
+      if (activeBtn) {
+        activeBtn.className = 'preset-btn p-3 rounded-xl bg-cyan-950/40 border-2 border-cyan-400 text-left transition flex flex-col justify-between h-24 shadow-lg shadow-cyan-500/20';
+      }
+      document.getElementById('preset-selected-label').innerText = `${label.toUpperCase()}`;
+      document.getElementById('quota-slider').value = minutes;
+      updateQuotaSlider(minutes);
+    }
+
+    function updateQuotaSlider(val) {
+      const hours = Math.floor(val / 60);
+      const mins = val % 60;
+      document.getElementById('quota-slider-val').innerText = `${val} min (${hours}h ${String(mins).padStart(2, '0')}m)`;
+    }
+
+    // Installation Progress Execution
+    function startInstallationProcess() {
+      const btnStart = document.getElementById('btn-start-installation');
+      const btnOpen = document.getElementById('btn-open-command-center');
+      const bar = document.getElementById('install-progress-bar');
+      const pct = document.getElementById('install-percentage');
+      const stageText = document.getElementById('install-stage-text');
+      const badge = document.getElementById('installer-status-badge');
+      const terminal = document.getElementById('terminal-body');
+
+      btnStart.disabled = true;
+      btnStart.innerHTML = `<span>⏳</span> INSTALANDO CORE...`;
+      badge.innerText = 'INSTALANDO...';
+      badge.className = 'text-amber-400 font-semibold animate-pulse';
+
+      let progress = 0;
+      let lineIndex = 0;
+
+      const interval = setInterval(() => {
+        progress += 4;
+        if (progress > 100) progress = 100;
+
+        bar.style.width = `${progress}%`;
+        pct.innerText = `${progress}%`;
+
+        if (progress === 20) {
+          stageText.innerText = 'Criando drivers de intercepção e sandbox...';
+        } else if (progress === 50) {
+          stageText.innerText = 'Registrando modelo de IA e pontos de biometria...';
+        } else if (progress === 80) {
+          stageText.innerText = 'Configurando regras de bloqueio e watchdog...';
+        } else if (progress === 100) {
+          clearInterval(interval);
+          stageText.innerText = '✓ Instalação concluída com sucesso!';
+          badge.innerText = 'PRONTO PARA USO';
+          badge.className = 'text-emerald-400 font-semibold';
+          btnStart.classList.add('hidden');
+          btnOpen.classList.remove('hidden');
+          showToast('🎉 FaceKids instalado com sucesso no Windows!');
+        }
+
+        // Add line to terminal periodically
+        if (progress % 16 === 0 && lineIndex < terminalLines.length) {
+          const div = document.createElement('div');
+          div.className = 'terminal-line text-cyan-300';
+          div.innerText = terminalLines[lineIndex];
+          terminal.appendChild(div);
+          terminal.scrollTop = terminal.scrollHeight;
+          lineIndex++;
+        }
+      }, 70);
+    }
+
+    function clearAndReplayTerminal() {
+      const terminal = document.getElementById('terminal-body');
+      terminal.innerHTML = `
+        <div class="text-slate-500">// FACEKIDS KERNEL HOOK INITIALIZER v2.4.1</div>
+        <div>[00:00.01] <span class="text-cyan-300">SYSTEM:</span> Verificação refeita.</div>
+        <div>[00:00.20] <span class="text-emerald-300">✓ DRIVERS:</span> Todos os serviços operacionais.</div>
+      `;
+      showToast('Log de auditoria do instalador reiniciado.');
+    }
+
+    // --- AUTHENTICATION MODAL & KEYPAD LOGIC ---
+    function triggerQuickLock() {
+      authPin = '';
+      renderAuthSlots();
+      const modal = document.getElementById('auth-lock-modal');
+      modal.classList.remove('hidden');
+    }
+
+    function unlockDashboard() {
+      const modal = document.getElementById('auth-lock-modal');
+      modal.classList.add('hidden');
+      authPin = '';
+      showToast('🔓 Painel Desbloqueado pelo Administrador.');
+    }
+
+    function simulateBiometricUnlock() {
+      showToast('🖐️ Windows Hello: Biometria confirmada!');
+      setTimeout(() => {
+        unlockDashboard();
+      }, 400);
+    }
+
+    function pressAuthKey(digit) {
+      if (authPin.length < 4) {
+        authPin += digit;
+        renderAuthSlots();
+        if (authPin.length === 4) {
+          // Check PIN
+          setTimeout(() => {
+            unlockDashboard();
+          }, 300);
+        }
+      }
+    }
+
+    function clearAuthPin() {
+      authPin = '';
+      renderAuthSlots();
+    }
+
+    function backspaceAuthPin() {
+      if (authPin.length > 0) {
+        authPin = authPin.slice(0, -1);
+        renderAuthSlots();
+      }
+    }
+
+    function renderAuthSlots() {
+      for (let i = 0; i < 4; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        if (i < authPin.length) {
+          slot.innerText = '•';
+          slot.className = 'w-12 h-14 rounded-xl bg-cyan-950 border-2 border-cyan-400 text-cyan-300 flex items-center justify-center text-3xl font-mono font-bold shadow-[0_0_15px_#00e5ff] transform scale-105 transition';
+        } else {
+          slot.innerText = '_';
+          slot.className = 'w-12 h-14 rounded-xl bg-slate-950/80 border-2 border-white/20 flex items-center justify-center text-2xl font-mono font-bold text-cyan-400 transition';
+        }
+      }
+    }
+
+    // Physical Keyboard Listener for PIN
+    window.addEventListener('keydown', (e) => {
+      const lockModal = document.getElementById('auth-lock-modal');
+      if (!lockModal.classList.contains('hidden')) {
+        if (e.key >= '0' && e.key <= '9') {
+          pressAuthKey(e.key);
+        } else if (e.key === 'Backspace') {
+          backspaceAuthPin();
+        } else if (e.key === 'Escape') {
+          unlockDashboard();
+        }
+      }
+    });
+
+    // Schedule Grid Slot Toggle
+    function toggleSlot(btn) {
+      if (btn.classList.contains('bg-emerald-950/70')) {
+        btn.className = 'h-8 rounded bg-rose-950/60 border border-rose-500/30 text-rose-300 text-[10px] hover:brightness-125 transition flex items-center justify-center';
+        btn.innerText = '🔒';
+        showToast('Horário alterado para: BLOQUEADO');
+      } else {
+        btn.className = 'h-8 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] hover:brightness-125 transition flex items-center justify-center font-semibold';
+        btn.innerText = 'Livre';
+        showToast('Horário alterado para: PERMITIDO');
+      }
+    }
+
+    // Emergency Freeze Toggle
+    function toggleEmergencyFreeze() {
+      emergencyFreezeActive = !emergencyFreezeActive;
+      const banner = document.getElementById('emergency-freeze-banner');
+      const btn = document.getElementById('btn-pause-all');
+      const btnText = document.getElementById('btn-pause-all-text');
+
+      if (emergencyFreezeActive) {
+        banner.classList.remove('hidden');
+        btn.className = 'p-4 rounded-xl bg-rose-600 border border-rose-300 text-left transition group active:scale-98 shadow-lg shadow-rose-500/50 animate-pulse';
+        btnText.innerText = 'REATIVAR TODOS';
+        showToast('🚨 PAUSA GERAL ATIVADA! Telas bloqueadas no Windows.');
+      } else {
+        banner.classList.add('hidden');
+        btn.className = 'p-4 rounded-xl bg-gradient-to-br from-rose-950/50 to-slate-900 border border-rose-500/40 hover:border-rose-400 text-left transition group active:scale-98';
+        btnText.innerText = 'Pausar Todos';
+        showToast('✓ Contas infantis liberadas com sucesso.');
+      }
+    }
+
+    function toggleChildPause(child) {
+      showToast(`⏸️ Sessão de ${child} pausada temporariamente.`);
+    }
+
+    // Camera Scan Test Animation
+    function runFaceScanTest() {
+      const btn = document.getElementById('btn-test-recognition');
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳</span> ANALISANDO BIOMETRIA...`;
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🎯</span> TESTAR RECONHECIMENTO AGORA`;
+        showToast('🟢 Reconhecimento 100% validado: Lucas presente em frente ao PC.');
+      }, 1800);
+    }
+
+    // Bonus Time Modal
+    function openBonusModal(child) {
+      document.getElementById('bonus-modal').classList.remove('hidden');
+      if (child !== 'Todos') {
+        document.getElementById('bonus-child-select').value = child;
+      }
+    }
+
+    function closeBonusModal() {
+      document.getElementById('bonus-modal').classList.add('hidden');
+    }
+
+    function applyBonusTime(mins) {
+      const child = document.getElementById('bonus-child-select').value;
+      if (child === 'Lucas' || child === 'Todos') lucasSeconds += mins * 60;
+      if (child === 'Maria' || child === 'Todos') mariaSeconds += mins * 60;
+
+      closeBonusModal();
+      showToast(`⚡ +${mins} minutos concedidos para ${child}!`);
+    }
+
+    // New Child Modal
+    function openNewChildModal() {
+      document.getElementById('new-child-modal').classList.remove('hidden');
+    }
+
+    function closeNewChildModal() {
+      document.getElementById('new-child-modal').classList.add('hidden');
+    }
+
+    // Notification Dropdown Toggle
+    function toggleNotificationsModal() {
+      const dropdown = document.getElementById('notif-dropdown');
+      dropdown.classList.toggle('hidden');
+    }
+
+    function openTelemetryReport() {
+      showToast('📊 Gerando relatório de telemetria e exportando para PDF...');
+    }
+
+    function injectSimulatedLog() {
+      showToast('⚡ Novo log de auditoria injetado no stream.');
+    }
+
+    // Toast Notification System
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'glass-card border border-cyan-500/40 text-white text-xs font-mono px-4 py-3 rounded-xl shadow-2xl shadow-cyan-500/20 flex items-center gap-2 transform translate-y-4 opacity-0 transition-all duration-300 pointer-events-auto';
+      toast.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-4', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-4', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+  </script>
+</body>
+</html>

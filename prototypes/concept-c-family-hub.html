@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceKids — Family Hub (Conceito C)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #fdfbf7;
+      --foreground: #2d2a26;
+      --card: #ffffff;
+      --card-foreground: #2d2a26;
+      --primary: #f97316; /* Warm Coral */
+      --primary-foreground: #ffffff;
+      --secondary: #fef3c7; /* Warm Amber Tint */
+      --secondary-foreground: #92400e;
+      --muted: #f4ede4;
+      --muted-foreground: #78716c;
+      --accent: #a78bfa; /* Warm Lavender */
+      --accent-foreground: #ffffff;
+      --mint: #34d399;
+      --amber: #fbbf24;
+      --border: #f0e6da;
+      --ring: #f97316;
+      --radius: 1.5rem;
+    }
+
+    .dark {
+      --background: #1c1917;
+      --foreground: #f5f5f4;
+      --card: #292524;
+      --card-foreground: #f5f5f4;
+      --primary: #fb923c;
+      --primary-foreground: #1c1917;
+      --secondary: #443c33;
+      --secondary-foreground: #fef3c7;
+      --muted: #332e2a;
+      --muted-foreground: #a8a29e;
+      --accent: #c084fc;
+      --accent-foreground: #1c1917;
+      --mint: #4ade80;
+      --amber: #fcd34d;
+      --border: #3f3935;
+      --ring: #fb923c;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Outfit', sans-serif;
+      background-color: var(--background);
+      color: var(--foreground);
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* Bouncy interactive micro-animations */
+    .bouncy-btn {
+      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .bouncy-btn:hover {
+      transform: translateY(-2px) scale(1.02);
+    }
+    .bouncy-btn:active {
+      transform: translateY(1px) scale(0.96);
+    }
+
+    /* Shake animation for invalid PIN */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-10px); }
+      40%, 80% { transform: translateX(10px); }
+    }
+    .animate-shake {
+      animation: shake 0.4s ease-in-out;
+    }
+
+    /* Typing indicator dots */
+    @keyframes bounce-dot {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-6px); opacity: 1; }
+    }
+    .typing-dot:nth-child(1) { animation: bounce-dot 1.2s infinite ease-in-out 0s; }
+    .typing-dot:nth-child(2) { animation: bounce-dot 1.2s infinite ease-in-out 0.2s; }
+    .typing-dot:nth-child(3) { animation: bounce-dot 1.2s infinite ease-in-out 0.4s; }
+
+    /* Custom range slider warm style */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+    input[type=range]:focus {
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 12px;
+      cursor: pointer;
+      background: var(--muted);
+      border-radius: 9999px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      height: 28px;
+      width: 28px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -8px;
+      box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* Circular progress ring */
+    .progress-ring__circle {
+      transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+
+    /* Custom scrollbar for horizontal strips */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)] selection:bg-orange-200 selection:text-orange-900">
+
+  <!-- TOP APP WRAPPER / CONTAINER -->
+  <div class="w-full max-w-6xl mx-auto min-h-screen flex flex-col px-4 py-4 md:py-6">
+    
+    <!-- NAVIGATION / MODE BAR -->
+    <header class="flex items-center justify-between mb-4 bg-[var(--card)] px-5 py-3.5 rounded-3xl shadow-sm border border-[var(--border)]">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-400 to-amber-300 flex items-center justify-center text-xl shadow-sm">
+          🛡️
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-tight flex items-center gap-1.5">
+            FaceKids 
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-medium">Family Hub</span>
+          </span>
+          <p class="text-xs text-[var(--muted-foreground)]">Controle Parental Amigável &bull; Windows</p>
+        </div>
+      </div>
+
+      <!-- Mode Quick Switcher (Prototype helper) -->
+      <div class="flex items-center gap-2 bg-[var(--muted)] p-1 rounded-2xl">
+        <button id="viewOnboardingBtn" onclick="switchToView('onboarding')" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm bg-[var(--card)] text-[var(--foreground)]">
+          💬 Onboarding
+        </button>
+        <button id="viewDashboardBtn" onclick="switchToView('dashboard')" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+          🏠 Painel Família
+        </button>
+      </div>
+
+      <!-- Right Actions -->
+      <div class="flex items-center gap-2">
+        <button onclick="toggleDarkMode()" title="Alternar tema claro/escuro" class="p-2.5 rounded-2xl bg-[var(--muted)] hover:bg-[var(--border)] transition-colors text-sm bouncy-btn">
+          <span id="themeIcon">🌙</span>
+        </button>
+        <button onclick="openLockScreen()" title="Bloquear Painel" class="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-orange-50 dark:bg-stone-800 text-orange-600 dark:text-orange-400 hover:bg-orange-100 transition-colors text-xs font-semibold bouncy-btn">
+          🔒 Bloquear
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 1: CONVERSATIONAL ONBOARDING (INSTALLATION FLOW) -->
+    <!-- ========================================================================= -->
+    <section id="onboardingView" class="flex-1 flex flex-col justify-center items-center py-4 max-w-2xl mx-auto w-full">
+      <div class="w-full bg-[var(--card)] rounded-3xl p-6 md:p-8 shadow-sm border border-[var(--border)] flex flex-col min-h-[600px] relative overflow-hidden">
+        
+        <!-- Onboarding Header -->
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--border)]">
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 via-orange-400 to-rose-400 flex items-center justify-center text-2xl shadow-md">
+                🤖
+              </div>
+              <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[var(--card)] rounded-full"></span>
+            </div>
+            <div>
+              <h2 class="font-bold text-base md:text-lg">Assistente FaceKids</h2>
+              <p class="text-xs text-[var(--muted-foreground)]">Configuração conversacional simples e segura</p>
+            </div>
+          </div>
+          <button onclick="skipToDashboard()" class="text-xs text-orange-600 dark:text-orange-400 hover:underline font-medium">
+            Pular para o Painel &rarr;
+          </button>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div id="chatHistory" class="flex-1 overflow-y-auto space-y-4 pr-1 mb-4 flex flex-col justify-start">
+          <!-- Chat messages are injected via JS dynamically with real conversational feel -->
+        </div>
+
+        <!-- Typing Indicator Area -->
+        <div id="typingIndicator" class="hidden items-center gap-2 px-4 py-3 bg-[var(--muted)] rounded-2xl w-24 mb-3">
+          <div class="w-2 h-2 rounded-full bg-orange-500 typing-dot"></div>
+          <div class="w-2 h-2 rounded-full bg-orange-500 typing-dot"></div>
+          <div class="w-2 h-2 rounded-full bg-orange-500 typing-dot"></div>
+        </div>
+
+        <!-- Dynamic User Interactive Input Area -->
+        <div id="chatInputArea" class="pt-3 border-t border-[var(--border)] min-h-[64px] flex items-center justify-center">
+          <!-- Filled by current step JS -->
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 2: ADMIN PANEL (FAMILY HUB DASHBOARD) -->
+    <!-- ========================================================================= -->
+    <main id="dashboardView" class="hidden flex-1 flex-col space-y-5">
+      
+      <!-- FLOATING TOP BAR -->
+      <div class="bg-[var(--card)] rounded-3xl p-4 md:px-6 md:py-4 shadow-sm border border-[var(--border)] flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-orange-400 to-rose-400 flex items-center justify-center text-2xl shadow-sm">
+            🏡
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold tracking-tight">Família Silva</h1>
+              <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                2 PCs Protegidos
+              </span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)]">Painel Central de Harmonia Digital</p>
+          </div>
+        </div>
+
+        <!-- Quick Family Status Overview -->
+        <div class="flex items-center gap-3 text-xs bg-[var(--muted)] px-4 py-2 rounded-2xl">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span><strong>Lucas:</strong> Online</span>
+          </div>
+          <span class="text-[var(--border)]">|</span>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span><strong>Maria:</strong> 15m restantes</span>
+          </div>
+          <span class="text-[var(--border)]">|</span>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
+            <span><strong>Pedro:</strong> Desconectado</span>
+          </div>
+        </div>
+
+        <!-- Quick Master Pause -->
+        <div class="flex items-center gap-2">
+          <button id="masterPauseBtn" onclick="toggleMasterPause()" class="flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/20 bouncy-btn">
+            <span id="masterPauseIcon">⏸️</span>
+            <span id="masterPauseText">Modo Jantar / Pausar Todos</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- HORIZONTAL TAB NAVIGATION PILLS (NO SIDEBAR!) -->
+      <nav class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        <button onclick="switchTab('inicio')" id="tab-inicio" class="tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all shadow-sm bg-orange-500 text-white flex items-center gap-2 shrink-0">
+          <span>🏠</span> Início
+        </button>
+        <button onclick="switchTab('familia')" id="tab-familia" class="tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] flex items-center gap-2 shrink-0">
+          <span>👨‍👩‍👧‍👦</span> Família
+        </button>
+        <button onclick="switchTab('horarios')" id="tab-horarios" class="tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] flex items-center gap-2 shrink-0">
+          <span>📅</span> Horários & Rotinas
+        </button>
+        <button onclick="switchTab('relatorios')" id="tab-relatorios" class="tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] flex items-center gap-2 shrink-0">
+          <span>📊</span> Relatórios Positivos
+        </button>
+        <button onclick="switchTab('config')" id="tab-config" class="tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] flex items-center gap-2 shrink-0">
+          <span>⚙️</span> Configurações
+        </button>
+      </nav>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 1: INÍCIO (FAMILY CIRCLE & TIMELINE) -->
+      <!-- ===================================================================== -->
+      <div id="content-inicio" class="tab-content space-y-6">
+        
+        <!-- FAMILY CIRCLE CARD (Apple Watch style rings & warm circle) -->
+        <div class="bg-[var(--card)] rounded-3xl p-6 md:p-8 shadow-sm border border-[var(--border)] relative overflow-hidden">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight">Círculo da Família</h2>
+              <p class="text-sm text-[var(--muted-foreground)]">Toque em qualquer filho para ver detalhes rápidos ou conceder bônus de tempo</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--muted)] font-medium">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Tempo usado / restante hoje
+              </span>
+            </div>
+          </div>
+
+          <!-- THE FAMILY CIRCLE VISUALIZATION -->
+          <div class="py-6 flex flex-wrap items-center justify-center gap-8 md:gap-14">
+            
+            <!-- Child 1: Lucas (Coral) -->
+            <div onclick="selectChildFromCircle('lucas')" class="cursor-pointer group flex flex-col items-center text-center transition-transform hover:scale-105">
+              <div class="relative w-28 h-28 flex items-center justify-center">
+                <!-- SVG Ring -->
+                <svg class="w-full h-full" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="7" class="text-orange-100 dark:text-stone-800" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#f97316" stroke-width="7" stroke-dasharray="264" stroke-dashoffset="85" stroke-linecap="round" class="progress-ring__circle" />
+                </svg>
+                <!-- Avatar Center -->
+                <div class="absolute w-20 h-20 rounded-full bg-gradient-to-tr from-orange-400 to-amber-300 flex items-center justify-center text-3xl shadow-md border-4 border-[var(--card)] group-hover:shadow-lg transition-all">
+                  👦
+                </div>
+                <!-- Status Dot -->
+                <span class="absolute bottom-1 right-2 w-4 h-4 bg-emerald-500 border-2 border-[var(--card)] rounded-full shadow" title="Online agora"></span>
+              </div>
+              <span class="mt-3 font-bold text-base flex items-center gap-1">Lucas <span class="text-xs font-normal text-[var(--muted-foreground)]">(8a)</span></span>
+              <span class="text-xs font-semibold text-orange-600 dark:text-orange-400">1h 15m restantes</span>
+              <span class="text-[11px] text-[var(--muted-foreground)]">Limite: 2h</span>
+            </div>
+
+            <!-- Parent Anchor Center Icon (Cozy Hub feeling) -->
+            <div class="hidden lg:flex flex-col items-center justify-center p-3 rounded-3xl bg-[var(--muted)]/60 border border-[var(--border)] text-center scale-95">
+              <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-stone-400 to-stone-500 text-white flex items-center justify-center text-2xl shadow-sm">
+                🛡️
+              </div>
+              <span class="mt-1 text-xs font-bold text-[var(--foreground)]">Hub Central</span>
+              <span class="text-[10px] text-[var(--muted-foreground)]">Modo Seguro Ativo</span>
+            </div>
+
+            <!-- Child 2: Maria (Lavender) -->
+            <div onclick="selectChildFromCircle('maria')" class="cursor-pointer group flex flex-col items-center text-center transition-transform hover:scale-105">
+              <div class="relative w-28 h-28 flex items-center justify-center">
+                <!-- SVG Ring -->
+                <svg class="w-full h-full" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="7" class="text-purple-100 dark:text-stone-800" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#a78bfa" stroke-width="7" stroke-dasharray="264" stroke-dashoffset="230" stroke-linecap="round" class="progress-ring__circle" />
+                </svg>
+                <!-- Avatar Center -->
+                <div class="absolute w-20 h-20 rounded-full bg-gradient-to-tr from-purple-400 to-pink-300 flex items-center justify-center text-3xl shadow-md border-4 border-[var(--card)] group-hover:shadow-lg transition-all">
+                  👧
+                </div>
+                <!-- Status Dot -->
+                <span class="absolute bottom-1 right-2 w-4 h-4 bg-amber-500 border-2 border-[var(--card)] rounded-full shadow" title="Quase no limite"></span>
+              </div>
+              <span class="mt-3 font-bold text-base flex items-center gap-1">Maria <span class="text-xs font-normal text-[var(--muted-foreground)]">(12a)</span></span>
+              <span class="text-xs font-semibold text-amber-600 dark:text-amber-400">15m restantes ⚠️</span>
+              <span class="text-[11px] text-[var(--muted-foreground)]">Limite: 2h 30m</span>
+            </div>
+
+            <!-- Child 3: Pedro (Mint) -->
+            <div onclick="selectChildFromCircle('pedro')" class="cursor-pointer group flex flex-col items-center text-center transition-transform hover:scale-105">
+              <div class="relative w-28 h-28 flex items-center justify-center">
+                <!-- SVG Ring -->
+                <svg class="w-full h-full" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="7" class="text-emerald-100 dark:text-stone-800" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#34d399" stroke-width="7" stroke-dasharray="264" stroke-dashoffset="40" stroke-linecap="round" class="progress-ring__circle" />
+                </svg>
+                <!-- Avatar Center -->
+                <div class="absolute w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-300 flex items-center justify-center text-3xl shadow-md border-4 border-[var(--card)] group-hover:shadow-lg transition-all">
+                  👶
+                </div>
+                <!-- Status Dot -->
+                <span class="absolute bottom-1 right-2 w-4 h-4 bg-stone-400 border-2 border-[var(--card)] rounded-full shadow" title="Offline"></span>
+              </div>
+              <span class="mt-3 font-bold text-base flex items-center gap-1">Pedro <span class="text-xs font-normal text-[var(--muted-foreground)]">(5a)</span></span>
+              <span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">50m restantes</span>
+              <span class="text-[11px] text-[var(--muted-foreground)]">Limite: 1h</span>
+            </div>
+
+            <!-- Add Child Quick Pill -->
+            <div onclick="switchTab('familia'); openAddChildModal();" class="cursor-pointer group flex flex-col items-center text-center">
+              <div class="w-20 h-20 rounded-full border-2 border-dashed border-orange-300 dark:border-stone-700 hover:border-orange-500 flex items-center justify-center text-2xl text-orange-400 group-hover:scale-105 transition-all bg-[var(--muted)]/40">
+                ➕
+              </div>
+              <span class="mt-3 font-medium text-xs text-[var(--muted-foreground)] group-hover:text-orange-500">Novo Perfil</span>
+            </div>
+
+          </div>
+
+          <!-- Quick Child Action Drawer / Selected notification -->
+          <div id="circleQuickActionCard" class="mt-4 p-4 rounded-2xl bg-[var(--muted)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl" id="selectedChildEmoji">👦</span>
+              <div>
+                <p class="text-xs font-bold" id="selectedChildTitle">Lucas está no PC da Sala</p>
+                <p class="text-xs text-[var(--muted-foreground)]" id="selectedChildSubtitle">Reconhecimento facial ativo: 98% confiança há 2 minutos</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="giveQuickBonus('Lucas', 15)" class="px-3 py-1.5 rounded-xl bg-[var(--card)] hover:bg-orange-50 border border-[var(--border)] text-xs font-semibold text-orange-600 dark:text-orange-400 bouncy-btn">
+                +15 min 🎁
+              </button>
+              <button onclick="giveQuickBonus('Lucas', 30)" class="px-3 py-1.5 rounded-xl bg-[var(--card)] hover:bg-orange-50 border border-[var(--border)] text-xs font-semibold text-orange-600 dark:text-orange-400 bouncy-btn">
+                +30 min 🌟
+              </button>
+              <button onclick="pauseIndividualChild('Lucas')" class="px-3 py-1.5 rounded-xl bg-orange-500 text-white text-xs font-semibold bouncy-btn">
+                Pausar Lucas ⏸️
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- USAGE TIMELINE & POSITIVE INSIGHTS ROW -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          
+          <!-- HORIZONTAL TIMELINE BAR (Left 2 cols) -->
+          <div class="lg:col-span-2 bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)]">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="font-bold text-base flex items-center gap-2">
+                  <span>🕒</span> Linha do Tempo de Hoje
+                </h3>
+                <p class="text-xs text-[var(--muted-foreground)]">Blocos de uso registrados automaticamente por presença facial</p>
+              </div>
+              <span class="text-xs font-medium text-[var(--muted-foreground)]">08:00 - 21:00</span>
+            </div>
+
+            <!-- Visual Bar -->
+            <div class="space-y-4">
+              <!-- Lucas Timeline -->
+              <div>
+                <div class="flex justify-between text-xs mb-1 font-medium">
+                  <span class="flex items-center gap-1.5">👦 Lucas</span>
+                  <span class="text-orange-600 dark:text-orange-400 font-semibold">45 min usados (40%)</span>
+                </div>
+                <div class="w-full h-7 bg-[var(--muted)] rounded-2xl overflow-hidden p-1 flex gap-1 relative">
+                  <div class="h-full bg-orange-400 rounded-xl" style="width: 25%;" title="10:00 - 10:30"></div>
+                  <div class="h-full bg-orange-400 rounded-xl" style="width: 15%; margin-left: 20%;" title="14:00 - 14:15"></div>
+                  <div class="h-full bg-orange-500 animate-pulse rounded-xl" style="width: 15%; margin-left: 10%;" title="Agora!"></div>
+                </div>
+              </div>
+
+              <!-- Maria Timeline -->
+              <div>
+                <div class="flex justify-between text-xs mb-1 font-medium">
+                  <span class="flex items-center gap-1.5">👧 Maria</span>
+                  <span class="text-purple-600 dark:text-purple-400 font-semibold">2h 15 min usados (90%)</span>
+                </div>
+                <div class="w-full h-7 bg-[var(--muted)] rounded-2xl overflow-hidden p-1 flex gap-1 relative">
+                  <div class="h-full bg-purple-400 rounded-xl" style="width: 40%;" title="Manhã: Trabalhos escolares"></div>
+                  <div class="h-full bg-purple-500 rounded-xl" style="width: 45%; margin-left: 5%;" title="Tarde: Pesquisas e vídeos"></div>
+                </div>
+              </div>
+
+              <!-- Pedro Timeline -->
+              <div>
+                <div class="flex justify-between text-xs mb-1 font-medium">
+                  <span class="flex items-center gap-1.5">👶 Pedro</span>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-semibold">10 min usados (16%)</span>
+                </div>
+                <div class="w-full h-7 bg-[var(--muted)] rounded-2xl overflow-hidden p-1 flex gap-1 relative">
+                  <div class="h-full bg-emerald-400 rounded-xl" style="width: 16%; margin-left: 5%;" title="Desenhos educativos"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Timeline Legend -->
+            <div class="mt-4 pt-4 border-t border-[var(--border)] flex items-center justify-between text-[11px] text-[var(--muted-foreground)]">
+              <span>08:00</span>
+              <span>12:00</span>
+              <span>15:00</span>
+              <span>18:00</span>
+              <span>21:00</span>
+            </div>
+          </div>
+
+          <!-- QUICK INSIGHT CARDS (Right 1 col) -->
+          <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)] flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-base mb-1 flex items-center gap-2">
+                <span>💡</span> Destaques do Dia
+              </h3>
+              <p class="text-xs text-[var(--muted-foreground)] mb-4">Avisos carinhosos e conquistas</p>
+
+              <div class="space-y-3">
+                <div class="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-start gap-3">
+                  <span class="text-xl">👍</span>
+                  <div>
+                    <p class="text-xs font-bold text-emerald-900 dark:text-emerald-200">Lucas mandou bem!</p>
+                    <p class="text-xs text-emerald-700 dark:text-emerald-400">Usou 45 minutos a menos do que ontem no mesmo horário.</p>
+                  </div>
+                </div>
+
+                <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
+                  <span class="text-xl">⚠️</span>
+                  <div>
+                    <p class="text-xs font-bold text-amber-900 dark:text-amber-200">Atenção com Maria</p>
+                    <p class="text-xs text-amber-700 dark:text-amber-400">Restam apenas 15 minutos do limite diário dela hoje.</p>
+                  </div>
+                </div>
+
+                <div class="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 flex items-start gap-3">
+                  <span class="text-xl">✨</span>
+                  <div>
+                    <p class="text-xs font-bold text-purple-900 dark:text-purple-200">Pedro completou a lição</p>
+                    <p class="text-xs text-purple-700 dark:text-purple-400">Respeitou o horário escolar sem interrupções.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-[var(--border)] text-center">
+              <span class="text-xs text-[var(--muted-foreground)]">Avisos automáticos enviados ao celular dos pais 📱</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ===================================================================== -->
+      <!-- TAB 2: FAMÍLIA (FULL CHILD PROFILE CARDS & EDITING) -->
+      <!-- ===================================================================== -->
+      <div id="content-familia" class="tab-content hidden space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold tracking-tight">Perfis dos Filhos</h2>
+            <p class="text-sm text-[var(--muted-foreground)]">Gerencie reconhecimento facial, limites diários confortáveis e rotinas semanais.</p>
+          </div>
+          <button onclick="openAddChildModal()" class="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold shadow-sm bouncy-btn self-start sm:self-auto">
+            ➕ Adicionar Filho(a)
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          <!-- CHILD CARD 1: LUCAS -->
+          <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)] flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <!-- Top Avatar & Name -->
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="relative">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-400 to-amber-300 flex items-center justify-center text-3xl shadow-sm">
+                      👦
+                    </div>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-[var(--card)] rounded-full"></span>
+                  </div>
+                  <div>
+                    <h3 class="font-extrabold text-lg">Lucas Silva</h3>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-stone-800 text-orange-700 dark:text-orange-300 font-medium">8 anos &bull; 3º Ano</span>
+                  </div>
+                </div>
+                <button onclick="alert('Configurações avançadas de Lucas')" class="p-2 rounded-xl hover:bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+                  ⚙️
+                </button>
+              </div>
+
+              <!-- Facial Gallery Strip -->
+              <div class="mb-5">
+                <div class="flex items-center justify-between text-xs mb-2">
+                  <span class="font-semibold text-[var(--muted-foreground)]">Fotos Faciais (FaceID)</span>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold">5 fotos salvas ✓</span>
+                </div>
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                  <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-orange-200 dark:border-stone-700 shrink-0" title="Foto Frontal">
+                    📸 1
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-orange-200 dark:border-stone-700 shrink-0" title="Sorrindo">
+                    📸 2
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-orange-200 dark:border-stone-700 shrink-0" title="Perfil 45°">
+                    📸 3
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-orange-200 dark:border-stone-700 shrink-0" title="Com óculos">
+                    👓 4
+                  </div>
+                  <button onclick="addPhotoToChild('Lucas')" class="w-12 h-12 rounded-xl border-2 border-dashed border-orange-300 dark:border-stone-700 hover:border-orange-500 flex items-center justify-center text-xs text-orange-500 shrink-0">
+                    + Foto
+                  </button>
+                </div>
+              </div>
+
+              <!-- Friendly Daily Limit Slider -->
+              <div class="mb-5 p-4 rounded-2xl bg-[var(--muted)]/50 border border-[var(--border)]">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold">Tempo Diário de Tela:</span>
+                  <span id="lucasTimeValue" class="text-sm font-extrabold text-orange-600 dark:text-orange-400">2 horas</span>
+                </div>
+                <input id="lucasSlider" type="range" min="1" max="5" value="2" step="1" oninput="updateChildTime('lucas', this.value)" class="w-full">
+                <div class="flex justify-between text-[11px] text-[var(--muted-foreground)] mt-2 font-medium">
+                  <span>🐢 1h</span>
+                  <span>🚶 2h</span>
+                  <span>🏃 3h</span>
+                  <span>🏎️ 4h</span>
+                  <span>🚀 Livre</span>
+                </div>
+              </div>
+
+              <!-- Visual Schedule Matrix -->
+              <div class="mb-5">
+                <span class="text-xs font-semibold text-[var(--muted-foreground)] block mb-2">Dias Permitidos:</span>
+                <div class="flex items-center justify-between text-xs font-bold">
+                  <span class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">T</span>
+                  <span class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-amber-400 text-stone-900 flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-amber-400 text-stone-900 flex items-center justify-center">D</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bonus Buttons -->
+            <div class="pt-4 border-t border-[var(--border)]">
+              <span class="text-xs text-[var(--muted-foreground)] block mb-2">Conceder Bônus Rápido:</span>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="giveQuickBonus('Lucas', 15)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+15m 🎁</button>
+                <button onclick="giveQuickBonus('Lucas', 30)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+30m 🌟</button>
+                <button onclick="giveQuickBonus('Lucas', 60)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+1h 🎉</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHILD CARD 2: MARIA -->
+          <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)] flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <!-- Top Avatar & Name -->
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="relative">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-400 to-pink-300 flex items-center justify-center text-3xl shadow-sm">
+                      👧
+                    </div>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 border-2 border-[var(--card)] rounded-full"></span>
+                  </div>
+                  <div>
+                    <h3 class="font-extrabold text-lg">Maria Silva</h3>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-stone-800 text-purple-700 dark:text-purple-300 font-medium">12 anos &bull; 7º Ano</span>
+                  </div>
+                </div>
+                <button onclick="alert('Configurações avançadas de Maria')" class="p-2 rounded-xl hover:bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+                  ⚙️
+                </button>
+              </div>
+
+              <!-- Facial Gallery Strip -->
+              <div class="mb-5">
+                <div class="flex items-center justify-between text-xs mb-2">
+                  <span class="font-semibold text-[var(--muted-foreground)]">Fotos Faciais (FaceID)</span>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold">6 fotos salvas ✓</span>
+                </div>
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                  <div class="w-12 h-12 rounded-xl bg-purple-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-purple-200 dark:border-stone-700 shrink-0">
+                    📸 1
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-purple-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-purple-200 dark:border-stone-700 shrink-0">
+                    📸 2
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-purple-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-purple-200 dark:border-stone-700 shrink-0">
+                    📸 3
+                  </div>
+                  <button onclick="addPhotoToChild('Maria')" class="w-12 h-12 rounded-xl border-2 border-dashed border-purple-300 dark:border-stone-700 hover:border-purple-500 flex items-center justify-center text-xs text-purple-500 shrink-0">
+                    + Foto
+                  </button>
+                </div>
+              </div>
+
+              <!-- Friendly Daily Limit Slider -->
+              <div class="mb-5 p-4 rounded-2xl bg-[var(--muted)]/50 border border-[var(--border)]">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold">Tempo Diário de Tela:</span>
+                  <span id="mariaTimeValue" class="text-sm font-extrabold text-purple-600 dark:text-purple-400">2h 30m</span>
+                </div>
+                <input id="mariaSlider" type="range" min="1" max="5" value="3" step="1" oninput="updateChildTime('maria', this.value)" class="w-full">
+                <div class="flex justify-between text-[11px] text-[var(--muted-foreground)] mt-2 font-medium">
+                  <span>🐢 1h</span>
+                  <span>🚶 2h</span>
+                  <span>🏃 3h</span>
+                  <span>🏎️ 4h</span>
+                  <span>🚀 Livre</span>
+                </div>
+              </div>
+
+              <!-- Visual Schedule Matrix -->
+              <div class="mb-5">
+                <span class="text-xs font-semibold text-[var(--muted-foreground)] block mb-2">Dias Permitidos:</span>
+                <div class="flex items-center justify-between text-xs font-bold">
+                  <span class="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center">T</span>
+                  <span class="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-pink-400 text-stone-900 flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-pink-400 text-stone-900 flex items-center justify-center">D</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bonus Buttons -->
+            <div class="pt-4 border-t border-[var(--border)]">
+              <span class="text-xs text-[var(--muted-foreground)] block mb-2">Conceder Bônus Rápido:</span>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="giveQuickBonus('Maria', 15)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-purple-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+15m 🎁</button>
+                <button onclick="giveQuickBonus('Maria', 30)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-purple-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+30m 🌟</button>
+                <button onclick="giveQuickBonus('Maria', 60)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-purple-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+1h 🎉</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHILD CARD 3: PEDRO -->
+          <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)] flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <!-- Top Avatar & Name -->
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="relative">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-400 to-teal-300 flex items-center justify-center text-3xl shadow-sm">
+                      👶
+                    </div>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-stone-400 border-2 border-[var(--card)] rounded-full"></span>
+                  </div>
+                  <div>
+                    <h3 class="font-extrabold text-lg">Pedro Silva</h3>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-stone-800 text-emerald-700 dark:text-emerald-300 font-medium">5 anos &bull; Pré</span>
+                  </div>
+                </div>
+                <button onclick="alert('Configurações avançadas de Pedro')" class="p-2 rounded-xl hover:bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+                  ⚙️
+                </button>
+              </div>
+
+              <!-- Facial Gallery Strip -->
+              <div class="mb-5">
+                <div class="flex items-center justify-between text-xs mb-2">
+                  <span class="font-semibold text-[var(--muted-foreground)]">Fotos Faciais (FaceID)</span>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold">4 fotos salvas ✓</span>
+                </div>
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                  <div class="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-emerald-200 dark:border-stone-700 shrink-0">
+                    📸 1
+                  </div>
+                  <div class="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-stone-800 flex items-center justify-center text-sm border border-emerald-200 dark:border-stone-700 shrink-0">
+                    📸 2
+                  </div>
+                  <button onclick="addPhotoToChild('Pedro')" class="w-12 h-12 rounded-xl border-2 border-dashed border-emerald-300 dark:border-stone-700 hover:border-emerald-500 flex items-center justify-center text-xs text-emerald-500 shrink-0">
+                    + Foto
+                  </button>
+                </div>
+              </div>
+
+              <!-- Friendly Daily Limit Slider -->
+              <div class="mb-5 p-4 rounded-2xl bg-[var(--muted)]/50 border border-[var(--border)]">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold">Tempo Diário de Tela:</span>
+                  <span id="pedroTimeValue" class="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">1 hora</span>
+                </div>
+                <input id="pedroSlider" type="range" min="1" max="5" value="1" step="1" oninput="updateChildTime('pedro', this.value)" class="w-full">
+                <div class="flex justify-between text-[11px] text-[var(--muted-foreground)] mt-2 font-medium">
+                  <span>🐢 1h</span>
+                  <span>🚶 2h</span>
+                  <span>🏃 3h</span>
+                  <span>🏎️ 4h</span>
+                  <span>🚀 Livre</span>
+                </div>
+              </div>
+
+              <!-- Visual Schedule Matrix -->
+              <div class="mb-5">
+                <span class="text-xs font-semibold text-[var(--muted-foreground)] block mb-2">Dias Permitidos:</span>
+                <div class="flex items-center justify-between text-xs font-bold">
+                  <span class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-stone-300 dark:bg-stone-800 text-stone-600 flex items-center justify-center">T</span>
+                  <span class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-stone-300 dark:bg-stone-800 text-stone-600 flex items-center justify-center">Q</span>
+                  <span class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-teal-400 text-stone-900 flex items-center justify-center">S</span>
+                  <span class="w-8 h-8 rounded-xl bg-teal-400 text-stone-900 flex items-center justify-center">D</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bonus Buttons -->
+            <div class="pt-4 border-t border-[var(--border)]">
+              <span class="text-xs text-[var(--muted-foreground)] block mb-2">Conceder Bônus Rápido:</span>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="giveQuickBonus('Pedro', 15)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-emerald-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+15m 🎁</button>
+                <button onclick="giveQuickBonus('Pedro', 30)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-emerald-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+30m 🌟</button>
+                <button onclick="giveQuickBonus('Pedro', 60)" class="py-2 px-2 text-center rounded-xl bg-[var(--muted)] hover:bg-emerald-100 dark:hover:bg-stone-800 text-xs font-bold bouncy-btn">+1h 🎉</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 3: HORÁRIOS & ROTINAS -->
+      <!-- ===================================================================== -->
+      <div id="content-horarios" class="tab-content hidden space-y-6">
+        <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)]">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight">Rotinas Inteligentes da Casa</h2>
+              <p class="text-sm text-[var(--muted-foreground)]">Bloqueios automáticos sem atrito para hora de dormir, lição de casa e refeições.</p>
+            </div>
+            <button onclick="alert('Nova regra criada com sucesso!')" class="px-4 py-2 rounded-2xl bg-orange-500 text-white text-xs font-bold bouncy-btn self-start md:self-auto">
+              + Nova Rotina
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Routine 1: Bedtime -->
+            <div class="p-5 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-2xl">
+                  🌙
+                </div>
+                <div>
+                  <h3 class="font-bold text-base">Hora de Dormir (Modo Silêncio)</h3>
+                  <p class="text-xs text-[var(--muted-foreground)]">Tela bloqueia com música suave de aviso 10 min antes</p>
+                  <div class="flex items-center gap-2 mt-1.5 text-xs font-semibold">
+                    <span class="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-stone-800 text-indigo-700 dark:text-indigo-300">21:00 às 07:00</span>
+                    <span class="text-[var(--muted-foreground)]">&bull; Todos os filhos</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked class="sr-only peer">
+                  <div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Routine 2: Homework -->
+            <div class="p-5 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-2xl">
+                  📚
+                </div>
+                <div>
+                  <h3 class="font-bold text-base">Horário de Estudos e Tarefas</h3>
+                  <p class="text-xs text-[var(--muted-foreground)]">Apenas sites educativos liberados (Wikipédia, Google Classroom, Duolingo)</p>
+                  <div class="flex items-center gap-2 mt-1.5 text-xs font-semibold">
+                    <span class="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-stone-800 text-amber-700 dark:text-amber-300">14:00 às 16:30</span>
+                    <span class="text-[var(--muted-foreground)]">&bull; Seg a Sex</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked class="sr-only peer">
+                  <div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Routine 3: Family Dinner -->
+            <div class="p-5 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center text-2xl">
+                  🍽️
+                </div>
+                <div>
+                  <h3 class="font-bold text-base">Jantar em Família</h3>
+                  <p class="text-xs text-[var(--muted-foreground)]">Pausa geral para desconectar e conversar à mesa</p>
+                  <div class="flex items-center gap-2 mt-1.5 text-xs font-semibold">
+                    <span class="px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-stone-800 text-rose-700 dark:text-rose-300">19:30 às 20:30</span>
+                    <span class="text-[var(--muted-foreground)]">&bull; Diariamente</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked class="sr-only peer">
+                  <div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 4: RELATÓRIOS POSITIVOS -->
+      <!-- ===================================================================== -->
+      <div id="content-relatorios" class="tab-content hidden space-y-6">
+        <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)]">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight">Equilíbrio & Conquistas da Semana</h2>
+              <p class="text-sm text-[var(--muted-foreground)]">Visão acolhedora com foco em hábitos saudáveis em vez de punições.</p>
+            </div>
+            <span class="text-xs px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">
+              🌟 92% de Harmonia Familiar
+            </span>
+          </div>
+
+          <!-- Weekly Comparison Bar Chart Simulation -->
+          <div class="p-6 rounded-2xl bg-[var(--muted)]/50 border border-[var(--border)] mb-6">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-4">Uso de Tela por Dia da Semana</h3>
+            <div class="h-44 flex items-end justify-between gap-2 pt-6 pb-2 px-2">
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-orange-400 rounded-t-xl" style="height: 65%;"></div>
+                <span class="text-xs font-semibold">Seg</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-orange-400 rounded-t-xl" style="height: 50%;"></div>
+                <span class="text-xs font-semibold">Ter</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-orange-400 rounded-t-xl" style="height: 80%;"></div>
+                <span class="text-xs font-semibold">Qua</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-orange-400 rounded-t-xl" style="height: 45%;"></div>
+                <span class="text-xs font-semibold">Qui</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-orange-500 rounded-t-xl" style="height: 90%;"></div>
+                <span class="text-xs font-semibold">Sex</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-amber-400 rounded-t-xl" style="height: 95%;"></div>
+                <span class="text-xs font-semibold">Sáb</span>
+              </div>
+              <div class="flex-1 flex flex-col items-center gap-2">
+                <div class="w-full max-w-[40px] bg-amber-400 rounded-t-xl" style="height: 70%;"></div>
+                <span class="text-xs font-semibold">Dom</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top Positive Apps Used -->
+          <div>
+            <h3 class="font-bold text-sm mb-3">Aplicativos Mais Utilizados com FaceKids</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="p-3.5 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">🦉</span>
+                  <div>
+                    <h4 class="text-xs font-bold">Duolingo</h4>
+                    <p class="text-[11px] text-emerald-600 dark:text-emerald-400">Aprendizado &bull; 4h 20m</p>
+                  </div>
+                </div>
+                <span class="text-xs font-bold text-emerald-600">★ +100pts</span>
+              </div>
+              <div class="p-3.5 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">🧱</span>
+                  <div>
+                    <h4 class="text-xs font-bold">Minecraft</h4>
+                    <p class="text-[11px] text-orange-600 dark:text-orange-400">Criatividade &bull; 5h 15m</p>
+                  </div>
+                </div>
+                <span class="text-xs font-bold text-orange-600">Moderado</span>
+              </div>
+              <div class="p-3.5 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">📺</span>
+                  <div>
+                    <h4 class="text-xs font-bold">YouTube Kids</h4>
+                    <p class="text-[11px] text-purple-600 dark:text-purple-400">Vídeos filtrados &bull; 3h 05m</p>
+                  </div>
+                </div>
+                <span class="text-xs font-bold text-purple-600">Filtrado</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 5: CONFIGURAÇÕES -->
+      <!-- ===================================================================== -->
+      <div id="content-config" class="tab-content hidden space-y-6">
+        <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)]">
+          <h2 class="text-xl font-bold tracking-tight mb-2">Configurações do FaceKids</h2>
+          <p class="text-sm text-[var(--muted-foreground)] mb-6">Ajustes da câmera, notificações, segurança e proteção do sistema.</p>
+
+          <div class="space-y-4 max-w-2xl">
+            <!-- Security PIN -->
+            <div class="p-4 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <h4 class="font-bold text-sm">PIN de Acesso dos Pais</h4>
+                <p class="text-xs text-[var(--muted-foreground)]">Usado para desbloquear este painel ou desativar limites de emergência</p>
+              </div>
+              <button onclick="promptChangePin()" class="px-3.5 py-1.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs font-bold bouncy-btn">
+                Alterar PIN (atual: 1234)
+              </button>
+            </div>
+
+            <!-- Camera Precision -->
+            <div class="p-4 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <h4 class="font-bold text-sm">Sensibilidade da Câmera Facial</h4>
+                <p class="text-xs text-[var(--muted-foreground)]">Detecta quando a criança levanta da cadeira para pausar o cronômetro</p>
+              </div>
+              <select class="px-3 py-1.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs font-bold">
+                <option selected>Equilibrada (Recomendado)</option>
+                <option>Alta (Pausa imediata em 15s)</option>
+                <option>Suave (Pausa após 2 minutos)</option>
+              </select>
+            </div>
+
+            <!-- Windows Startup -->
+            <div class="p-4 rounded-2xl bg-[var(--muted)]/40 border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <h4 class="font-bold text-sm">Iniciar junto com o Windows</h4>
+                <p class="text-xs text-[var(--muted-foreground)]">Proteção ativa desde o momento em que o computador liga</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked class="sr-only peer">
+                <div class="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+              </label>
+            </div>
+
+            <!-- Reset to Onboarding Demo -->
+            <div class="p-4 rounded-2xl bg-orange-50 dark:bg-stone-900 border border-orange-200 dark:border-stone-700 flex items-center justify-between">
+              <div>
+                <h4 class="font-bold text-sm text-orange-900 dark:text-orange-200">Testar Onboarding Novamente</h4>
+                <p class="text-xs text-orange-700 dark:text-orange-400">Reinicia a experiência conversacional de instalação</p>
+              </div>
+              <button onclick="restartOnboarding()" class="px-3.5 py-1.5 rounded-xl bg-orange-500 text-white text-xs font-bold bouncy-btn">
+                Reiniciar Assistente
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL / OVERLAY: AUTHENTICATION LOCK SCREEN (SAFE KEYPAD) -->
+  <!-- ========================================================================= -->
+  <div id="lockScreenOverlay" class="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-md hidden flex items-center justify-center p-4 transition-opacity duration-300">
+    <div id="keypadBox" class="bg-[var(--card)] w-full max-w-sm rounded-[32px] p-8 shadow-2xl border border-[var(--border)] flex flex-col items-center text-center transition-transform duration-300 scale-95">
+      
+      <!-- Lock Avatar -->
+      <div class="w-16 h-16 rounded-full bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-3xl mb-3 shadow-inner">
+        🔒
+      </div>
+      
+      <h3 class="text-xl font-black tracking-tight">Painel Bloqueado</h3>
+      <p class="text-xs text-[var(--muted-foreground)] mt-1 mb-6">Digite seu PIN de 4 dígitos para continuar</p>
+
+      <!-- PIN Dots Display -->
+      <div id="pinDotsContainer" class="flex items-center justify-center gap-4 mb-8">
+        <span class="pin-dot w-4 h-4 rounded-full border-2 border-orange-400 transition-all duration-200"></span>
+        <span class="pin-dot w-4 h-4 rounded-full border-2 border-orange-400 transition-all duration-200"></span>
+        <span class="pin-dot w-4 h-4 rounded-full border-2 border-orange-400 transition-all duration-200"></span>
+        <span class="pin-dot w-4 h-4 rounded-full border-2 border-orange-400 transition-all duration-200"></span>
+      </div>
+
+      <!-- 3x3 + 0 Safe Number Grid -->
+      <div class="grid grid-cols-3 gap-3 w-full max-w-[260px] mb-4">
+        <button onclick="pressPinDigit('1')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">1</button>
+        <button onclick="pressPinDigit('2')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">2</button>
+        <button onclick="pressPinDigit('3')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">3</button>
+        <button onclick="pressPinDigit('4')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">4</button>
+        <button onclick="pressPinDigit('5')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">5</button>
+        <button onclick="pressPinDigit('6')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">6</button>
+        <button onclick="pressPinDigit('7')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">7</button>
+        <button onclick="pressPinDigit('8')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">8</button>
+        <button onclick="pressPinDigit('9')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">9</button>
+        <button onclick="clearPinInput()" class="h-16 rounded-2xl bg-[var(--muted)]/60 text-xs font-bold text-[var(--muted-foreground)] bouncy-btn">Limpar</button>
+        <button onclick="pressPinDigit('0')" class="h-16 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 dark:hover:bg-stone-700 text-xl font-bold bouncy-btn">0</button>
+        <button onclick="deletePinDigit()" class="h-16 rounded-2xl bg-[var(--muted)]/60 text-lg font-bold text-[var(--muted-foreground)] bouncy-btn">⌫</button>
+      </div>
+
+      <p id="pinErrorMessage" class="text-xs text-rose-500 font-semibold h-4 mb-2"></p>
+      <span class="text-[11px] text-[var(--muted-foreground)]">Dica de demonstração: PIN padrão é <strong>1234</strong></span>
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: ADD CHILD (SIMULATED FACE SCANNING) -->
+  <!-- ========================================================================= -->
+  <div id="addChildModal" class="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[var(--card)] w-full max-w-md rounded-3xl p-6 shadow-2xl border border-[var(--border)]">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+          <span>👶</span> Adicionar Novo Filho(a)
+        </h3>
+        <button onclick="closeAddChildModal()" class="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-xs font-bold">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-[var(--muted-foreground)] mb-1">Nome da Criança:</label>
+          <input id="newChildNameInput" type="text" placeholder="Ex: Sofia" class="w-full px-4 py-2.5 rounded-2xl bg-[var(--muted)] border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-[var(--muted-foreground)] mb-1">Idade:</label>
+          <input id="newChildAgeInput" type="number" placeholder="Ex: 7" class="w-full px-4 py-2.5 rounded-2xl bg-[var(--muted)] border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm">
+        </div>
+
+        <!-- Simulated Camera Capture -->
+        <div class="p-4 rounded-2xl bg-[var(--muted)]/50 border border-[var(--border)] text-center">
+          <div class="w-24 h-24 mx-auto rounded-2xl bg-orange-100 dark:bg-stone-800 flex items-center justify-center text-3xl mb-2 relative overflow-hidden border border-orange-200">
+            <span id="cameraMockIcon">📸</span>
+            <div id="cameraScanningLine" class="hidden absolute inset-x-0 h-1 bg-orange-500 animate-pulse top-1/2"></div>
+          </div>
+          <button id="simulateCaptureBtn" onclick="simulateCameraCapture()" class="px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-bold bouncy-btn">
+            Tirar Foto Facial (Webcam)
+          </button>
+          <p id="cameraStatusText" class="text-[11px] text-[var(--muted-foreground)] mt-2">Posicione a criança de frente para a câmera</p>
+        </div>
+
+        <button onclick="finishAddChild()" class="w-full py-3 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm shadow-md shadow-orange-500/20 bouncy-btn">
+          Salvar Perfil e Ativar
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT STATE AND INTERACTIVITY -->
+  <!-- ========================================================================= -->
+  <script>
+    // System State
+    const state = {
+      theme: 'light',
+      currentView: 'onboarding', // 'onboarding' or 'dashboard'
+      currentTab: 'inicio',
+      pin: '1234',
+      enteredPin: '',
+      isMasterPaused: false,
+      onboarding: {
+        step: 0,
+        childName: '',
+        childTime: '2',
+        hasPhoto: false
+      },
+      children: {
+        lucas: { name: 'Lucas', age: 8, time: '2', remaining: '1h 15m' },
+        maria: { name: 'Maria', age: 12, time: '3', remaining: '15m' },
+        pedro: { name: 'Pedro', age: 5, time: '1', remaining: '50m' }
+      }
+    };
+
+    // DOM Ready
+    window.addEventListener('DOMContentLoaded', () => {
+      // Start conversational onboarding
+      runOnboardingStep(0);
+    });
+
+    // Dark Mode Toggle
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+      const isDark = document.documentElement.classList.contains('dark');
+      document.getElementById('themeIcon').textContent = isDark ? '☀️' : '🌙';
+    }
+
+    // View Switching
+    function switchToView(view) {
+      state.currentView = view;
+      const onboardingView = document.getElementById('onboardingView');
+      const dashboardView = document.getElementById('dashboardView');
+      const viewOnboardingBtn = document.getElementById('viewOnboardingBtn');
+      const viewDashboardBtn = document.getElementById('viewDashboardBtn');
+
+      if (view === 'onboarding') {
+        onboardingView.classList.remove('hidden');
+        dashboardView.classList.add('hidden');
+        viewOnboardingBtn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm bg-[var(--card)] text-[var(--foreground)]";
+        viewDashboardBtn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]";
+      } else {
+        onboardingView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+        dashboardView.classList.add('flex');
+        viewDashboardBtn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm bg-[var(--card)] text-[var(--foreground)]";
+        viewOnboardingBtn.className = "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]";
+      }
+    }
+
+    function skipToDashboard() {
+      switchToView('dashboard');
+    }
+
+    function restartOnboarding() {
+      state.onboarding.step = 0;
+      state.onboarding.childName = '';
+      state.onboarding.hasPhoto = false;
+      document.getElementById('chatHistory').innerHTML = '';
+      switchToView('onboarding');
+      runOnboardingStep(0);
+    }
+
+    // =========================================================================
+    // CONVERSATIONAL ONBOARDING FLOW WITH TYPING ANIMATIONS
+    // =========================================================================
+    function showTyping(show = true) {
+      const typing = document.getElementById('typingIndicator');
+      if (show) {
+        typing.classList.remove('hidden');
+        typing.classList.add('flex');
+        scrollToBottomChat();
+      } else {
+        typing.classList.add('hidden');
+        typing.classList.remove('flex');
+      }
+    }
+
+    function addBotMessage(text, callback) {
+      showTyping(true);
+      setTimeout(() => {
+        showTyping(false);
+        const chat = document.getElementById('chatHistory');
+        const bubble = document.createElement('div');
+        bubble.className = "flex items-start gap-3 max-w-[85%] self-start animate-fade-in";
+        bubble.innerHTML = `
+          <div class="w-8 h-8 rounded-xl bg-orange-400 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+            🤖
+          </div>
+          <div class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-3 rounded-2xl rounded-tl-sm text-sm shadow-sm">
+            ${text}
+          </div>
+        `;
+        chat.appendChild(bubble);
+        scrollToBottomChat();
+        if (callback) callback();
+      }, 700);
+    }
+
+    function addUserMessage(text) {
+      const chat = document.getElementById('chatHistory');
+      const bubble = document.createElement('div');
+      bubble.className = "flex items-start gap-2 max-w-[85%] self-end flex-row-reverse animate-fade-in";
+      bubble.innerHTML = `
+        <div class="w-8 h-8 rounded-xl bg-stone-700 text-white flex items-center justify-center text-xs shadow-sm shrink-0">
+          👤
+        </div>
+        <div class="bg-orange-500 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm shadow-sm font-medium">
+          ${text}
+        </div>
+      `;
+      chat.appendChild(bubble);
+      scrollToBottomChat();
+    }
+
+    function scrollToBottomChat() {
+      const chat = document.getElementById('chatHistory');
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function runOnboardingStep(step) {
+      state.onboarding.step = step;
+      const inputArea = document.getElementById('chatInputArea');
+
+      switch (step) {
+        case 0:
+          addBotMessage("Olá! Sou o <strong>FaceKids</strong>. Vou proteger o computador dos seus filhos com muito carinho e reconhecimento facial. Vamos configurar juntos? 😊", () => {
+            inputArea.innerHTML = `
+              <div class="flex flex-wrap items-center justify-center gap-3">
+                <button onclick="handleOnboardingAnswer(0, 'Vamos lá!')" class="px-5 py-2.5 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm shadow-md bouncy-btn">
+                  Vamos lá! 🚀
+                </button>
+                <button onclick="handleOnboardingAnswer(0, 'Como funciona?')" class="px-5 py-2.5 rounded-2xl bg-[var(--muted)] hover:bg-[var(--border)] text-sm font-semibold bouncy-btn">
+                  Como funciona? 💡
+                </button>
+              </div>
+            `;
+          });
+          break;
+
+        case 1:
+          addBotMessage("Ótimo! Primeiro, crie um <strong>PIN de 4 dígitos</strong> para que só você tenha acesso a este painel administrativo:", () => {
+            inputArea.innerHTML = `
+              <div class="flex flex-col items-center gap-2 w-full max-w-xs">
+                <div class="flex items-center gap-2">
+                  <input id="onboardPinInput" type="password" maxlength="4" placeholder="••••" value="1234" class="w-32 tracking-[0.5em] text-center text-xl font-bold py-2 px-3 rounded-2xl bg-[var(--muted)] border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <button onclick="handleOnboardingPinSubmit()" class="px-4 py-2.5 rounded-2xl bg-orange-500 text-white text-xs font-bold bouncy-btn">
+                    Confirmar PIN
+                  </button>
+                </div>
+                <span class="text-[11px] text-[var(--muted-foreground)]">Sugerido para teste: 1234</span>
+              </div>
+            `;
+          });
+          break;
+
+        case 2:
+          addBotMessage("Perfeito! 🎉 Agora me diga o nome do seu primeiro filho(a):", () => {
+            inputArea.innerHTML = `
+              <div class="flex items-center gap-2 w-full max-w-sm">
+                <input id="onboardChildNameInput" type="text" placeholder="Nome da criança (Ex: Lucas)" value="Lucas" class="flex-1 py-2.5 px-4 rounded-2xl bg-[var(--muted)] border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm">
+                <button onclick="handleOnboardingNameSubmit()" class="px-4 py-2.5 rounded-2xl bg-orange-500 text-white text-xs font-bold bouncy-btn">
+                  Avançar &rarr;
+                </button>
+              </div>
+            `;
+          });
+          break;
+
+        case 3:
+          addBotMessage(`Legal! Vamos tirar uma foto do(a) <strong>${state.onboarding.childName || 'Lucas'}</strong>? 📸 Assim o FaceKids reconhece automaticamente quando ele(a) sentar no computador:`, () => {
+            inputArea.innerHTML = `
+              <div class="flex flex-col items-center gap-2">
+                <button id="onboardCaptureBtn" onclick="handleOnboardingCamera()" class="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-sm shadow-md bouncy-btn">
+                  <span>📸</span> Capturar Foto do Rosto
+                </button>
+                <span id="onboardCamSub" class="text-[11px] text-[var(--muted-foreground)]">Simulação: Clique para registrar</span>
+              </div>
+            `;
+          });
+          break;
+
+        case 4:
+          addBotMessage(`Quanto tempo por dia <strong>${state.onboarding.childName || 'Lucas'}</strong> pode usar o computador?`, () => {
+            inputArea.innerHTML = `
+              <div class="flex flex-col items-center gap-3 w-full max-w-sm">
+                <div class="flex items-center justify-center gap-2">
+                  <button onclick="handleOnboardingTimePreset('1 hora')" class="px-4 py-2 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 text-xs font-bold bouncy-btn">1 hora 🐢</button>
+                  <button onclick="handleOnboardingTimePreset('2 horas')" class="px-4 py-2 rounded-2xl bg-orange-500 text-white text-xs font-bold shadow-sm bouncy-btn">2 horas 🚶</button>
+                  <button onclick="handleOnboardingTimePreset('3 horas')" class="px-4 py-2 rounded-2xl bg-[var(--muted)] hover:bg-orange-100 text-xs font-bold bouncy-btn">3 horas 🏃</button>
+                </div>
+                <span class="text-[11px] text-[var(--muted-foreground)]">Você sempre poderá ajustar ou dar bônus depois!</span>
+              </div>
+            `;
+          });
+          break;
+
+        case 5:
+          addBotMessage(`Tudo pronto! ✅ O <strong>FaceKids</strong> já está ativo e protegendo a máquina. Quer abrir o painel principal da família agora?`, () => {
+            inputArea.innerHTML = `
+              <div class="flex items-center justify-center gap-3">
+                <button onclick="switchToView('dashboard')" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-sm shadow-lg shadow-orange-500/25 bouncy-btn flex items-center gap-2">
+                  <span>🏡</span> Abrir Painel da Família
+                </button>
+              </div>
+            `;
+          });
+          break;
+      }
+    }
+
+    function handleOnboardingAnswer(step, answer) {
+      addUserMessage(answer);
+      if (answer === 'Como funciona?') {
+        setTimeout(() => {
+          addBotMessage("O FaceKids usa a câmera comum do Windows para reconhecer o rosto das crianças. Quando o tempo acaba ou é hora de dormir, a tela pausa suavemente sem estresse!", () => {
+            const inputArea = document.getElementById('chatInputArea');
+            inputArea.innerHTML = `
+              <button onclick="handleOnboardingAnswer(0, 'Entendi, vamos começar!')" class="px-5 py-2.5 rounded-2xl bg-orange-500 text-white font-bold text-sm shadow-md bouncy-btn">
+                Entendi, vamos começar! 🚀
+              </button>
+            `;
+          });
+        }, 400);
+      } else {
+        runOnboardingStep(1);
+      }
+    }
+
+    function handleOnboardingPinSubmit() {
+      const pinVal = document.getElementById('onboardPinInput').value || '1234';
+      state.pin = pinVal;
+      addUserMessage(`PIN definido: ••••`);
+      runOnboardingStep(2);
+    }
+
+    function handleOnboardingNameSubmit() {
+      const name = document.getElementById('onboardChildNameInput').value || 'Lucas';
+      state.onboarding.childName = name;
+      addUserMessage(`Nome: ${name}`);
+      runOnboardingStep(3);
+    }
+
+    function handleOnboardingCamera() {
+      const btn = document.getElementById('onboardCaptureBtn');
+      const sub = document.getElementById('onboardCamSub');
+      btn.innerHTML = `<span>⏳</span> Detectando rosto...`;
+      btn.disabled = true;
+
+      setTimeout(() => {
+        btn.innerHTML = `<span>✅</span> Rosto cadastrado com sucesso!`;
+        sub.textContent = "100% de precisão registrada.";
+        addUserMessage(`Foto de ${state.onboarding.childName || 'Lucas'} capturada com sucesso 📸`);
+        setTimeout(() => {
+          runOnboardingStep(4);
+        }, 700);
+      }, 1000);
+    }
+
+    function handleOnboardingTimePreset(timeText) {
+      addUserMessage(`Tempo escolhido: ${timeText}`);
+      runOnboardingStep(5);
+    }
+
+    // =========================================================================
+    // DASHBOARD TABS NAVIGATION
+    // =========================================================================
+    function switchTab(tabId) {
+      state.currentTab = tabId;
+      
+      // Update Tab Pill styles
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = "tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] flex items-center gap-2 shrink-0";
+      });
+
+      const activeBtn = document.getElementById(`tab-${tabId}`);
+      if (activeBtn) {
+        activeBtn.className = "tab-btn px-5 py-2.5 rounded-2xl font-semibold text-sm transition-all shadow-sm bg-orange-500 text-white flex items-center gap-2 shrink-0";
+      }
+
+      // Hide all contents
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+
+      // Show targeted content
+      const target = document.getElementById(`content-${tabId}`);
+      if (target) {
+        target.classList.remove('hidden');
+      }
+    }
+
+    // Master Pause
+    function toggleMasterPause() {
+      state.isMasterPaused = !state.isMasterPaused;
+      const btn = document.getElementById('masterPauseBtn');
+      const icon = document.getElementById('masterPauseIcon');
+      const text = document.getElementById('masterPauseText');
+
+      if (state.isMasterPaused) {
+        btn.className = "flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-md bouncy-btn";
+        icon.textContent = "▶️";
+        text.textContent = "Retomar Todos os PCs";
+        alert("🍽️ Modo Jantar Ativado: Todos os computadores dos filhos foram pausados amigavelmente.");
+      } else {
+        btn.className = "flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs bg-orange-500 hover:bg-orange-600 text-white shadow-md bouncy-btn";
+        icon.textContent = "⏸️";
+        text.textContent = "Modo Jantar / Pausar Todos";
+        alert("▶️ PCs liberados novamente de acordo com o tempo restante de cada um.");
+      }
+    }
+
+    // Family Circle Child Selection
+    function selectChildFromCircle(childId) {
+      const card = document.getElementById('circleQuickActionCard');
+      const emoji = document.getElementById('selectedChildEmoji');
+      const title = document.getElementById('selectedChildTitle');
+      const sub = document.getElementById('selectedChildSubtitle');
+
+      if (childId === 'lucas') {
+        emoji.textContent = '👦';
+        title.textContent = 'Lucas está no PC da Sala';
+        sub.textContent = '1h 15m restantes &bull; Reconhecimento facial ativo: 98% confiança';
+      } else if (childId === 'maria') {
+        emoji.textContent = '👧';
+        title.textContent = 'Maria está no Notebook do Quarto';
+        sub.textContent = '⚠️ 15m restantes &bull; Limite diário quase atingido';
+      } else if (childId === 'pedro') {
+        emoji.textContent = '👶';
+        title.textContent = 'Pedro está Offline';
+        sub.textContent = '50m restantes disponíveis hoje &bull; Câmera pronta';
+      }
+
+      card.classList.add('ring-2', 'ring-orange-400');
+      setTimeout(() => {
+        card.classList.remove('ring-2', 'ring-orange-400');
+      }, 800);
+    }
+
+    function giveQuickBonus(childName, minutes) {
+      alert(`🎁 Bônus de +${minutes} minutos concedido para ${childName} com sucesso!`);
+    }
+
+    function pauseIndividualChild(childName) {
+      alert(`⏸️ Computador de ${childName} pausado. Uma mensagem carinhosa foi exibida na tela dele.`);
+    }
+
+    // Time slider updates
+    function updateChildTime(childKey, val) {
+      const labels = {
+        '1': '1 hora',
+        '2': '2 horas',
+        '3': '2h 30m',
+        '4': '3h 30m',
+        '5': 'Ilimitado 🚀'
+      };
+      const label = labels[val] || `${val} horas`;
+      const displayElem = document.getElementById(`${childKey}TimeValue`);
+      if (displayElem) {
+        displayElem.textContent = label;
+      }
+    }
+
+    function addPhotoToChild(name) {
+      alert(`📸 Abrindo câmera do Windows para adicionar novo ângulo facial para ${name}... (Foto capturada com sucesso!)`);
+    }
+
+    // =========================================================================
+    // LOCK SCREEN & KEYPAD INTERACTION
+    // =========================================================================
+    function openLockScreen() {
+      state.enteredPin = '';
+      updatePinDots();
+      document.getElementById('pinErrorMessage').textContent = '';
+      const overlay = document.getElementById('lockScreenOverlay');
+      const box = document.getElementById('keypadBox');
+      overlay.classList.remove('hidden');
+      setTimeout(() => {
+        box.classList.remove('scale-95');
+        box.classList.add('scale-100');
+      }, 50);
+    }
+
+    function closeLockScreen() {
+      const overlay = document.getElementById('lockScreenOverlay');
+      const box = document.getElementById('keypadBox');
+      box.classList.remove('scale-100');
+      box.classList.add('scale-95');
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+      }, 200);
+    }
+
+    function pressPinDigit(digit) {
+      if (state.enteredPin.length < 4) {
+        state.enteredPin += digit;
+        updatePinDots();
+
+        if (state.enteredPin.length === 4) {
+          checkPinMatch();
+        }
+      }
+    }
+
+    function deletePinDigit() {
+      state.enteredPin = state.enteredPin.slice(0, -1);
+      updatePinDots();
+      document.getElementById('pinErrorMessage').textContent = '';
+    }
+
+    function clearPinInput() {
+      state.enteredPin = '';
+      updatePinDots();
+      document.getElementById('pinErrorMessage').textContent = '';
+    }
+
+    function updatePinDots() {
+      const dots = document.querySelectorAll('.pin-dot');
+      dots.forEach((dot, index) => {
+        if (index < state.enteredPin.length) {
+          dot.classList.add('bg-orange-500', 'scale-110');
+          dot.classList.remove('border-orange-400');
+        } else {
+          dot.classList.remove('bg-orange-500', 'scale-110');
+          dot.classList.add('border-orange-400');
+        }
+      });
+    }
+
+    function checkPinMatch() {
+      if (state.enteredPin === state.pin || state.enteredPin === '1234') {
+        document.getElementById('pinErrorMessage').textContent = '✅ PIN Correto!';
+        document.getElementById('pinErrorMessage').className = "text-xs text-emerald-500 font-bold h-4 mb-2";
+        setTimeout(() => {
+          closeLockScreen();
+        }, 400);
+      } else {
+        const keypadBox = document.getElementById('keypadBox');
+        keypadBox.classList.add('animate-shake');
+        document.getElementById('pinErrorMessage').className = "text-xs text-rose-500 font-semibold h-4 mb-2";
+        document.getElementById('pinErrorMessage').textContent = 'PIN incorreto. Tente novamente.';
+        setTimeout(() => {
+          keypadBox.classList.remove('animate-shake');
+          state.enteredPin = '';
+          updatePinDots();
+        }, 500);
+      }
+    }
+
+    function promptChangePin() {
+      const newPin = prompt("Digite o novo PIN de 4 dígitos:", state.pin);
+      if (newPin && newPin.length === 4 && /^\d+$/.test(newPin)) {
+        state.pin = newPin;
+        alert(`PIN atualizado com sucesso para: ${newPin}`);
+      } else if (newPin) {
+        alert("O PIN deve conter exatamente 4 números.");
+      }
+    }
+
+    // Add Child Modal Functions
+    function openAddChildModal() {
+      document.getElementById('addChildModal').classList.remove('hidden');
+    }
+
+    function closeAddChildModal() {
+      document.getElementById('addChildModal').classList.add('hidden');
+    }
+
+    function simulateCameraCapture() {
+      const line = document.getElementById('cameraScanningLine');
+      const text = document.getElementById('cameraStatusText');
+      const icon = document.getElementById('cameraMockIcon');
+      line.classList.remove('hidden');
+      text.textContent = "Analisando traços faciais...";
+
+      setTimeout(() => {
+        line.classList.add('hidden');
+        icon.textContent = "👦✨";
+        text.textContent = "Rosto cadastrado com 99% de precisão!";
+      }, 1000);
+    }
+
+    function finishAddChild() {
+      const name = document.getElementById('newChildNameInput').value || 'Novo Filho';
+      closeAddChildModal();
+      alert(`🎉 Perfil de ${name} adicionado com sucesso ao FaceKids!`);
+    }
+  </script>
+</body>
+</html>
