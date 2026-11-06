@@ -12,3 +12,6 @@ artifacts/
 native/**/*.exe
 !native/**/FaceKidsCredentialProvider.dll
 auditoria_*.txt
+dist/
+build/
+*.spec

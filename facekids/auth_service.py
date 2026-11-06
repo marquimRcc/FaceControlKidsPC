@@ -40,6 +40,7 @@ from .windows_pipe_api import configure_kernel32
 from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
 from .agent_watchdog import AgentWatchdog, AgentWatchdogThread
+from .session_secret import get_session_secret
 
 from .vm_lab_paths import vm_lab_root
 
@@ -348,7 +349,7 @@ class FaceAuthenticator:
             # Only the legacy unlock command needs the credential field.
             # Session observations must never carry a password or touch UI files.
             if publish_unlock_event:
-                response["password"] = "1"
+                response["password"] = get_session_secret()
             return "ALLOW", response
         finally:
             store.close()

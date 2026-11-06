@@ -114,7 +114,12 @@ public:
             // Autorizacao e elegivel conforme dados do servico.
             result.success = true;
             result.user = L"Filhos";
-            result.password = L"1";
+            std::string pass = ExtractJsonString(resp, "password");
+            if (!pass.empty()) {
+                result.password = std::wstring(pass.begin(), pass.end());
+            } else {
+                result.password = L"1";
+            }
             result.childId = cid;
 
             std::string n = ExtractJsonString(resp, "child_name");
