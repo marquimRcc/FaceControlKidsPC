@@ -186,3 +186,15 @@ Nenhuma ACL restritiva de segurança (DACLs do pipe, permissões do banco, ACEs 
 **R-34 — Protocolo do Pipe: ASCII, sem nulos, máximo 512 bytes**  
 Comandos aceitos pelo pipe: `AUTH_QUERY`, `SESSION_QUERY`, `QUERY`, `PING`. Payloads com caracteres nulos, não-ASCII ou tamanho > 512 bytes resultam em `INVALID_REQUEST`.  
 *Fonte: `facekids/pipe_protocol.py`*
+
+**R-35 — Detecção Passiva de Liveness**  
+A autenticação facial requer verificação de vivacidade baseada na variância temporal dos marcos faciais YuNet ao longo de frames consecutivos. Se a variância for nula ou inferior ao limiar mínimo de micro-movimento (foto estática ou tela fixa), o serviço emite `DENY_SPOOF` e bloqueia a concessão de acesso.  
+*Fonte: `facekids/liveness.py`, `facekids/auth_service.py`*
+
+**R-36 — Reembolso Idempotente com Recibo e Session Epoch**  
+Cada transição para estado `ACTIVE` gera um `session_epoch` criptograficamente aleatório. O método `refund()` persiste um recibo único na tabela `quota_refund_receipts`. Chamadas repetidas com o mesmo `session_epoch` retornam o saldo atual sem duplicar o estorno de tempo, e estornos são limitados ao saldo efetivamente consumido.  
+*Fonte: `facekids/storage.py`, `facekids/filhos_agent.py`*
+
+**R-37 — Blindagem NTFS de ProgramData\FaceKids**  
+A pasta `C:\ProgramData\FaceKids` e seus arquivos devem possuir herança desabilitada (`/inheritance:d`) e permissões amplas de escrita para `Everyone` e `BUILTIN\Users` revogadas. SYSTEM e Administradores possuem Controle Total; binários e scripts executáveis são restritos contra adulteração por contas não privilegiadas.  
+*Fonte: `scripts/Blindar-Permissoes-FaceKids.ps1`, `scripts/Instalar-FaceKids-Nativo.ps1`*

@@ -26,7 +26,6 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 - Filtragem de conteúdo / Firewall parental.
 - Sincronização de dados em nuvem.
 - Suporte a múltiplas contas Windows de crianças (apenas a conta `Filhos` é gerenciada).
-- Liveness / anti-spoofing com fotos ou vídeos em tela de celular.
 - Autologon automático (habilitado apenas após aprovação do M5).
 
 ---
@@ -80,6 +79,7 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 | `facekids/session.py` | WTS Win32: detecta estado `ACTIVE` / `LOCKED` da sessão |
 | `facekids/locker.py` | `LockWorkStation()` Win32 seguro |
 | `facekids/pipe_protocol.py` | Decodificador de comandos do Named Pipe (bounded, ASCII-only) |
+| `facekids/liveness.py` | Detecção de vivacidade facial passiva: variância temporal de marcos faciais YuNet para rejeição de fotos estáticas |
 
 ---
 
@@ -121,6 +121,7 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 | `Ativar-Desbloqueio-No-Boot.bat` | Habilita o serviço facial como SYSTEM antes do primeiro login |
 | `abrir-facekids.bat` | Abre o Painel dos Pais (`admin_dashboard.py`) |
 | `scripts/Iniciar-Teste-Adulto-Filhos.ps1` | Teste presencial voluntário com rosto adulto (M1 — sem autologon) |
+| `scripts/Blindar-Permissoes-FaceKids.ps1` | Endurecimento NTFS de permissões (SYSTEM/Admin Full, remoção de Everyone/Users write, proteção da DLL, configs e scripts .bat) |
 
 ---
 
@@ -136,7 +137,7 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 1. **Webcam USB na Sessão 0 (SYSTEM):** A captura de frames em contexto SYSTEM (isolado do desktop) ainda não foi validada fisicamente. Risco de falha silenciosa de abertura da câmera. *(Bloqueador do M2)*
 2. **Autologon não ativado em produção:** O fluxo de `KerbInteractiveLogon` existe no C++, mas não está habilitado no PC familiar até M5 ser aprovado.
-3. **Writer de quota é legado:** `filhos_agent.py` escreve diretamente no SQLite. O broker SCM seguro é VM-only e não pode ser apontado para o banco doméstico sem cutover aprovado.
-4. **Liveness não implementado:** Fotos/vídeos na frente da câmera podem falsificar reconhecimento. Não declarar resistência a spoofing.
+3. **Reembolsos de inatividade com recibo:** Implementada geração de `session_epoch` e persistência idempotente na tabela `quota_refund_receipts` (`facekids/storage.py` e `facekids/filhos_agent.py`), prevenindo duplicação de saldo após suspensão/hibernação.
+4. **Liveness passivo ativo:** Implementada verificação de micro-movimento temporal sobre os marcos faciais do YuNet (`facekids/liveness.py`), rejeitando automaticamente tentativas de spoofing por fotos estáticas.
 5. **Generalização 1+ de perfis:** O piloto foi generalizado, mas scripts e instalador antigos podem conter suposições de exatamente 3 perfis. Auditoria necessária antes de M4.
 6. **PR #4 é draft:** O branch de security hardening não foi mergeado à `main`. Integração exige análise e testes.

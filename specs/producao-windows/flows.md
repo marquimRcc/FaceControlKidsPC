@@ -49,9 +49,12 @@ auth_service.py recebe AUTH_QUERY
   ├── Captura frame da webcam (OpenCV)
   ├── YuNet: detecta face(s) no frame
   │     ├── Nenhuma face → { "status": "DENY_NOFACE" }
-  │     └── 1+ faces → extrai embedding SFace da face principal
+  │     └── 1+ faces → extrai marcos faciais e embedding SFace da face principal
   ├── SFace: comparação 1:N com embeddings cadastrados no SQLite
   │     ├── Match (score ≥ threshold) → child_id identificado
+  │     │     ├── PassiveLivenessDetector: variância temporal de micro-movimentos
+  │     │     │     ├── Foto estática / spoofing → { "status": "DENY_SPOOF" }
+  │     │     │     └── Rosto vivo confirmado → prossegue verificação
   │     │     ├── Verifica quota: storage.remaining(child_id, today) > 0?
   │     │     │     ├── SIM + horário permitido → { "status": "ALLOW", "child_id": N, ... }
   │     │     │     ├── Quota esgotada → { "status": "DENY_QUOTA" }
@@ -63,6 +66,7 @@ auth_service.py recebe AUTH_QUERY
       ▼
 FaceKidsCredentialProvider.dll recebe resposta
   ├── ALLOW → KerbInteractiveLogon(usuário="Filhos", senha="1") → AutoLogon
+  ├── DENY_SPOOF → exibe mensagem "Foto ou tela estática detectada" e permanece bloqueado
   ├── DENY_QUOTA / DENY_CURFEW → exibe mensagem e permanece na LogonUI
   ├── DENY_NOFACE / DENY_UNKNOWN → repete captura ou exibe mensagem
   └── ERROR_CAMERA → exibe aviso (câmera ocupada) ou permite PIN manual
@@ -132,7 +136,9 @@ while True:
         │
         ├─ [5f] Checar inatividade física:
         │        idle ≥ lock_sec (120s):
-        │          → refund = min(idle, lock_sec) → store.refund()
+        │          → refund = min(idle, lock_sec)
+        │          → store.refund(child_id, refund, today, session_epoch=current_session_epoch)
+        │          → quota_refund_receipts persiste recibo único (idempotente)
         │          → LockWorkStation() + sleep 3s
         │        idle ≥ warn_sec (100s) e não avisado:
         │          → toast "Ausência Detectada"
