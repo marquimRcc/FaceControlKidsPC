@@ -17,6 +17,7 @@ import ctypes
 import json
 import logging
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -602,6 +603,7 @@ def run_agent():
     today = date.today().isoformat()
     inactivity_warned = False
     previous_session_state = None
+    current_session_epoch = secrets.token_hex(16)
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
     write_agent_heartbeat()
@@ -644,6 +646,7 @@ def run_agent():
                 session_active_since_mono = time.monotonic()
                 last_active_time = time.monotonic()
                 identifier.last_query_mono = 0.0
+                current_session_epoch = secrets.token_hex(16)
             previous_session_state = state
 
             if state is SessionState.ACTIVE:
@@ -731,7 +734,7 @@ def run_agent():
                     # Reembolsa o tempo de inatividade para a crianca nao perder saldo
                     if tracker.current_child_id is not None and idle_sec > 0:
                         refund = min(idle_sec, lock_sec)
-                        store.refund(tracker.current_child_id, refund, today)
+                        store.refund(tracker.current_child_id, refund, today, session_epoch=current_session_epoch)
                         rem = store.remaining(tracker.current_child_id, today)
                         tracker.update_balance(rem)
                         logger.info("Reembolsados %.0fs de inatividade para %s. Saldo ajustado: %.0fs", refund, tracker.current_child_name, rem)

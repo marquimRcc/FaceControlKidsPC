@@ -52,6 +52,46 @@ class StorageTest(unittest.TestCase):
                 db.refund(a, -10, "2026-10-19")
             db.close()
 
+    def test_refund_idempotent_with_session_epoch_receipt(self):
+        with TemporaryDirectory() as d:
+            db = Storage(Path(d) / "test.sqlite3")
+            child = db.add_person("Lucas", 120)
+            day = "2026-10-19"
+            db.charge(child, 100, day)
+            self.assertEqual(db.used(child, day), 100.0)
+            self.assertEqual(db.remaining(child, day), 7100.0)
+
+            epoch_1 = "a1b2c3d4e5f60718"
+            new_used = db.refund(child, 40, day, session_epoch=epoch_1)
+            self.assertEqual(new_used, 60.0)
+            self.assertEqual(db.used(child, day), 60.0)
+            self.assertEqual(db.remaining(child, day), 7140.0)
+
+            receipts = db.db.execute(
+                "SELECT session_epoch, person_id, day, requested_seconds, refunded_seconds, reason "
+                "FROM quota_refund_receipts WHERE session_epoch=?",
+                (epoch_1,)
+            ).fetchall()
+            self.assertEqual(len(receipts), 1)
+            self.assertEqual(receipts[0], (epoch_1, child, day, 40.0, 40.0, "inactivity"))
+
+            replay_used = db.refund(child, 40, day, session_epoch=epoch_1)
+            self.assertEqual(replay_used, 60.0)
+            self.assertEqual(db.used(child, day), 60.0)
+
+            epoch_2 = "9876fedcba012345"
+            capped_used = db.refund(child, 80, day, session_epoch=epoch_2)
+            self.assertEqual(capped_used, 0.0)
+            self.assertEqual(db.used(child, day), 0.0)
+            self.assertEqual(db.remaining(child, day), 7200.0)
+
+            r2 = db.db.execute(
+                "SELECT requested_seconds, refunded_seconds FROM quota_refund_receipts WHERE session_epoch=?",
+                (epoch_2,)
+            ).fetchone()
+            self.assertEqual(r2, (80.0, 60.0))
+            db.close()
+
     def test_bonus_total_capped_per_child_and_day(self):
         with TemporaryDirectory() as d:
             db = Storage(Path(d) / "quotas.sqlite3")

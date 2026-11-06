@@ -558,17 +558,45 @@ class Storage:
                 )
             return actual
 
-    def refund(self, person_id: int, seconds: float, day: Optional[str] = None) -> float:
+    def refund(self, person_id: int, seconds: float, day: Optional[str] = None,
+               session_epoch: Optional[str] = None) -> float:
         if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
             raise ValueError("Não é permitido reembolsar tempo negativo")
         day = day or date.today().isoformat()
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
             self._require_quota_writer(service_receipt=False)
-            self.db.execute("""
-                UPDATE daily_usage SET seconds = MAX(0.0, seconds - ?)
-                WHERE person_id=? AND day=?
-            """, (float(seconds), person_id, day))
+            if session_epoch:
+                import secrets
+                existing = self.db.execute(
+                    "SELECT 1 FROM quota_refund_receipts WHERE session_epoch=? AND person_id=? AND day=?",
+                    (str(session_epoch), person_id, day),
+                ).fetchone()
+                if existing:
+                    return self.used(person_id, day)
+                used = self.db.execute(
+                    "SELECT seconds FROM daily_usage WHERE person_id=? AND day=?",
+                    (person_id, day),
+                ).fetchone()
+                actual_used = float(used[0]) if used else 0.0
+                actual_refund = min(float(seconds), actual_used)
+                event_id = secrets.token_hex(16)
+                self.db.execute(
+                    "INSERT INTO quota_refund_receipts "
+                    "(event_id, session_epoch, person_id, day, requested_seconds, refunded_seconds, reason) "
+                    "VALUES (?,?,?,?,?,?,'inactivity')",
+                    (event_id, str(session_epoch), person_id, day, float(seconds), actual_refund),
+                )
+                if actual_refund > 0:
+                    self.db.execute("""
+                        UPDATE daily_usage SET seconds = MAX(0.0, seconds - ?)
+                        WHERE person_id=? AND day=?
+                    """, (actual_refund, person_id, day))
+            else:
+                self.db.execute("""
+                    UPDATE daily_usage SET seconds = MAX(0.0, seconds - ?)
+                    WHERE person_id=? AND day=?
+                """, (float(seconds), person_id, day))
         return self.used(person_id, day)
 
     def bonus(self, person_id: int, day: Optional[str] = None) -> int:
