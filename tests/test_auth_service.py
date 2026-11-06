@@ -119,5 +119,75 @@ class TestAuthService(unittest.TestCase):
             self.assertTrue(probe_camera_access(0))
 
 
+
+    def test_authenticator_anti_spoofing_blocks_static_photo(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test_spoof.sqlite3"
+            store = Storage(db_path)
+            try:
+                pid = store.add_person("Filho Teste", 120)
+                dummy_vec = np.ones(128, dtype=np.float32)
+                store.add_embedding(pid, dummy_vec)
+            finally:
+                store.close()
+
+            # Mock de face com landmarks perfeitamente estáticos (foto de celular)
+            static_face = [100.0, 100.0, 150.0, 180.0, 130.0, 140.0, 190.0, 140.0, 160.0, 170.0, 140.0, 220.0, 180.0, 220.0, 0.95]
+            fake_rec = MagicMock()
+            fake_rec.faces.return_value = [static_face]
+            fake_rec.features.return_value = dummy_vec
+            fake_rec.identify.return_value = (pid, 0.92)
+
+            auth = FaceAuthenticator(Path("models"), db_path, recognizer=fake_rec)
+            dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            mock_cap = MagicMock()
+            mock_cap.isOpened.return_value = True
+            mock_cap.read.return_value = (True, dummy_frame)
+
+            with patch("cv2.VideoCapture", return_value=mock_cap), patch("facekids.auth_service.save_child_photo"):
+                status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
+
+            # Deve ser barrado pelo Anti-Spoofing
+            self.assertEqual(status, "DENY_SPOOF")
+            self.assertIn("Apresente um rosto vivo", data.get("message", ""))
+            self.assertEqual(data.get("reason"), "SPOOF_STATIC_IMAGE")
+
+    def test_authenticator_allows_live_face_with_micro_movement(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test_live.sqlite3"
+            store = Storage(db_path)
+            try:
+                pid = store.add_person("Filho Vivo", 120)
+                dummy_vec = np.ones(128, dtype=np.float32)
+                store.add_embedding(pid, dummy_vec)
+            finally:
+                store.close()
+
+            # Mock gerando variação fisiológica natural entre os frames
+            rng = np.random.RandomState(42)
+            def generate_live_face(*args, **kwargs):
+                f = [100.0, 100.0, 150.0, 180.0, 130.0, 140.0, 190.0, 140.0, 160.0, 170.0, 140.0, 220.0, 180.0, 220.0, 0.95]
+                f[4] += float(rng.uniform(-1.5, 1.5))
+                f[6] += float(rng.uniform(-1.5, 1.5))
+                f[8] += float(rng.uniform(-1.0, 1.0))
+                return [f]
+
+            fake_rec = MagicMock()
+            fake_rec.faces.side_effect = generate_live_face
+            fake_rec.features.return_value = dummy_vec
+            fake_rec.identify.return_value = (pid, 0.92)
+
+            auth = FaceAuthenticator(Path("models"), db_path, recognizer=fake_rec)
+            dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            mock_cap = MagicMock()
+            mock_cap.isOpened.return_value = True
+            mock_cap.read.return_value = (True, dummy_frame)
+
+            with patch("cv2.VideoCapture", return_value=mock_cap), patch("facekids.auth_service.save_child_photo"):
+                status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
+
+            self.assertEqual(status, "ALLOW")
+            self.assertEqual(data["child_name"], "Filho Vivo")
+
 if __name__ == "__main__":
     unittest.main()

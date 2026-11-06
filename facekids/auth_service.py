@@ -33,6 +33,7 @@ import numpy as np
 
 from .children_pilot import child_pilot_database
 from .recognition import Recognizer
+from .liveness import PassiveLivenessDetector
 from .storage import Storage
 from .avatar_utils import save_child_photo
 from .windows_pipe_api import configure_kernel32
@@ -198,6 +199,8 @@ class FaceAuthenticator:
             best_face_box = None
             best_detected_ids: list[int] = []
             best_face_count: int = 0
+            candidate_face_history: list = []
+            liveness_detector = PassiveLivenessDetector(min_samples=2)
 
             try:
                 while time.monotonic() < deadline:
@@ -236,6 +239,8 @@ class FaceAuthenticator:
                                 best_face_box = candidate_face_box
                                 best_detected_ids = list(current_frame_detected_ids)
                                 best_face_count = len(faces)
+                                if candidate_face_box is not None:
+                                    candidate_face_history.append(candidate_face_box)
                                 if consecutive_matches >= 2:
                                     break
                             else:
@@ -245,6 +250,7 @@ class FaceAuthenticator:
                                 best_face_box = candidate_face_box
                                 best_detected_ids = list(current_frame_detected_ids)
                                 best_face_count = len(faces)
+                                candidate_face_history = [candidate_face_box] if candidate_face_box is not None else []
                         else:
                             best_candidate = None
                             consecutive_matches = 0
@@ -256,6 +262,24 @@ class FaceAuthenticator:
                 return "DENY_UNKNOWN", {"message": "Rosto desconhecido ou instavel"}
 
             child_name = names.get(best_candidate, f"Crianca {best_candidate}")
+
+            if liveness_detector.can_evaluate(candidate_face_history):
+                liveness_result = liveness_detector.evaluate_sequence(candidate_face_history)
+                if not liveness_result.is_live and liveness_result.reason in ("SPOOF_STATIC_IMAGE", "SPOOF_RIGID_PLANAR_MOTION"):
+                    logger.warning(
+                        "Reconhecimento facial bloqueado por Anti-Spoofing: %s (amostras=%d, conf=%.2f) para candidato %s",
+                        liveness_result.reason,
+                        len(candidate_face_history),
+                        liveness_result.confidence,
+                        child_name,
+                    )
+                    return "DENY_SPOOF", {
+                        "child_id": best_candidate,
+                        "child_name": child_name,
+                        "remaining": 0,
+                        "message": "Apresente um rosto vivo diante da webcam",
+                        "reason": liveness_result.reason,
+                    }
 
             # 1. Verificar horario permitido (toque de recolher)
             is_curfew, curfew_msg = store.is_curfew_active()
