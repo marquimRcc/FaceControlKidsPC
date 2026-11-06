@@ -119,6 +119,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_child_add(body)
         elif path == "/api/camera/enroll/start":
             self.handle_camera_enroll_start(body)
+        elif path == "/api/settings/pin":
+            self.handle_settings_pin(body)
         else:
             self.send_json({"error": "Endpoint POST desconhecido"}, 404)
 
@@ -179,6 +181,21 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 return
             valid = verify_pin(pin, stored)
             self.send_json({"ok": valid, "error": None if valid else "PIN incorreto."})
+        finally:
+            store.close()
+
+    def handle_settings_pin(self, data: Dict[str, Any]) -> None:
+        pin = str(data.get("pin", "")).strip()
+        if not pin or len(pin) < 4:
+            self.send_json({"ok": False, "error": "PIN precisa ter de 4 a 6 digitos."}, 400)
+            return
+        if not DEFAULT_DB_FILE.exists():
+            self.send_json({"ok": False, "error": "Banco de dados ainda nao inicializado."}, 400)
+            return
+        store = Storage(DEFAULT_DB_FILE)
+        try:
+            store.set_setting(AUTH_SETTING, hash_pin(pin))
+            self.send_json({"ok": True, "message": "PIN atualizado com sucesso."})
         finally:
             store.close()
 

@@ -159,13 +159,17 @@ async function runLiveDiagnostics() {
 
 async function syncDashboardData() {
   const data = await FaceKidsAPI.getDashboard();
-  if (!data || !data.children || data.children.length === 0) return;
+  if (!data) return;
 
   if (data.summary) {
     const activeStat = document.getElementById("statActiveCount");
     if (activeStat) activeStat.innerText = data.summary.active_children;
     const usedStat = document.getElementById("statTotalUsed");
     if (usedStat) usedStat.innerText = data.summary.total_used_formatted;
+  }
+
+  if (typeof renderChildrenCards === "function") {
+    renderChildrenCards(data.children || []);
   }
 }
 

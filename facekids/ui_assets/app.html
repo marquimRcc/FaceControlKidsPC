@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FaceKids — One-Click Wizard & Painel Administrativo</title>
+  <title>FaceKids — Controle Parental por Reconhecimento Facial</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
@@ -26,9 +26,8 @@
       overflow-x: hidden;
     }
 
-    /* Glassmorphism custom classes */
     .glass-panel {
-      background: rgba(17, 24, 39, 0.7);
+      background: rgba(17, 24, 39, 0.75);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.08);
@@ -49,17 +48,6 @@
       box-shadow: 0 0 15px -3px rgba(6, 182, 212, 0.25);
     }
 
-    /* Shimmer and pulse effects */
-    @keyframes pulseScan {
-      0% { top: 0%; opacity: 0.8; }
-      50% { opacity: 1; }
-      100% { top: 100%; opacity: 0.8; }
-    }
-
-    .scanner-line {
-      animation: pulseScan 2.4s ease-in-out infinite alternate;
-    }
-
     /* Custom scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
@@ -76,12 +64,10 @@
       background: #334155;
     }
 
-    /* Circular progress transition */
     .circle-progress {
       transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* Shake animation for invalid PIN */
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
       20%, 60% { transform: translateX(-8px); }
@@ -94,35 +80,24 @@
 </head>
 <body class="min-h-screen bg-[var(--background)] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white">
 
-  <!-- TOP PROTOCOL BAR (Switcher & Status) -->
-  <header class="w-full border-b border-[var(--border)] bg-[#0c1222]/90 backdrop-blur-md sticky top-0 z-40 px-4 py-2.5 flex items-center justify-between text-xs text-slate-400">
+  <!-- TOP HEADER (Produção Limpa) -->
+  <header class="w-full border-b border-[var(--border)] bg-[#0c1222]/90 backdrop-blur-md sticky top-0 z-40 px-5 py-3 flex items-center justify-between text-xs text-slate-400">
     <div class="flex items-center space-x-3">
       <div class="flex items-center space-x-2">
         <span class="text-xl">🛡️</span>
-        <span class="font-bold text-sm tracking-wide text-white">Face<span class="text-cyan-400">Kids</span></span>
+        <span class="font-bold text-base tracking-wide text-white">Face<span class="text-cyan-400">Kids</span></span>
       </div>
-      <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-medium flex items-center space-x-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse inline-block"></span>
-        <span>Conceito A: One-Click Wizard</span>
+      <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-medium flex items-center space-x-1.5 text-xs">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+        <span id="serviceStatusLabel">Proteção Ativa</span>
       </span>
-      <span class="hidden md:inline-block text-slate-500">|</span>
-      <span class="hidden md:inline-block text-slate-400">Windows Parental Control Daemon v2.4</span>
     </div>
 
-    <!-- Quick Switcher to Jump Flows for Demo Reviewer -->
-    <div class="flex items-center space-x-2">
-      <div class="bg-slate-900/80 p-0.5 rounded-lg border border-slate-700/60 flex items-center">
-        <button id="viewBtnWizard" onclick="switchMainView('wizard')" class="px-3 py-1 rounded-md text-xs font-medium transition-all bg-cyan-500 text-slate-950 shadow-sm font-semibold">
-          🚀 Wizard Instalação
-        </button>
-        <button id="viewBtnDashboard" onclick="switchMainView('dashboard')" class="px-3 py-1 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white">
-          📊 Painel Admin
-        </button>
-      </div>
-
-      <!-- Lock Screen Overlay Trigger -->
-      <button onclick="openLockScreen()" title="Bloquear Painel (Exigir PIN)" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 transition-colors border border-slate-700">
-        🔒
+    <div class="flex items-center space-x-3">
+      <div id="liveClock" class="font-mono text-xs text-slate-400 hidden sm:block"></div>
+      <button id="lockScreenBtn" onclick="openLockScreen()" title="Bloquear Painel (Exigir PIN)" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 transition-colors border border-slate-700 flex items-center space-x-1.5 text-xs font-semibold">
+        <span>🔒</span>
+        <span>Bloquear</span>
       </button>
     </div>
   </header>
@@ -131,997 +106,325 @@
   <main class="flex-1 flex flex-col relative overflow-hidden">
 
     <!-- ======================================================== -->
-    <!-- VIEW 1: INSTALLATION FLOW (WIZARD - 5 STEPS) -->
+    <!-- VIEW 1: WIZARD DE INSTALACAO (3 PASSOS EXPRESSOS)        -->
     <!-- ======================================================== -->
     <section id="wizardView" class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500 relative">
-      <!-- Background Ambient Glow -->
       <div class="absolute w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[130px] -top-32 -left-32 pointer-events-none"></div>
       <div class="absolute w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] -bottom-20 -right-20 pointer-events-none"></div>
 
-      <!-- Wizard Main Container -->
       <div class="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 relative shadow-2xl overflow-hidden border border-slate-700/60 glow-cyan-sm">
         
-        <!-- Wizard Top Indicator -->
-        <div class="flex items-center justify-between mb-8 pb-4 border-b border-slate-800/80">
+        <!-- Header do Wizard -->
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
           <div class="flex items-center space-x-2">
-            <span class="text-2xl">🛡️</span>
+            <span class="text-2xl">⚡</span>
             <div>
-              <h2 class="text-sm font-bold text-white tracking-wider uppercase text-cyan-400">Instalação Expressa</h2>
-              <p class="text-xs text-slate-400">Passo <span id="currentStepNumber">1</span> de 5</p>
+              <h2 class="text-sm font-bold tracking-wider uppercase text-cyan-400">Instalação Expressa</h2>
+              <p class="text-xs text-slate-400">Passo <span id="currentStepNumber">1</span> de 3</p>
             </div>
           </div>
-
-          <!-- Step Dots Indicator -->
-          <div class="flex items-center space-x-1.5" id="stepDotsContainer">
-            <div class="step-dot w-6 h-2 rounded-full bg-cyan-400 transition-all duration-300"></div>
-            <div class="step-dot w-2 h-2 rounded-full bg-slate-700 transition-all duration-300"></div>
-            <div class="step-dot w-2 h-2 rounded-full bg-slate-700 transition-all duration-300"></div>
-            <div class="step-dot w-2 h-2 rounded-full bg-slate-700 transition-all duration-300"></div>
-            <div class="step-dot w-2 h-2 rounded-full bg-slate-700 transition-all duration-300"></div>
+          <!-- Dots de Progresso -->
+          <div class="flex items-center space-x-2">
+            <div id="dotStep1" class="w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all"></div>
+            <div id="dotStep2" class="w-2.5 h-2.5 rounded-full bg-slate-700 transition-all"></div>
+            <div id="dotStep3" class="w-2.5 h-2.5 rounded-full bg-slate-700 transition-all"></div>
           </div>
         </div>
 
-        <!-- Dynamic Step Content Wrapper -->
-        <div id="wizardStepsWrapper" class="relative min-h-[380px] flex flex-col justify-between">
+        <!-- PASSO 1: BOAS-VINDAS -->
+        <div id="wizardStep1" class="wizard-step flex flex-col items-center text-center space-y-6 transition-all duration-300">
+          <div class="w-20 h-20 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-4xl shadow-inner">
+            🛡️
+          </div>
+          <div class="space-y-2">
+            <h1 class="text-2xl font-black text-white">Instalar o FaceKids</h1>
+            <p class="text-sm text-slate-400 max-w-sm mx-auto">
+              Controle parental inteligente com desbloqueio facial biométrico e cotas de tempo para o Windows.
+            </p>
+          </div>
 
-          <!-- ---------------------------------------------------- -->
-          <!-- STEP 1: WELCOME (One-Click Start) -->
-          <!-- ---------------------------------------------------- -->
-          <div id="wizardStep1" class="wizard-step flex flex-col items-center text-center justify-center space-y-6 py-4 transition-all duration-300">
-            <!-- Animated Shield Icon -->
-            <div class="relative group">
-              <div class="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600 to-blue-500 p-0.5 glow-cyan transition-transform group-hover:scale-105 duration-300">
-                <div class="w-full h-full bg-slate-950/80 rounded-[22px] flex items-center justify-center backdrop-blur-sm">
-                  <span class="text-5xl filter drop-shadow">🛡️</span>
-                </div>
-              </div>
-              <span class="absolute -bottom-1 -right-1 bg-cyan-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-lg">v2.4</span>
+          <div class="w-full space-y-2.5 text-xs text-left bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-emerald-400">✓</span>
+              <span>Sem senha fixa: credenciais dinâmicas de alta segurança</span>
             </div>
-
-            <!-- Copy -->
-            <div class="space-y-2 max-w-md">
-              <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                Instale o <span class="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">FaceKids</span> em 1 Clique
-              </h1>
-              <p class="text-sm text-slate-400 leading-relaxed">
-                Proteção inteligente com reconhecimento facial e cotas de tempo para o Windows. Sem burocracia ou configurações manuais complexas.
-              </p>
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-emerald-400">✓</span>
+              <span>100% Local e Privado: nenhum dado ou foto sai do seu PC</span>
             </div>
-
-            <!-- Value Props Badges -->
-            <div class="grid grid-cols-3 gap-2 w-full text-left py-1 text-xs">
-              <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl flex items-center space-x-2">
-                <span class="text-cyan-400 text-base">⚡</span>
-                <span class="text-slate-300 font-medium text-[11px]">Zero formulários</span>
-              </div>
-              <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl flex items-center space-x-2">
-                <span class="text-cyan-400 text-base">📷</span>
-                <span class="text-slate-300 font-medium text-[11px]">Auto-detecta câmera</span>
-              </div>
-              <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl flex items-center space-x-2">
-                <span class="text-cyan-400 text-base">🔒</span>
-                <span class="text-slate-300 font-medium text-[11px]">100% Local & Privado</span>
-              </div>
-            </div>
-
-            <!-- Big 1-Click CTA -->
-            <div class="w-full pt-2">
-              <button onclick="startAutoDetectionStep()" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-500 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center space-x-2 group">
-                <span>Instalar FaceKids Agora</span>
-                <span class="transition-transform group-hover:translate-x-1 font-mono text-lg">⚡</span>
-              </button>
-              <p class="text-[11px] text-slate-500 mt-2">Detecção automática de conta Windows e câmera integrada</p>
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-emerald-400">✓</span>
+              <span>Proteção anti-burla com verificação automática de presença</span>
             </div>
           </div>
 
-          <!-- ---------------------------------------------------- -->
-          <!-- STEP 2: AUTO-DETECTION -->
-          <!-- ---------------------------------------------------- -->
-          <div id="wizardStep2" class="wizard-step hidden flex flex-col space-y-5 transition-all duration-300">
-            <div class="text-left space-y-1">
-              <div class="inline-flex items-center space-x-2 text-cyan-400 text-xs font-semibold uppercase tracking-wider">
-                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-                <span>Varredura do Sistema</span>
-              </div>
-              <h2 class="text-xl font-bold text-white">Preparando seu computador</h2>
-              <p class="text-xs text-slate-400">Verificamos os requisitos de hardware e do Windows automaticamente.</p>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="w-full bg-slate-900/90 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
-              <div id="detectionProgressBar" class="bg-gradient-to-r from-cyan-500 to-teal-400 h-full rounded-full transition-all duration-500 w-1/4"></div>
-            </div>
-
-            <!-- Detection Checklist Items -->
-            <div class="space-y-3 py-1">
-              <!-- Item 1: Windows Account -->
-              <div id="checkItemAccount" class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800 transition-all">
-                <div class="flex items-center space-x-3">
-                  <div id="checkIconAccount" class="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-sm">
-                    <span class="animate-spin text-cyan-400">⏳</span>
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-semibold text-white">Conta Windows "Filhos"</h4>
-                    <p id="checkSubAccount" class="text-xs text-slate-400">Procurando perfil local padrão...</p>
-                  </div>
-                </div>
-                <div id="checkBadgeAccount" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-medium">
-                  Verificando...
-                </div>
-              </div>
-
-              <!-- Item 2: Camera Hardware -->
-              <div id="checkItemCamera" class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800 transition-all">
-                <div class="flex items-center space-x-3">
-                  <div id="checkIconCamera" class="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-sm">
-                    <span class="text-slate-600">⏳</span>
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-semibold text-white">Câmera & Webcam HD</h4>
-                    <p id="checkSubCamera" class="text-xs text-slate-400">Aguardando verificação...</p>
-                  </div>
-                </div>
-                <div id="checkBadgeCamera" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-medium">
-                  Na fila
-                </div>
-              </div>
-
-              <!-- Item 3: AI Facial Engine / Python -->
-              <div id="checkItemAI" class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800 transition-all">
-                <div class="flex items-center space-x-3">
-                  <div id="checkIconAI" class="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-sm">
-                    <span class="text-slate-600">⏳</span>
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-semibold text-white">Motor Biométrico Local (IA)</h4>
-                    <p id="checkSubAI" class="text-xs text-slate-400">Aguardando verificação...</p>
-                  </div>
-                </div>
-                <div id="checkBadgeAI" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-medium">
-                  Na fila
-                </div>
-              </div>
-            </div>
-
-            <!-- Simulated Warning Box (can be toggled or resolved with 1 click) -->
-            <div id="detectionWarningBox" class="hidden p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-              <div class="flex items-center space-x-2.5">
-                <span class="text-amber-400 text-xl">⚠️</span>
-                <div>
-                  <p class="text-xs font-semibold text-amber-200">Aviso: Conta "Filhos" não configurada ainda</p>
-                  <p class="text-[11px] text-amber-300/80">Podemos criar uma conta padrão isolada agora.</p>
-                </div>
-              </div>
-              <button onclick="resolveAutoFix()" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-sm transition-all flex items-center space-x-1">
-                <span>Corrigir Auto</span>
-                <span>✨</span>
-              </button>
-            </div>
-
-            <!-- Bottom Navigation -->
-            <div class="flex items-center justify-between pt-2">
-              <button onclick="goToStep(1)" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold transition-all">
-                ← Voltar
-              </button>
-              <button id="step2NextBtn" disabled onclick="goToStep(3)" class="px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs opacity-50 cursor-not-allowed hover:bg-cyan-400 shadow-md shadow-cyan-500/20 transition-all flex items-center space-x-1.5">
-                <span>Continuar para Criar PIN</span>
-                <span>→</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- ---------------------------------------------------- -->
-          <!-- STEP 3: CREATE PIN (Phone Lockscreen Style Pad) -->
-          <!-- ---------------------------------------------------- -->
-          <div id="wizardStep3" class="wizard-step hidden flex flex-col space-y-4 transition-all duration-300">
-            <div class="text-center space-y-1">
-              <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 mx-auto flex items-center justify-center text-cyan-400 text-xl mb-1">
-                🔑
-              </div>
-              <h2 class="text-xl font-bold text-white">Crie o PIN dos Pais</h2>
-              <p class="text-xs text-slate-400 max-w-sm mx-auto">
-                Substitui senhas longas. Use este PIN de 4 dígitos para pausar o bloqueio ou conceder tempo extra.
-              </p>
-            </div>
-
-            <!-- PIN Visual Dots Slot -->
-            <div id="pinDotsWrapper" class="flex justify-center items-center space-x-4 py-2">
-              <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all duration-200"></div>
-              <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all duration-200"></div>
-              <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all duration-200"></div>
-              <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all duration-200"></div>
-            </div>
-
-            <!-- Strength Indicator -->
-            <div class="w-48 mx-auto space-y-1 text-center">
-              <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div id="pinStrengthBar" class="h-full bg-slate-700 w-0 transition-all duration-300 rounded-full"></div>
-              </div>
-              <span id="pinStrengthLabel" class="text-[10px] text-slate-500 block font-medium">Digite 4 dígitos</span>
-            </div>
-
-            <!-- Modern Phone Pad Grid -->
-            <div class="max-w-[240px] mx-auto grid grid-cols-3 gap-2.5 pt-1">
-              <button onclick="pressPinKey('1')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">1<span class="text-[8px] text-slate-500 -mt-1 font-normal">&nbsp;</span></button>
-              <button onclick="pressPinKey('2')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">2<span class="text-[8px] text-slate-500 -mt-1 font-normal">ABC</span></button>
-              <button onclick="pressPinKey('3')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">3<span class="text-[8px] text-slate-500 -mt-1 font-normal">DEF</span></button>
-              <button onclick="pressPinKey('4')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">4<span class="text-[8px] text-slate-500 -mt-1 font-normal">GHI</span></button>
-              <button onclick="pressPinKey('5')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">5<span class="text-[8px] text-slate-500 -mt-1 font-normal">JKL</span></button>
-              <button onclick="pressPinKey('6')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">6<span class="text-[8px] text-slate-500 -mt-1 font-normal">MNO</span></button>
-              <button onclick="pressPinKey('7')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">7<span class="text-[8px] text-slate-500 -mt-1 font-normal">PQRS</span></button>
-              <button onclick="pressPinKey('8')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">8<span class="text-[8px] text-slate-500 -mt-1 font-normal">TUV</span></button>
-              <button onclick="pressPinKey('9')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">9<span class="text-[8px] text-slate-500 -mt-1 font-normal">WXYZ</span></button>
-              <button onclick="clearPin()" class="h-11 rounded-xl bg-slate-900/40 hover:bg-slate-800 active:scale-95 text-slate-400 hover:text-white text-xs font-semibold border border-slate-800 transition-all flex items-center justify-center">Limpar</button>
-              <button onclick="pressPinKey('0')" class="h-11 rounded-xl bg-slate-900/80 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all flex flex-col items-center justify-center">0<span class="text-[8px] text-slate-500 -mt-1 font-normal">+</span></button>
-              <button onclick="backspacePin()" class="h-11 rounded-xl bg-slate-900/40 hover:bg-slate-800 active:scale-95 text-slate-400 hover:text-white text-base border border-slate-800 transition-all flex items-center justify-center">⌫</button>
-            </div>
-
-            <!-- Bottom Navigation -->
-            <div class="flex items-center justify-between pt-3">
-              <button onclick="goToStep(2)" class="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold transition-all">
-                ← Voltar
-              </button>
-              <button id="step3NextBtn" disabled onclick="goToStep(4)" class="px-5 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs opacity-50 cursor-not-allowed hover:bg-cyan-400 shadow-md shadow-cyan-500/20 transition-all flex items-center space-x-1.5">
-                <span>Salvar PIN & Continuar</span>
-                <span>→</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- ---------------------------------------------------- -->
-          <!-- STEP 4: FIRST CHILD SETUP (Webcam Scan Simulation) -->
-          <!-- ---------------------------------------------------- -->
-          <div id="wizardStep4" class="wizard-step hidden flex flex-col space-y-4 transition-all duration-300">
-            <div class="text-left space-y-1">
-              <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Perfil Inicial</span>
-              <h2 class="text-xl font-bold text-white">Cadastrar Primeiro Filho(a)</h2>
-              <p class="text-xs text-slate-400">Associe o rosto e defina a cota de uso diário do computador.</p>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center py-1">
-              <!-- Left: Webcam Simulation View -->
-              <div class="flex flex-col items-center text-center space-y-2">
-                <div class="relative w-36 h-36 rounded-full p-1 bg-gradient-to-tr from-cyan-500 via-blue-500 to-teal-400 shadow-lg glow-cyan-sm overflow-hidden group">
-                  <!-- Simulated Camera Stream / Circle Face -->
-                  <div id="cameraPreviewArea" class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center relative overflow-hidden">
-                    <!-- Live Camera Stream Image -->
-                    <img id="liveCamFeed" src="/api/camera/stream" class="w-full h-full object-cover rounded-full absolute inset-0 z-0" onerror="this.style.display='none'; document.getElementById('camAvatarPlaceholder').style.display='flex';" onload="document.getElementById('camAvatarPlaceholder').style.display='none';">
-                    <!-- Gradient placeholder avatar (fallback) -->
-                    <div id="camAvatarPlaceholder" class="w-full h-full bg-gradient-to-b from-indigo-950 via-slate-900 to-cyan-950 flex flex-col items-center justify-center z-10">
-                      <span class="text-4xl filter drop-shadow">👦</span>
-                      <span class="text-[9px] text-cyan-400 font-mono mt-1">Câmera Ativa</span>
-                    </div>
-
-                    <!-- Scanning Laser Beam -->
-                    <div id="scanLaser" class="absolute inset-x-0 h-0.5 bg-cyan-400 scanner-line shadow-[0_0_10px_#22d3ee]"></div>
-
-                    <!-- Face bounding reticle -->
-                    <div class="absolute inset-4 border border-cyan-400/40 rounded-full border-dashed animate-spin" style="animation-duration: 20s;"></div>
-
-                    <!-- Captured Snapshot Confirmation Badge -->
-                    <div id="photoCapturedBadge" class="hidden absolute inset-0 bg-cyan-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-cyan-300">
-                      <span class="text-3xl">✓</span>
-                      <span class="text-[10px] font-bold uppercase mt-1">Rosto Capturado</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Snapshot Button -->
-                <button id="snapPhotoButton" onclick="simulatePhotoCapture()" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all flex items-center space-x-1.5 shadow-sm">
-                  <span>📸</span>
-                  <span id="snapButtonText">Tirar Foto Facial</span>
-                </button>
-                <span id="photoStatusText" class="text-[10px] text-slate-400">Posicione a criança em frente à tela</span>
-              </div>
-
-              <!-- Right: Name & Initial Quota Input -->
-              <div class="space-y-3">
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">Nome da Criança</label>
-                  <input id="wizardChildName" type="text" value="Lucas" class="w-full px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 transition-colors" placeholder="Ex: Lucas, Sofia...">
-                </div>
-
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">Limite Diário de Tela</label>
-                  <div class="grid grid-cols-3 gap-1.5 text-center">
-                    <button type="button" onclick="selectQuotaPreset(this, '1h 00m')" class="quota-btn px-2 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:border-cyan-500 transition-all">
-                      1h 00m
-                    </button>
-                    <button type="button" onclick="selectQuotaPreset(this, '2h 00m')" class="quota-btn px-2 py-1.5 rounded-lg border border-cyan-400 bg-cyan-500/10 text-xs text-cyan-300 font-bold hover:border-cyan-400 transition-all">
-                      2h 00m ⭐
-                    </button>
-                    <button type="button" onclick="selectQuotaPreset(this, '3h 00m')" class="quota-btn px-2 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:border-cyan-500 transition-all">
-                      3h 00m
-                    </button>
-                  </div>
-                  <p class="text-[10px] text-slate-500 mt-1">Poderá ser ajustado ou pausado a qualquer momento.</p>
-                </div>
-
-                <div class="p-2.5 rounded-xl bg-slate-900/50 border border-slate-800 text-[11px] text-slate-400 flex items-start space-x-2">
-                  <span class="text-cyan-400 mt-0.5">ℹ️</span>
-                  <span>O reconhecimento opera a cada 30 segundos em segundo plano de forma silenciosa.</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Bottom Navigation -->
-            <div class="flex items-center justify-between pt-3">
-              <button onclick="goToStep(3)" class="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold transition-all">
-                ← Voltar
-              </button>
-              <button onclick="finishInstallation()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/25 transition-all flex items-center space-x-1.5">
-                <span>Concluir Instalação</span>
-                <span>✨</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- ---------------------------------------------------- -->
-          <!-- STEP 5: DONE! (Confetti & Success Animation) -->
-          <!-- ---------------------------------------------------- -->
-          <div id="wizardStep5" class="wizard-step hidden flex flex-col items-center text-center justify-center space-y-6 py-4 relative transition-all duration-300">
-            <!-- Canvas Confetti Container Overlay -->
-            <canvas id="confettiCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
-
-            <!-- Success Big Shield Icon -->
-            <div class="relative z-20">
-              <div class="w-24 h-24 rounded-3xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-500 p-1 glow-cyan animate-bounce" style="animation-duration: 2.2s;">
-                <div class="w-full h-full bg-slate-950/90 rounded-[20px] flex items-center justify-center">
-                  <span class="text-5xl">🎉</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Title & Feedback -->
-            <div class="space-y-2 max-w-md relative z-20">
-              <h2 class="text-2xl sm:text-3xl font-extrabold text-white">Tudo Pronto e Protegido!</h2>
-              <p class="text-sm text-slate-300 leading-relaxed">
-                O FaceKids já está ativo em segundo plano no Windows. O tempo de tela e o bloqueio facial estão configurados.
-              </p>
-            </div>
-
-            <!-- Installed Summary Card -->
-            <div class="w-full max-w-sm glass-card rounded-2xl p-3.5 text-xs text-left space-y-2 relative z-20 border border-slate-700">
-              <div class="flex items-center justify-between py-1 border-b border-slate-800">
-                <span class="text-slate-400">Conta Windows:</span>
-                <span class="font-semibold text-white flex items-center space-x-1">
-                  <span>Filhos</span>
-                  <span class="text-emerald-400 text-xs">✓ Ativa</span>
-                </span>
-              </div>
-              <div class="flex items-center justify-between py-1 border-b border-slate-800">
-                <span class="text-slate-400">Primeira Criança:</span>
-                <span id="summaryChildName" class="font-semibold text-cyan-300">Lucas (2h 00m)</span>
-              </div>
-              <div class="flex items-center justify-between py-1">
-                <span class="text-slate-400">Segurança dos Pais:</span>
-                <span class="font-semibold text-white">PIN Configurado</span>
-              </div>
-            </div>
-
-            <!-- Open Dashboard CTA -->
-            <div class="w-full relative z-20 pt-2">
-              <button onclick="switchMainView('dashboard')" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 hover:from-cyan-300 hover:to-teal-300 text-slate-950 font-extrabold text-sm shadow-xl shadow-cyan-500/30 transform hover:-translate-y-0.5 transition-all flex items-center justify-center space-x-2">
-                <span>Abrir Painel de Controle</span>
-                <span class="font-mono text-base">🚀</span>
-              </button>
-              <button onclick="goToStep(1)" class="text-[11px] text-slate-500 hover:text-slate-400 mt-2.5 underline">
-                Repetir simulação do Assistente
-              </button>
-            </div>
-          </div>
-
+          <button onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2">
+            <span>Iniciar Instalação em 1 Clique</span>
+            <span>⚡</span>
+          </button>
         </div>
+
+        <!-- PASSO 2: AUTO-DETECCAO -->
+        <div id="wizardStep2" class="wizard-step hidden flex flex-col space-y-6 transition-all duration-300">
+          <div class="text-left space-y-1">
+            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Verificação de Sistema</span>
+            <h2 class="text-xl font-bold text-white">Detectando Pré-requisitos</h2>
+            <p class="text-xs text-slate-400">O FaceKids está preparando os componentes do sistema automaticamente.</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">📷</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Câmera / Webcam</h4>
+                  <p class="text-[10px] text-slate-400">Reconhecimento facial biométrico</p>
+                </div>
+              </div>
+              <span id="diagCameraBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Detectada</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">👤</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Conta Windows 'Filhos'</h4>
+                  <p class="text-[10px] text-slate-400">Ambiente supervisionado com cota</p>
+                </div>
+              </div>
+              <span id="diagUserBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Configurada</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">🧠</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Motor de IA YuNet + SFace</h4>
+                  <p class="text-[10px] text-slate-400">Detecção e embeddings faciais offline</p>
+                </div>
+              </div>
+              <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Pronto</span>
+            </div>
+          </div>
+
+          <button onclick="goToStep3()" class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+            Continuar para Criar PIN →
+          </button>
+        </div>
+
+        <!-- PASSO 3: CRIAR PIN DOS PAIS -->
+        <div id="wizardStep3" class="wizard-step hidden flex flex-col space-y-6 transition-all duration-300">
+          <div class="text-left space-y-1">
+            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
+            <h2 class="text-xl font-bold text-white">Crie seu PIN de Administrador</h2>
+            <p class="text-xs text-slate-400">Digite um PIN numérico de 4 a 6 dígitos para proteger o painel.</p>
+          </div>
+
+          <!-- PIN Display -->
+          <div class="flex flex-col items-center space-y-4 py-2">
+            <div id="pinDotsDisplay" class="flex items-center space-x-3">
+              <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+            </div>
+
+            <!-- Teclado Numérico -->
+            <div class="grid grid-cols-3 gap-2.5 w-full max-w-[240px]">
+              <button onclick="pressPinKey('1')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">1</button>
+              <button onclick="pressPinKey('2')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">2</button>
+              <button onclick="pressPinKey('3')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">3</button>
+              <button onclick="pressPinKey('4')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">4</button>
+              <button onclick="pressPinKey('5')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">5</button>
+              <button onclick="pressPinKey('6')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">6</button>
+              <button onclick="pressPinKey('7')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">7</button>
+              <button onclick="pressPinKey('8')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">8</button>
+              <button onclick="pressPinKey('9')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">9</button>
+              <button onclick="clearPinKey()" class="h-12 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
+              <button onclick="pressPinKey('0')" class="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-lg font-bold text-white transition-all active:scale-95">0</button>
+              <button onclick="backspacePinKey()" class="h-12 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
+            </div>
+          </div>
+
+          <button id="finishInstallBtn" onclick="finishInstallation()" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+            Concluir Instalação e Abrir Painel 🚀
+          </button>
+        </div>
+
       </div>
     </section>
 
+
     <!-- ======================================================== -->
-    <!-- VIEW 2: ADMIN PANEL (DASHBOARD) -->
+    <!-- VIEW 2: PAINEL ADMINISTRATIVO (DADOS REAIS / SEM MOCKS)   -->
     <!-- ======================================================== -->
-    <section id="dashboardView" class="flex-1 hidden flex flex-col md:flex-row transition-all duration-300">
+    <section id="dashboardView" class="hidden flex-1 flex flex-col lg:flex-row overflow-hidden">
       
-      <!-- Collapsible Sleek Sidebar -->
-      <aside class="w-full md:w-64 border-b md:border-b-0 md:border-r border-[var(--border)] bg-[#0d1424]/90 backdrop-blur-md flex flex-col justify-between p-4 flex-shrink-0">
-        <div class="space-y-6">
-          <!-- User / Admin Profile Mini -->
-          <div class="flex items-center space-x-3 p-2.5 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-sm">
-              👨‍👧
+      <!-- SIDEBAR -->
+      <aside class="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-[var(--border)] bg-[#0c1222]/70 p-4 space-y-4 flex flex-col justify-between shrink-0">
+        <div class="space-y-4">
+          <!-- Profile Badge -->
+          <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-lg shadow-md">
+              👨‍👩‍👧
             </div>
-            <div class="overflow-hidden">
-              <h3 class="text-xs font-bold text-white truncate">Pai / Administrador</h3>
-              <span class="inline-flex items-center space-x-1 text-[10px] text-emerald-400">
+            <div>
+              <h3 class="text-xs font-bold text-white">Painel dos Pais</h3>
+              <span class="text-[10px] text-emerald-400 font-medium flex items-center space-x-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span>Modo Protegido</span>
+                <span>Modo Supervisionado</span>
               </span>
             </div>
           </div>
 
           <!-- Navigation Links -->
           <nav class="space-y-1">
-            <button onclick="switchAdminTab('overview')" id="tabBtn-overview" class="admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-              <span class="text-base">📊</span>
+            <button onclick="switchTab('overview')" id="navTabOverview" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all">
+              <span>📊</span>
               <span>Visão Geral</span>
             </button>
-            <button onclick="switchAdminTab('children')" id="tabBtn-children" class="admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span class="text-base">👥</span>
+            <button onclick="switchTab('children')" id="navTabChildren" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>👶</span>
               <span>Crianças Cadastradas</span>
-              <span class="ml-auto bg-slate-800 text-slate-300 text-[10px] px-1.5 py-0.5 rounded-full">2</span>
             </button>
-            <button onclick="switchAdminTab('schedules')" id="tabBtn-schedules" class="admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span class="text-base">⏰</span>
-              <span>Horários & Limites</span>
+            <button onclick="switchTab('camera')" id="navTabCamera" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>📹</span>
+              <span>Monitor da Câmera</span>
             </button>
-            <button onclick="switchAdminTab('history')" id="tabBtn-history" class="admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span class="text-base">📜</span>
-              <span>Histórico & Logs IA</span>
-            </button>
-            <button onclick="switchAdminTab('settings')" id="tabBtn-settings" class="admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span class="text-base">⚙️</span>
-              <span>Configurações PIN</span>
+            <button onclick="switchTab('settings')" id="navTabSettings" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>⚙️</span>
+              <span>Configurações & PIN</span>
             </button>
           </nav>
         </div>
 
-        <!-- Sidebar Footer Action (Lock & Reopen Wizard) -->
-        <div class="pt-4 border-t border-slate-800/80 space-y-2">
-          <button onclick="openLockScreen()" class="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 text-xs font-medium transition-all flex items-center justify-center space-x-2">
-            <span>🔒</span>
-            <span>Bloquear Painel</span>
-          </button>
-          <button onclick="switchMainView('wizard')" class="w-full py-1.5 px-3 rounded-xl text-slate-500 hover:text-slate-300 text-[11px] transition-all flex items-center justify-center space-x-1">
-            <span>↺</span>
-            <span>Refazer Assistente de Instalação</span>
-          </button>
-        </div>
+        <button onclick="openAddChildModal()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center space-x-1.5">
+          <span>➕</span>
+          <span>Cadastrar Filho(a)</span>
+        </button>
       </aside>
 
-      <!-- Main Dashboard Content Area -->
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <!-- CONTENT AREA -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
 
-        <!-- Top Header Info -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
-          <div>
-            <h1 class="text-xl sm:text-2xl font-extrabold text-white flex items-center space-x-2">
-              <span>Bom dia, Pai/Mãe 👋</span>
-            </h1>
-            <p class="text-xs text-slate-400 mt-0.5">Sexta-feira, 6 de Novembro • Serviço de detecção facial ativo e operando em 60fps</p>
-          </div>
-
-          <div class="flex items-center space-x-2">
-            <!-- Simulated Camera Live Status Pill -->
-            <div class="glass-card px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs border border-slate-700">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span class="text-slate-300 font-medium">Câmera HD Monitorando</span>
+        <!-- TAB: VISAO GERAL -->
+        <div id="tabOverview" class="tab-content space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-xl font-black text-white">Visão Geral da Família</h1>
+              <p class="text-xs text-slate-400">Acompanhe em tempo real o tempo de tela e a presença facial dos filhos.</p>
             </div>
-            <!-- Notification Bell with Popover -->
-            <button onclick="showNotificationToast()" class="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 relative transition-colors" title="Notificações">
-              🔔
-              <span class="w-2 h-2 rounded-full bg-cyan-400 absolute top-1.5 right-1.5"></span>
+            <button onclick="syncDashboardData()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all">
+              🔄 Atualizar
             </button>
           </div>
-        </div>
 
-        <!-- TAB CONTENT 1: OVERVIEW (Default) -->
-        <div id="tabContent-overview" class="admin-tab-content space-y-6">
-          
-          <!-- 3 Stats Cards in a Row -->
+          <!-- Quick Stats Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            
-            <!-- Stat 1: Crianças Ativas -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 hover:border-cyan-500/30 transition-all hover:-translate-y-0.5 group">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-slate-400">Crianças ativas</span>
-                <span class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 text-sm">👥</span>
-              </div>
-              <div class="mt-2 flex items-baseline space-x-2">
-                <span class="text-2xl font-black text-white">2</span>
-                <span class="text-xs text-slate-400 font-normal">perfis cadastrados</span>
-              </div>
-              <div class="mt-2.5 flex items-center space-x-1.5 text-[11px] text-emerald-400 font-medium">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span>Lucas online agora (Roblox)</span>
-              </div>
-            </div>
-
-            <!-- Stat 2: Tempo Usado Hoje -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 hover:border-cyan-500/30 transition-all hover:-translate-y-0.5 group">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-slate-400">Tempo usado hoje</span>
-                <span class="p-2 rounded-xl bg-blue-500/10 text-blue-400 text-sm">⏱️</span>
-              </div>
-              <div class="mt-2 flex items-baseline space-x-2">
-                <span id="statTimeUsedToday" class="text-2xl font-black text-white">1h 23m</span>
-                <span class="text-xs text-slate-400 font-normal">de 3h 30m total</span>
-              </div>
-              <div class="mt-2.5 flex items-center space-x-1.5 text-[11px] text-cyan-400 font-medium">
-                <span>📉 Média semanal: 2h 10m/dia</span>
-              </div>
-            </div>
-
-            <!-- Stat 3: Próximo Limite -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 hover:border-amber-500/30 transition-all hover:-translate-y-0.5 group">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-slate-400">Próximo limite</span>
-                <span class="p-2 rounded-xl bg-amber-500/10 text-amber-400 text-sm">⏳</span>
-              </div>
-              <div class="mt-2 flex items-baseline space-x-2">
-                <span id="statNextLimit" class="text-2xl font-black text-amber-400">em 37min</span>
-                <span class="text-xs text-slate-400 font-normal">Lucas (18:30)</span>
-              </div>
-              <div class="mt-2.5 flex items-center space-x-1.5 text-[11px] text-amber-300 font-medium">
-                <span>⚠️ Aviso prévio em 25min</span>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Section Title: Child Cards Grid -->
-          <div class="space-y-4">
-            <div class="flex items-center justify-between">
+            <div class="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+              <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl">👶</div>
               <div>
-                <h2 class="text-base font-bold text-white">Monitoramento Individual em Tempo Real</h2>
-                <p class="text-xs text-slate-400">Ajuste cotas ou pause o acesso instantaneamente.</p>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Crianças Ativas</span>
+                <h3 id="statActiveCount" class="text-lg font-black text-white">0</h3>
               </div>
-              <button onclick="openAddChildModal()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center space-x-1.5 shadow-sm">
-                <span>+ Adicionar Filho</span>
-              </button>
             </div>
-
-            <!-- 2-COLUMN GRID OF CHILD CARDS -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              
-              <!-- CARD 1: LUCAS (Online & Active) -->
-              <div id="cardLucas" class="glass-panel rounded-3xl p-5 border border-slate-700/80 hover:border-cyan-500/40 transition-all duration-300 shadow-xl relative overflow-hidden group">
-                <!-- Status pill top-right -->
-                <div class="flex items-start justify-between">
-                  <div class="flex items-center space-x-3.5">
-                    <!-- Circular Avatar with Gradient Border -->
-                    <div class="relative">
-                      <div class="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-cyan-400 via-teal-300 to-blue-500 shadow-md">
-                        <div class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden">
-                          <span class="text-2xl">👦</span>
-                        </div>
-                      </div>
-                      <span class="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-950 shadow-sm" title="Online Agora"></span>
-                    </div>
-
-                    <div>
-                      <div class="flex items-center space-x-2">
-                        <h3 class="text-base font-bold text-white">Lucas</h3>
-                        <span class="text-xs text-slate-400">9 anos</span>
-                      </div>
-                      <div class="mt-0.5 flex items-center space-x-2">
-                        <span id="lucasStatusBadge" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                          <span>Online (Roblox)</span>
-                        </span>
-                      </div>
-                      <p class="text-[10px] text-slate-400 mt-1">Última detecção facial: há 14s (99.4%)</p>
-                    </div>
-                  </div>
-
-                  <!-- Quick Settings Icon -->
-                  <button onclick="editChildProfile('Lucas')" class="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors" title="Editar Limites">
-                    ⚙️
-                  </button>
-                </div>
-
-                <!-- Apple Watch Style Time Quota Ring & Stats -->
-                <div class="mt-5 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/90 flex items-center justify-between">
-                  <!-- SVG Circular Progress Ring -->
-                  <div class="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
-                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      <!-- Background Ring -->
-                      <circle cx="50" cy="50" r="40" stroke="currentColor" stroke-width="9" class="text-slate-800 fill-none" />
-                      <!-- Active Progress Ring (69% used = dashoffset ~78) -->
-                      <circle id="lucasProgressRing" cx="50" cy="50" r="40" stroke="currentColor" stroke-width="9" stroke-linecap="round" class="text-cyan-400 fill-none circle-progress" stroke-dasharray="251.2" stroke-dashoffset="78" />
-                    </svg>
-                    <!-- Center label inside ring -->
-                    <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <span id="lucasRemainingPercent" class="text-xs font-black text-white">70%</span>
-                      <span class="text-[8px] text-slate-400 uppercase font-medium">usado</span>
-                    </div>
-                  </div>
-
-                  <!-- Details text -->
-                  <div class="space-y-1.5 pl-4 text-xs flex-1">
-                    <div class="flex justify-between items-center text-slate-300">
-                      <span>Tempo Usado:</span>
-                      <span id="lucasUsedTimeText" class="font-bold text-white">1h 23m</span>
-                    </div>
-                    <div class="flex justify-between items-center text-slate-400">
-                      <span>Cota Permitida:</span>
-                      <span id="lucasTotalQuotaText" class="font-medium text-slate-200">2h 00m</span>
-                    </div>
-                    <div class="flex justify-between items-center pt-1 border-t border-slate-800">
-                      <span class="text-cyan-400 font-semibold">Tempo Restante:</span>
-                      <span id="lucasRemainingTimeText" class="font-bold text-cyan-300">37 min</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Quick Action Buttons -->
-                <div class="mt-4 grid grid-cols-4 gap-2">
-                  <button onclick="addTimeQuota('Lucas', 15)" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    +15min
-                  </button>
-                  <button onclick="addTimeQuota('Lucas', 30)" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    +30min
-                  </button>
-                  <button id="pauseBtnLucas" onclick="togglePauseChild('Lucas')" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    ⏸️ Pausar
-                  </button>
-                  <button onclick="editChildProfile('Lucas')" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition-all text-center">
-                    ✏️ Editar
-                  </button>
-                </div>
+            <div class="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">⏱️</div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tempo Usado Hoje</span>
+                <h3 id="statTotalUsed" class="text-lg font-black text-white">0h 00m</h3>
               </div>
-
-              <!-- CARD 2: SOFIA (Offline / Quase no Limite Demo) -->
-              <div id="cardSofia" class="glass-panel rounded-3xl p-5 border border-slate-700/80 hover:border-cyan-500/40 transition-all duration-300 shadow-xl relative overflow-hidden group">
-                <div class="flex items-start justify-between">
-                  <div class="flex items-center space-x-3.5">
-                    <!-- Circular Avatar with Gradient Border -->
-                    <div class="relative">
-                      <div class="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-pink-500 via-purple-400 to-indigo-500 shadow-md">
-                        <div class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden">
-                          <span class="text-2xl">👧</span>
-                        </div>
-                      </div>
-                      <span class="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-slate-500 border-2 border-slate-950 shadow-sm" title="Offline"></span>
-                    </div>
-
-                    <div>
-                      <div class="flex items-center space-x-2">
-                        <h3 class="text-base font-bold text-white">Sofia</h3>
-                        <span class="text-xs text-slate-400">6 anos</span>
-                      </div>
-                      <div class="mt-0.5 flex items-center space-x-2">
-                        <span id="sofiaStatusBadge" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                          <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                          <span>Offline</span>
-                        </span>
-                      </div>
-                      <p class="text-[10px] text-slate-400 mt-1">Último acesso: Ontem às 19:40</p>
-                    </div>
-                  </div>
-
-                  <!-- Quick Settings Icon -->
-                  <button onclick="editChildProfile('Sofia')" class="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors" title="Editar Limites">
-                    ⚙️
-                  </button>
-                </div>
-
-                <!-- Apple Watch Style Time Quota Ring & Stats -->
-                <div class="mt-5 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/90 flex items-center justify-between">
-                  <!-- SVG Circular Progress Ring (0% used = dashoffset 251.2) -->
-                  <div class="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
-                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      <!-- Background Ring -->
-                      <circle cx="50" cy="50" r="40" stroke="currentColor" stroke-width="9" class="text-slate-800 fill-none" />
-                      <!-- Active Progress Ring (0% used) -->
-                      <circle id="sofiaProgressRing" cx="50" cy="50" r="40" stroke="currentColor" stroke-width="9" stroke-linecap="round" class="text-purple-400 fill-none circle-progress" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
-                    </svg>
-                    <!-- Center label inside ring -->
-                    <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <span id="sofiaRemainingPercent" class="text-xs font-black text-white">0%</span>
-                      <span class="text-[8px] text-slate-400 uppercase font-medium">usado</span>
-                    </div>
-                  </div>
-
-                  <!-- Details text -->
-                  <div class="space-y-1.5 pl-4 text-xs flex-1">
-                    <div class="flex justify-between items-center text-slate-300">
-                      <span>Tempo Usado:</span>
-                      <span id="sofiaUsedTimeText" class="font-bold text-white">0m</span>
-                    </div>
-                    <div class="flex justify-between items-center text-slate-400">
-                      <span>Cota Permitida:</span>
-                      <span id="sofiaTotalQuotaText" class="font-medium text-slate-200">1h 30m</span>
-                    </div>
-                    <div class="flex justify-between items-center pt-1 border-t border-slate-800">
-                      <span class="text-purple-400 font-semibold">Tempo Restante:</span>
-                      <span id="sofiaRemainingTimeText" class="font-bold text-purple-300">1h 30m</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Quick Action Buttons -->
-                <div class="mt-4 grid grid-cols-4 gap-2">
-                  <button onclick="addTimeQuota('Sofia', 15)" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-purple-500 hover:text-white text-purple-400 border border-purple-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    +15min
-                  </button>
-                  <button onclick="addTimeQuota('Sofia', 30)" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-purple-500 hover:text-white text-purple-400 border border-purple-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    +30min
-                  </button>
-                  <button onclick="simulateLoginChild('Sofia')" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-emerald-500 hover:text-slate-950 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all shadow-sm text-center">
-                    🟢 Simular
-                  </button>
-                  <button onclick="editChildProfile('Sofia')" class="py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition-all text-center">
-                    ✏️ Editar
-                  </button>
-                </div>
-              </div>
-
             </div>
-          </div>
-
-          <!-- Real-Time Activity & Webcam Daemon Monitor -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <!-- Simulated Live Cam Feed -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-              <div class="flex items-center justify-between">
-                <h3 class="text-xs font-bold text-white flex items-center space-x-1.5">
-                  <span class="text-cyan-400">📹</span>
-                  <span>Feed da Câmera (Background)</span>
-                </h3>
-                <span class="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-mono">CPU: 0.8%</span>
-              </div>
-              <div class="h-32 rounded-xl bg-slate-950 border border-slate-800 relative flex items-center justify-center overflow-hidden">
-                <img src="/api/camera/stream" class="w-full h-full object-cover absolute inset-0 z-0" onerror="this.style.display='none';">
-                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 z-10 pointer-events-none"></div>
-                <div class="absolute bottom-2 left-2 z-20 text-[9px] font-mono text-cyan-400 bg-slate-900/80 px-2 py-0.5 rounded border border-cyan-500/20">
-                  MONITORAMENTO FACIAL ATIVO
-                </div>
-              </div>
-              <button onclick="triggerSimulatedScan()" class="w-full py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors">
-                Forçar Varredura Facial Imediata
-              </button>
-            </div>
-
-            <!-- Audit Activity Logs -->
-            <div class="lg:col-span-2 glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-              <div class="flex items-center justify-between">
-                <h3 class="text-xs font-bold text-white flex items-center space-x-1.5">
-                  <span class="text-cyan-400">📜</span>
-                  <span>Registro de Eventos Recentes</span>
-                </h3>
-                <span class="text-[10px] text-slate-400">Auto-atualizado</span>
-              </div>
-              <div id="liveActivityLog" class="space-y-2 text-xs font-mono max-h-40 overflow-y-auto pr-1">
-                <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
-                  <span class="text-emerald-400">✓ Lucas detectado na frente do PC</span>
-                  <span class="text-slate-500 text-[10px]">14:48:12</span>
-                </div>
-                <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
-                  <span class="text-cyan-400">ℹ️ Cota diária iniciada: 2h restantes</span>
-                  <span class="text-slate-500 text-[10px]">13:25:00</span>
-                </div>
-                <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
-                  <span class="text-slate-300">🛡️ Daemon FaceKids iniciado com o Windows</span>
-                  <span class="text-slate-500 text-[10px]">13:24:45</span>
-                </div>
+            <div class="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+              <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-xl">🛡️</div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Status do Sistema</span>
+                <h3 class="text-xs font-bold text-emerald-400">Protegido</h3>
               </div>
             </div>
           </div>
 
-        </div>
-
-        <!-- TAB CONTENT 2: CHILDREN (Profiles Management) -->
-        <div id="tabContent-children" class="admin-tab-content hidden space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-base font-bold text-white">Gerenciar Perfis de Crianças</h2>
-              <p class="text-xs text-slate-400">Cadastre fotos, biometria facial e regras de cota para cada filho.</p>
+          <!-- Empty State (Zero Crianças) -->
+          <div id="noChildrenState" class="hidden glass-panel rounded-3xl p-10 text-center flex flex-col items-center justify-center space-y-4 border border-slate-800">
+            <div class="w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl">
+              👶
             </div>
-            <button onclick="openAddChildModal()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center space-x-1.5">
-              <span>+ Novo Filho</span>
+            <div class="space-y-1">
+              <h3 class="text-base font-bold text-white">Nenhum filho cadastrado ainda</h3>
+              <p class="text-xs text-slate-400 max-w-sm mx-auto">
+                Cadastre o perfil e tire a foto facial do seu primeiro filho para que ele possa desbloquear o computador com o rosto.
+              </p>
+            </div>
+            <button onclick="openAddChildModal()" class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center space-x-2">
+              <span>➕</span>
+              <span>Cadastrar Primeiro Filho(a)</span>
             </button>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Child 1 Detail Box -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-              <div class="flex items-center space-x-3">
-                <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-2xl font-bold">
-                  👦
-                </div>
-                <div>
-                  <h4 class="text-sm font-bold text-white">Lucas</h4>
-                  <p class="text-xs text-slate-400">9 anos • 128 pontos biométricos mapeados</p>
-                </div>
-              </div>
-              <div class="p-3 rounded-xl bg-slate-900/80 text-xs space-y-1.5 border border-slate-800">
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Limite Seg-Sex:</span>
-                  <span class="text-white font-medium">2 horas / dia</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Limite Fim de Semana:</span>
-                  <span class="text-white font-medium">3 horas / dia</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Horário de Dormir:</span>
-                  <span class="text-amber-300 font-medium">21:00 (Bloqueio total)</span>
-                </div>
-              </div>
-              <div class="flex space-x-2">
-                <button onclick="editChildProfile('Lucas')" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium transition-colors">
-                  Editar Limites
-                </button>
-                <button onclick="recalibrateChild('Lucas')" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 font-medium transition-colors">
-                  Recalibrar Rosto
-                </button>
-              </div>
-            </div>
-
-            <!-- Child 2 Detail Box -->
-            <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-              <div class="flex items-center space-x-3">
-                <div class="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-2xl font-bold">
-                  👧
-                </div>
-                <div>
-                  <h4 class="text-sm font-bold text-white">Sofia</h4>
-                  <p class="text-xs text-slate-400">6 anos • 128 pontos biométricos mapeados</p>
-                </div>
-              </div>
-              <div class="p-3 rounded-xl bg-slate-900/80 text-xs space-y-1.5 border border-slate-800">
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Limite Seg-Sex:</span>
-                  <span class="text-white font-medium">1 hora e 30 min / dia</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Limite Fim de Semana:</span>
-                  <span class="text-white font-medium">2 horas / dia</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Horário de Dormir:</span>
-                  <span class="text-amber-300 font-medium">20:30 (Bloqueio total)</span>
-                </div>
-              </div>
-              <div class="flex space-x-2">
-                <button onclick="editChildProfile('Sofia')" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium transition-colors">
-                  Editar Limites
-                </button>
-                <button onclick="recalibrateChild('Sofia')" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-purple-400 font-medium transition-colors">
-                  Recalibrar Rosto
-                </button>
-              </div>
-            </div>
-          </div>
+          <!-- Grid de Crianças Dinâmico (Renderizado por JS) -->
+          <div id="childrenCardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
 
-        <!-- TAB CONTENT 3: SCHEDULES & LIMITS -->
-        <div id="tabContent-schedules" class="admin-tab-content hidden space-y-4">
+        <!-- TAB: CRIANCAS CADASTRADAS -->
+        <div id="tabChildren" class="tab-content hidden space-y-6">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-base font-bold text-white">Horários de Acesso Permitidos</h2>
-              <p class="text-xs text-slate-400">Defina os intervalos em que as crianças têm permissão para usar o PC.</p>
+              <h1 class="text-xl font-black text-white">Perfis de Crianças</h1>
+              <p class="text-xs text-slate-400">Gerencie fotos faciais, cotas diárias e permissões de cada filho.</p>
             </div>
-            <button onclick="showToast('Horários salvos com sucesso!')" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all">
-              Salvar Alterações
+            <button onclick="openAddChildModal()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center space-x-1.5">
+              <span>➕</span>
+              <span>Novo Filho(a)</span>
             </button>
           </div>
 
-          <!-- Schedule Matrix Visualization -->
-          <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-            <div class="grid grid-cols-7 gap-2 text-center text-xs">
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-white">Seg</div>
-                <div class="text-[10px] text-cyan-400 mt-1">08:00 - 20:00</div>
-                <div class="mt-2 h-16 bg-cyan-500/20 border border-cyan-500/40 rounded-lg flex items-center justify-center text-[10px] text-cyan-300">2h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-white">Ter</div>
-                <div class="text-[10px] text-cyan-400 mt-1">08:00 - 20:00</div>
-                <div class="mt-2 h-16 bg-cyan-500/20 border border-cyan-500/40 rounded-lg flex items-center justify-center text-[10px] text-cyan-300">2h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-white">Qua</div>
-                <div class="text-[10px] text-cyan-400 mt-1">08:00 - 20:00</div>
-                <div class="mt-2 h-16 bg-cyan-500/20 border border-cyan-500/40 rounded-lg flex items-center justify-center text-[10px] text-cyan-300">2h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-white">Qui</div>
-                <div class="text-[10px] text-cyan-400 mt-1">08:00 - 20:00</div>
-                <div class="mt-2 h-16 bg-cyan-500/20 border border-cyan-500/40 rounded-lg flex items-center justify-center text-[10px] text-cyan-300">2h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-cyan-300">Sex (Hoje)</div>
-                <div class="text-[10px] text-cyan-400 mt-1">08:00 - 21:00</div>
-                <div class="mt-2 h-16 bg-cyan-500/30 border border-cyan-400 rounded-lg flex items-center justify-center text-[10px] text-cyan-200 font-bold">2h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-amber-300">Sáb</div>
-                <div class="text-[10px] text-amber-400 mt-1">09:00 - 21:30</div>
-                <div class="mt-2 h-16 bg-amber-500/20 border border-amber-500/40 rounded-lg flex items-center justify-center text-[10px] text-amber-300 font-bold">3h Max</div>
-              </div>
-              <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <div class="font-bold text-amber-300">Dom</div>
-                <div class="text-[10px] text-amber-400 mt-1">09:00 - 21:00</div>
-                <div class="mt-2 h-16 bg-amber-500/20 border border-amber-500/40 rounded-lg flex items-center justify-center text-[10px] text-amber-300 font-bold">3h Max</div>
+          <div id="childrenListGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+
+        <!-- TAB: MONITOR DA CAMERA -->
+        <div id="tabCamera" class="tab-content hidden space-y-6">
+          <div>
+            <h1 class="text-xl font-black text-white">Monitor Facial em Tempo Real</h1>
+            <p class="text-xs text-slate-400">Feed da câmera ao vivo com visualização dos retículos de IA YuNet.</p>
+          </div>
+
+          <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 max-w-2xl">
+            <div class="aspect-video w-full rounded-2xl bg-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center">
+              <img id="liveMonitorFeed" src="/api/camera/stream" class="w-full h-full object-cover" onerror="this.style.display='none'; document.getElementById('camErrorMsg').style.display='flex';" onload="document.getElementById('camErrorMsg').style.display='none';">
+              <div id="camErrorMsg" class="hidden absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
+                <span>📹 Câmera não iniciada ou ocupada</span>
               </div>
             </div>
+            <p class="text-xs text-slate-400">
+              A câmera faz a identificação biométrica na tela de bloqueio e garante que apenas a criança autorizada utilize o computador.
+            </p>
           </div>
         </div>
 
-        <!-- TAB CONTENT 4: HISTORY & AUDIT -->
-        <div id="tabContent-history" class="admin-tab-content hidden space-y-4">
+        <!-- TAB: CONFIGURACOES & PIN -->
+        <div id="tabSettings" class="tab-content hidden space-y-6">
           <div>
-            <h2 class="text-base font-bold text-white">Auditoria & Reconhecimentos Recentes</h2>
-            <p class="text-xs text-slate-400">Verifique quando o sistema detectou as crianças ou realizou bloqueios automáticos.</p>
+            <h1 class="text-xl font-black text-white">Configurações & Segurança</h1>
+            <p class="text-xs text-slate-400">Altere o PIN mestre dos pais e regras de inatividade.</p>
           </div>
 
-          <div class="glass-card rounded-2xl p-4 border border-slate-800 overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider">
-                <tr>
-                  <th class="pb-2.5">Horário</th>
-                  <th class="pb-2.5">Criança</th>
-                  <th class="pb-2.5">Ação / Evento</th>
-                  <th class="pb-2.5">Confiança IA</th>
-                  <th class="pb-2.5 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-800/60 font-mono text-[11px]">
-                <tr>
-                  <td class="py-2.5 text-slate-400">Hoje, 14:48</td>
-                  <td class="text-white font-sans font-medium">Lucas</td>
-                  <td class="text-cyan-400 font-sans">Detecção Periódica (30s)</td>
-                  <td class="text-emerald-400">99.4%</td>
-                  <td class="text-right"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Permitido</span></td>
-                </tr>
-                <tr>
-                  <td class="py-2.5 text-slate-400">Hoje, 14:12</td>
-                  <td class="text-white font-sans font-medium">Lucas</td>
-                  <td class="text-slate-300 font-sans">Adição de Tempo (+30m)</td>
-                  <td class="text-slate-500">-</td>
-                  <td class="text-right"><span class="px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400">Admin PIN</span></td>
-                </tr>
-                <tr>
-                  <td class="py-2.5 text-slate-400">Hoje, 13:25</td>
-                  <td class="text-white font-sans font-medium">Lucas</td>
-                  <td class="text-cyan-400 font-sans">Login com Reconhecimento Facial</td>
-                  <td class="text-emerald-400">98.9%</td>
-                  <td class="text-right"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Desbloqueado</span></td>
-                </tr>
-                <tr>
-                  <td class="py-2.5 text-slate-400">Ontem, 19:40</td>
-                  <td class="text-white font-sans font-medium">Sofia</td>
-                  <td class="text-amber-400 font-sans">Limite Diário Atingido</td>
-                  <td class="text-slate-500">-</td>
-                  <td class="text-right"><span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Bloqueado</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- TAB CONTENT 5: SETTINGS -->
-        <div id="tabContent-settings" class="admin-tab-content hidden space-y-4">
-          <div>
-            <h2 class="text-base font-bold text-white">Configurações de Segurança</h2>
-            <p class="text-xs text-slate-400">Ajuste o PIN de acesso dos pais e a sensibilidade da câmera.</p>
-          </div>
-
-          <div class="glass-card rounded-2xl p-5 border border-slate-800 space-y-4 max-w-xl">
-            <div class="space-y-2">
-              <label class="block text-xs font-semibold text-slate-300">Alterar PIN dos Pais</label>
-              <div class="flex space-x-2">
-                <input id="settingsPinInput" type="password" maxlength="4" value="1234" class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm w-32 tracking-widest text-center font-mono">
-                <button onclick="updateSettingsPin()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all">
+          <div class="glass-panel rounded-3xl p-6 border border-slate-800 space-y-6 max-w-xl">
+            <div class="space-y-3">
+              <h3 class="text-sm font-bold text-white">PIN dos Pais (Administrador)</h3>
+              <p class="text-xs text-slate-400">Usado para desbloquear este painel a qualquer momento.</p>
+              <div class="flex items-center space-x-3">
+                <input id="newPinInput" type="password" maxlength="6" placeholder="Novo PIN (4-6 dígitos)" class="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 font-mono">
+                <button onclick="saveNewPin()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all">
                   Atualizar PIN
                 </button>
               </div>
             </div>
 
-            <div class="pt-3 border-t border-slate-800 space-y-2">
-              <div class="flex justify-between items-center text-xs">
-                <span class="font-semibold text-slate-300">Frequência da Varredura Facial</span>
-                <span class="text-cyan-400 font-mono">A cada 30 segundos</span>
-              </div>
-              <input type="range" min="10" max="120" value="30" class="w-full accent-cyan-400">
-              <p class="text-[10px] text-slate-500">Valores menores oferecem mais precisão com baixo consumo em GPUs/CPUs modernas.</p>
-            </div>
-
-            <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
-              <div>
-                <h4 class="text-xs font-semibold text-white">Iniciar Automaticamente com o Windows</h4>
-                <p class="text-[10px] text-slate-400">Garante monitoramento imediato no boot do sistema.</p>
-              </div>
-              <input type="checkbox" checked class="w-4 h-4 accent-cyan-400 rounded">
+            <div class="pt-4 border-t border-slate-800 space-y-2">
+              <h3 class="text-sm font-bold text-white">Segurança Windows</h3>
+              <p class="text-xs text-slate-400">
+                A conta Windows <strong>Filhos</strong> está protegida com credencial dinâmica gerada automaticamente. Nenhuma criança sabe a senha.
+              </p>
             </div>
           </div>
         </div>
@@ -1131,640 +434,338 @@
 
   </main>
 
+
   <!-- ======================================================== -->
-  <!-- MODAL: ADD / EDIT CHILD -->
+  <!-- MODAL: CADASTRAR / EDITAR FILHO COM CAMERA REAL          -->
   <!-- ======================================================== -->
   <div id="childModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-6 border border-slate-700 space-y-4 glow-cyan-sm">
-      <div class="flex items-center justify-between">
-        <h3 id="childModalTitle" class="text-base font-bold text-white">Editar Perfil de Lucas</h3>
+    <div class="w-full max-w-lg glass-panel rounded-3xl p-6 border border-slate-700 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="childModalTitle" class="text-base font-bold text-white">Cadastrar Novo Filho(a)</h3>
         <button onclick="closeChildModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
 
-      <div class="space-y-3 text-xs">
+      <div class="space-y-4">
         <div>
-          <label class="block text-slate-300 mb-1">Nome:</label>
-          <input id="modalChildName" type="text" value="Lucas" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs">
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nome do Filho(a)</label>
+          <input id="modalChildName" type="text" placeholder="Ex: Lucas, Sofia, Gabriel..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
         </div>
 
         <div>
-          <label class="block text-slate-300 mb-1">Cota Diária de Tela:</label>
-          <select id="modalChildQuota" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs">
-            <option value="1h 00m">1h 00m</option>
-            <option value="1h 30m">1h 30m</option>
-            <option value="2h 00m" selected>2h 00m (Padrão)</option>
-            <option value="2h 30m">2h 30m</option>
-            <option value="3h 00m">3h 00m</option>
-          </select>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Limite Diário de Uso</label>
+          <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <button type="button" onclick="selectModalQuota(1)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">1 hora</button>
+            <button type="button" onclick="selectModalQuota(2)" class="modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold">2 horas</button>
+            <button type="button" onclick="selectModalQuota(3)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">3 horas</button>
+            <button type="button" onclick="selectModalQuota(4)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">4 horas</button>
+          </div>
         </div>
 
-        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400">
-          Foto facial biométrica já cadastrada com sucesso.
+        <!-- Câmera e Captura de Fotos Real -->
+        <div class="space-y-2 pt-2 border-t border-slate-800">
+          <label class="block text-xs font-semibold text-slate-300">Biometria Facial (12 Amostras)</label>
+          <div class="w-full h-44 rounded-2xl bg-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center">
+            <img id="modalCamPreview" src="/api/camera/stream" class="w-full h-full object-cover">
+            <div id="modalEnrollProgressBadge" class="hidden absolute bottom-2 left-2 bg-slate-900/90 text-cyan-400 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-cyan-500/30">
+              Capturando...
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button id="modalStartEnrollBtn" onclick="startModalEnrollment()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/30 text-xs font-semibold text-cyan-300 transition-all active:scale-95 flex items-center justify-center space-x-1.5">
+              <span>📸</span>
+              <span id="modalEnrollBtnText">Capturar Fotos com Webcam (12 Fotos)</span>
+            </button>
+          </div>
+          <span id="modalEnrollStatus" class="block text-[11px] text-slate-400 text-center">Posicione o rosto da criança em frente à câmera.</span>
         </div>
       </div>
 
-      <div class="flex justify-end space-x-2 pt-2">
-        <button onclick="closeChildModal()" class="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold">
-          Cancelar
-        </button>
-        <button onclick="saveChildModal()" class="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs">
-          Salvar
-        </button>
+      <div class="flex items-center space-x-3 pt-3 border-t border-slate-800">
+        <button onclick="closeChildModal()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all">Cancelar</button>
+        <button onclick="saveChildModal()" class="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-slate-950 shadow-md shadow-cyan-500/20 transition-all">Salvar Perfil</button>
       </div>
     </div>
   </div>
 
+
   <!-- ======================================================== -->
-  <!-- AUTHENTICATION OVERLAY: PIN LOCKSCREEN CONCEPT -->
+  <!-- MODAL: LOCK SCREEN (PIN DOS PAIS)                        -->
   <!-- ======================================================== -->
-  <div id="lockScreenOverlay" class="hidden fixed inset-0 z-50 bg-[#070b14]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
-    <div class="w-full max-w-xs text-center space-y-6">
-      <!-- Time and Shield -->
-      <div class="space-y-1">
-        <span class="text-4xl">🛡️</span>
-        <h1 id="lockClock" class="text-4xl font-extrabold text-white tracking-tight">14:48</h1>
-        <p class="text-xs text-cyan-400 font-medium">FaceKids • Bloqueio de Segurança</p>
+  <div id="lockScreenModal" class="hidden fixed inset-0 z-50 bg-[#060a14]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-sm glass-panel rounded-3xl p-8 border border-slate-800 text-center space-y-6 shadow-2xl">
+      <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
+        🔒
       </div>
-
-      <!-- Instruction -->
-      <p class="text-xs text-slate-400">Digite o PIN dos Pais para desbloquear o painel</p>
-
-      <!-- Lock Dots -->
-      <div id="lockPinDots" class="flex justify-center items-center space-x-4 py-1">
-        <div id="lockDot0" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-        <div id="lockDot1" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-        <div id="lockDot2" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-        <div id="lockDot3" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-      </div>
-
-      <!-- Keypad -->
-      <div class="grid grid-cols-3 gap-2.5 pt-2">
-        <button onclick="pressLockKey('1')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">1</button>
-        <button onclick="pressLockKey('2')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">2</button>
-        <button onclick="pressLockKey('3')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">3</button>
-        <button onclick="pressLockKey('4')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">4</button>
-        <button onclick="pressLockKey('5')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">5</button>
-        <button onclick="pressLockKey('6')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">6</button>
-        <button onclick="pressLockKey('7')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">7</button>
-        <button onclick="pressLockKey('8')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">8</button>
-        <button onclick="pressLockKey('9')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">9</button>
-        <!-- Windows Hello / Fingerprint Option Hint -->
-        <button onclick="simulateBiometricUnlock()" title="Desbloquear com Biometria / Windows Hello" class="h-12 rounded-2xl bg-cyan-950/40 hover:bg-cyan-900/40 text-cyan-400 text-lg border border-cyan-800/40 transition-all flex items-center justify-center">
-          👆
-        </button>
-        <button onclick="pressLockKey('0')" class="h-12 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-white font-bold text-lg border border-slate-800 transition-all">0</button>
-        <button onclick="backspaceLockKey()" class="h-12 rounded-2xl bg-slate-900/40 hover:bg-slate-800 text-slate-400 hover:text-white text-base border border-slate-800 transition-all flex items-center justify-center">
-          ⌫
-        </button>
-      </div>
-
-      <!-- Biometric Hint -->
-      <button onclick="simulateBiometricUnlock()" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center justify-center space-x-1.5 mx-auto">
-        <span>👆</span>
-        <span>Entrar com Windows Hello / Biometria</span>
-      </button>
-
-      <!-- Dismiss Button for convenience -->
       <div>
-        <button onclick="closeLockScreen()" class="text-[11px] text-slate-500 hover:text-slate-400">
-          Cancelar e fechar overlay
-        </button>
+        <h2 class="text-xl font-black text-white">Painel Bloqueado</h2>
+        <p class="text-xs text-slate-400 mt-1">Digite seu PIN de Administrador para acessar</p>
+      </div>
+
+      <div class="flex flex-col items-center space-y-4">
+        <div id="lockPinDots" class="flex items-center space-x-3">
+          <div id="lockDot0" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot1" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot2" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot3" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2.5 w-full max-w-[210px]">
+          <button onclick="pressLockKey('1')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">1</button>
+          <button onclick="pressLockKey('2')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">2</button>
+          <button onclick="pressLockKey('3')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">3</button>
+          <button onclick="pressLockKey('4')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">4</button>
+          <button onclick="pressLockKey('5')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">5</button>
+          <button onclick="pressLockKey('6')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">6</button>
+          <button onclick="pressLockKey('7')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">7</button>
+          <button onclick="pressLockKey('8')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">8</button>
+          <button onclick="pressLockKey('9')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">9</button>
+          <button onclick="clearLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
+          <button onclick="pressLockKey('0')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">0</button>
+          <button onclick="backspaceLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- TOAST NOTIFICATION CONTAINER -->
-  <div id="toastNotification" class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
-    <div class="glass-panel px-4 py-3 rounded-2xl border border-cyan-500/40 shadow-2xl flex items-center space-x-3 text-xs text-white">
-      <span id="toastIcon" class="text-cyan-400 text-lg">✨</span>
-      <span id="toastMessage">Operação realizada com sucesso!</span>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-cyan-500/40 text-xs text-white font-medium shadow-2xl flex items-center space-x-2">
+      <span class="text-cyan-400">🔔</span>
+      <span id="toastMessage">Notificação</span>
     </div>
   </div>
 
-  <!-- ======================================================== -->
-  <!-- JAVASCRIPT LOGIC & INTERACTION -->
-  <!-- ======================================================== -->
+  <script src="/ui/api_bridge.js"></script>
   <script>
-    // System State
-    let currentStep = 1;
-    let registeredPin = "1234";
+    // Estado do Wizard
     let enteredWizardPin = "";
     let enteredLockPin = "";
-    let selectedQuota = "2h 00m";
-    let childPhotoCaptured = false;
-    let isPausedLucas = false;
-    let lucasUsedMinutes = 83; // 1h 23m
-    let lucasTotalMinutes = 120; // 2h 00m
+    let selectedQuotaHours = 2.0;
+    let editingChildId = null;
 
-    // -----------------------------------------------------------
-    // NAVIGATION: SWITCH VIEW (WIZARD vs DASHBOARD)
-    // -----------------------------------------------------------
-    function switchMainView(view) {
-      const wizardView = document.getElementById("wizardView");
-      const dashboardView = document.getElementById("dashboardView");
-      const btnW = document.getElementById("viewBtnWizard");
-      const btnD = document.getElementById("viewBtnDashboard");
+    // Relógio no topo
+    setInterval(() => {
+      const now = new Date();
+      const el = document.getElementById("liveClock");
+      if (el) el.innerText = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }, 1000);
 
-      if (view === "wizard") {
-        wizardView.classList.remove("hidden");
-        dashboardView.classList.add("hidden");
-        btnW.className = "px-3 py-1 rounded-md text-xs font-medium transition-all bg-cyan-500 text-slate-950 shadow-sm font-semibold";
-        btnD.className = "px-3 py-1 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white";
-      } else {
-        wizardView.classList.add("hidden");
-        dashboardView.classList.remove("hidden");
-        btnD.className = "px-3 py-1 rounded-md text-xs font-medium transition-all bg-cyan-500 text-slate-950 shadow-sm font-semibold";
-        btnW.className = "px-3 py-1 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white";
-      }
+    // Navegação do Wizard
+    function goToStep2() {
+      document.getElementById("wizardStep1").classList.add("hidden");
+      document.getElementById("wizardStep2").classList.remove("hidden");
+      document.getElementById("currentStepNumber").innerText = "2";
+      document.getElementById("dotStep2").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
+      runLiveDiagnostics();
     }
 
-    // -----------------------------------------------------------
-    // WIZARD STEP NAVIGATION
-    // -----------------------------------------------------------
-    function goToStep(stepNumber) {
-      currentStep = stepNumber;
-      document.getElementById("currentStepNumber").innerText = stepNumber;
-
-      // Hide all steps
-      for (let i = 1; i <= 5; i++) {
-        const stepEl = document.getElementById("wizardStep" + i);
-        if (stepEl) stepEl.classList.add("hidden");
-      }
-
-      // Show targeted step
-      const targetStep = document.getElementById("wizardStep" + stepNumber);
-      if (targetStep) targetStep.classList.remove("hidden");
-
-      // Update dots
-      const dots = document.querySelectorAll(".step-dot");
-      dots.forEach((dot, index) => {
-        if (index + 1 === stepNumber) {
-          dot.className = "step-dot w-6 h-2 rounded-full bg-cyan-400 transition-all duration-300";
-        } else if (index + 1 < stepNumber) {
-          dot.className = "step-dot w-2 h-2 rounded-full bg-teal-500/80 transition-all duration-300";
-        } else {
-          dot.className = "step-dot w-2 h-2 rounded-full bg-slate-700 transition-all duration-300";
-        }
-      });
+    function goToStep3() {
+      document.getElementById("wizardStep2").classList.add("hidden");
+      document.getElementById("wizardStep3").classList.remove("hidden");
+      document.getElementById("currentStepNumber").innerText = "3";
+      document.getElementById("dotStep3").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
     }
 
-    // -----------------------------------------------------------
-    // STEP 1 -> STEP 2: AUTO-DETECTION FLOW
-    // -----------------------------------------------------------
-    function startAutoDetectionStep() {
-      goToStep(2);
-      runAutoDetectionSimulation();
-    }
-
-    function runAutoDetectionSimulation() {
-      const progressBar = document.getElementById("detectionProgressBar");
-      const nextBtn = document.getElementById("step2NextBtn");
-
-      // Reset state
-      progressBar.style.width = "20%";
-      document.getElementById("checkBadgeAccount").innerText = "Verificando...";
-      document.getElementById("checkBadgeCamera").innerText = "Na fila";
-      document.getElementById("checkBadgeAI").innerText = "Na fila";
-
-      // 1. Account Check (Success after 700ms)
-      setTimeout(() => {
-        progressBar.style.width = "50%";
-        document.getElementById("checkIconAccount").innerHTML = `<span class="text-emerald-400 font-bold">✓</span>`;
-        document.getElementById("checkIconAccount").className = "w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-sm border border-emerald-500/30";
-        document.getElementById("checkSubAccount").innerText = "Conta de usuário 'Filhos' identificada";
-        document.getElementById("checkBadgeAccount").className = "text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-medium";
-        document.getElementById("checkBadgeAccount").innerText = "Pronta";
-
-        // Start Camera Check
-        document.getElementById("checkIconCamera").innerHTML = `<span class="animate-spin text-cyan-400">⏳</span>`;
-        document.getElementById("checkSubCamera").innerText = "Testando resolução e taxas de quadro...";
-        document.getElementById("checkBadgeCamera").innerText = "Verificando...";
-      }, 700);
-
-      // 2. Camera Check (Success after 1500ms)
-      setTimeout(() => {
-        progressBar.style.width = "80%";
-        document.getElementById("checkIconCamera").innerHTML = `<span class="text-emerald-400 font-bold">✓</span>`;
-        document.getElementById("checkIconCamera").className = "w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-sm border border-emerald-500/30";
-        document.getElementById("checkSubCamera").innerText = "HD Webcam 1080p ativa e calibrada";
-        document.getElementById("checkBadgeCamera").className = "text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-medium";
-        document.getElementById("checkBadgeCamera").innerText = "Disponível";
-
-        // Start AI Check
-        document.getElementById("checkIconAI").innerHTML = `<span class="animate-spin text-cyan-400">⏳</span>`;
-        document.getElementById("checkSubAI").innerText = "Carregando modelo de landmarks faciais...";
-        document.getElementById("checkBadgeAI").innerText = "Verificando...";
-      }, 1500);
-
-      // 3. AI Check (Success after 2300ms)
-      setTimeout(() => {
-        progressBar.style.width = "100%";
-        document.getElementById("checkIconAI").innerHTML = `<span class="text-emerald-400 font-bold">✓</span>`;
-        document.getElementById("checkIconAI").className = "w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-sm border border-emerald-500/30";
-        document.getElementById("checkSubAI").innerText = "Rede neural local pronta (Consumo <1% CPU)";
-        document.getElementById("checkBadgeAI").className = "text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-medium";
-        document.getElementById("checkBadgeAI").innerText = "100% OK";
-
-        // Enable Next Button
-        nextBtn.removeAttribute("disabled");
-        nextBtn.className = "px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs hover:bg-cyan-400 shadow-lg shadow-cyan-500/30 transition-all flex items-center space-x-1.5 transform hover:scale-105";
-      }, 2300);
-    }
-
-    function resolveAutoFix() {
-      const warningBox = document.getElementById("detectionWarningBox");
-      warningBox.classList.add("hidden");
-      showToast("Conta 'Filhos' criada e isolada com sucesso!");
-    }
-
-    // -----------------------------------------------------------
-    // STEP 3: CREATE PIN LOGIC
-    // -----------------------------------------------------------
+    // Teclado PIN do Wizard
     function pressPinKey(digit) {
-      if (enteredWizardPin.length < 4) {
+      if (enteredWizardPin.length < 6) {
         enteredWizardPin += digit;
         updatePinDots();
       }
     }
 
-    function backspacePin() {
-      if (enteredWizardPin.length > 0) {
-        enteredWizardPin = enteredWizardPin.slice(0, -1);
-        updatePinDots();
-      }
+    function clearPinKey() {
+      enteredWizardPin = "";
+      updatePinDots();
     }
 
-    function clearPin() {
-      enteredWizardPin = "";
+    function backspacePinKey() {
+      enteredWizardPin = enteredWizardPin.slice(0, -1);
       updatePinDots();
     }
 
     function updatePinDots() {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById("pinDot" + i);
-        if (i < enteredWizardPin.length) {
-          dot.className = "w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_10px_#22d3ee] transition-all duration-150 scale-110";
-        } else {
-          dot.className = "w-4 h-4 rounded-full border-2 border-slate-600 transition-all duration-150";
+        if (dot) {
+          dot.className = (i < enteredWizardPin.length)
+            ? "w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
+            : "w-4 h-4 rounded-full border-2 border-slate-600 transition-all";
         }
       }
+      const finishBtn = document.getElementById("finishInstallBtn");
+      finishBtn.disabled = enteredWizardPin.length < 4;
+    }
 
-      // Strength bar logic
-      const bar = document.getElementById("pinStrengthBar");
-      const label = document.getElementById("pinStrengthLabel");
-      const nextBtn = document.getElementById("step3NextBtn");
+    async function finishInstallation() {
+      const finishBtn = document.getElementById("finishInstallBtn");
+      finishBtn.disabled = true;
+      finishBtn.innerText = "Configurando sistema seguro...";
+      showToast("Configurando o FaceKids sem senha fixa...");
 
-      if (enteredWizardPin.length === 0) {
-        bar.style.width = "0%";
-        bar.className = "h-full bg-slate-700 w-0 transition-all duration-300 rounded-full";
-        label.innerText = "Digite 4 dígitos";
-        nextBtn.setAttribute("disabled", "true");
-        nextBtn.className = "px-5 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs opacity-50 cursor-not-allowed transition-all flex items-center space-x-1.5";
-      } else if (enteredWizardPin.length < 4) {
-        bar.style.width = (enteredWizardPin.length * 25) + "%";
-        bar.className = "h-full bg-cyan-500 transition-all duration-300 rounded-full";
-        label.innerText = `Faltam ${4 - enteredWizardPin.length} dígito(s)`;
-        nextBtn.setAttribute("disabled", "true");
-        nextBtn.className = "px-5 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs opacity-50 cursor-not-allowed transition-all flex items-center space-x-1.5";
+      const res = await FaceKidsAPI.install(enteredWizardPin, null, 2.0);
+      if (res.ok) {
+        showToast("Instalação concluída com sucesso!");
+        setTimeout(() => {
+          showDashboard();
+          syncDashboardData();
+        }, 600);
       } else {
-        bar.style.width = "100%";
-        bar.className = "h-full bg-emerald-400 transition-all duration-300 rounded-full shadow-[0_0_8px_#34d399]";
-        label.innerText = "PIN Forte • Pronto para salvar!";
-        registeredPin = enteredWizardPin;
-        document.getElementById("settingsPinInput").value = registeredPin;
-
-        nextBtn.removeAttribute("disabled");
-        nextBtn.className = "px-5 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs hover:bg-cyan-400 shadow-lg shadow-cyan-500/30 transition-all flex items-center space-x-1.5 transform hover:scale-105";
+        showToast(res.error || "Erro na instalação. Tente novamente.");
+        finishBtn.disabled = false;
+        finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
       }
     }
 
-    // Physical Keyboard support for PIN entry
-    window.addEventListener("keydown", (e) => {
-      // If Lock Screen is active
-      const lockOverlay = document.getElementById("lockScreenOverlay");
-      if (!lockOverlay.classList.contains("hidden")) {
-        if (e.key >= "0" && e.key <= "9") {
-          pressLockKey(e.key);
-        } else if (e.key === "Backspace") {
-          backspaceLockKey();
-        } else if (e.key === "Escape") {
-          closeLockScreen();
-        }
+    // Alternador de Visões Principais
+    function showWizard() {
+      document.getElementById("wizardView").classList.remove("hidden");
+      document.getElementById("dashboardView").classList.add("hidden");
+      document.getElementById("lockScreenBtn").classList.add("hidden");
+    }
+
+    function showDashboard() {
+      document.getElementById("wizardView").classList.add("hidden");
+      document.getElementById("dashboardView").classList.remove("hidden");
+      document.getElementById("lockScreenBtn").classList.remove("hidden");
+    }
+
+    // Abas do Painel
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
+      document.querySelectorAll(".nav-item").forEach(el => {
+        el.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all";
+      });
+
+      if (tabId === "overview") {
+        document.getElementById("tabOverview").classList.remove("hidden");
+        document.getElementById("navTabOverview").className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
+      } else if (tabId === "children") {
+        document.getElementById("tabChildren").classList.remove("hidden");
+        document.getElementById("navTabChildren").className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
+      } else if (tabId === "camera") {
+        document.getElementById("tabCamera").classList.remove("hidden");
+        document.getElementById("navTabCamera").className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
+      } else if (tabId === "settings") {
+        document.getElementById("tabSettings").classList.remove("hidden");
+        document.getElementById("navTabSettings").className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
+      }
+    }
+
+    // Renderização dos cards reais de crianças
+    function renderChildrenCards(children) {
+      const gridOverview = document.getElementById("childrenCardsGrid");
+      const gridList = document.getElementById("childrenListGrid");
+      const emptyState = document.getElementById("noChildrenState");
+
+      if (!children || children.length === 0) {
+        if (emptyState) emptyState.classList.remove("hidden");
+        if (gridOverview) gridOverview.innerHTML = "";
+        if (gridList) gridList.innerHTML = "";
         return;
       }
 
-      // If Wizard Step 3 is active
-      if (currentStep === 3 && document.getElementById("wizardView").classList.contains("hidden") === false) {
-        if (e.key >= "0" && e.key <= "9") {
-          pressPinKey(e.key);
-        } else if (e.key === "Backspace") {
-          backspacePin();
-        }
-      }
-    });
+      if (emptyState) emptyState.classList.add("hidden");
 
-    // -----------------------------------------------------------
-    // STEP 4: FIRST CHILD SETUP & WEBCAM SIMULATION
-    // -----------------------------------------------------------
-    function selectQuotaPreset(btn, quota) {
-      selectedQuota = quota;
-      document.querySelectorAll(".quota-btn").forEach(b => {
-        b.className = "quota-btn px-2 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:border-cyan-500 transition-all";
-      });
-      btn.className = "quota-btn px-2 py-1.5 rounded-lg border border-cyan-400 bg-cyan-500/10 text-xs text-cyan-300 font-bold hover:border-cyan-400 transition-all";
-    }
+      let overviewHtml = "";
+      let listHtml = "";
 
-    function simulatePhotoCapture() {
-      const snapBtn = document.getElementById("snapPhotoButton");
-      const snapText = document.getElementById("snapButtonText");
-      const badge = document.getElementById("photoCapturedBadge");
-      const statusText = document.getElementById("photoStatusText");
+      children.forEach(c => {
+        const radius = 40;
+        const circ = 2 * Math.PI * radius;
+        const offset = circ - (c.percent_remaining / 100) * circ;
 
-      // Flash shutter visual
-      const area = document.getElementById("cameraPreviewArea");
-      area.classList.add("ring-4", "ring-cyan-300", "brightness-125");
-      setTimeout(() => area.classList.remove("ring-4", "ring-cyan-300", "brightness-125"), 200);
+        overviewHtml += `
+          <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <img src="/api/child/${c.id}/avatar" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'48\\' height=\\'48\\'><circle cx=\\'24\\' cy=\\'24\\' r=\\'24\\' fill=\\'%230891b2\\'/><text x=\\'50%\\' y=\\'55%\\' text-anchor=\\'middle\\' fill=\\'white\\' font-size=\\'18\\' font-weight=\\'bold\\' dy=\\'.3em\\'>${c.name[0]}</text></svg>'" class="w-12 h-12 rounded-full object-cover border-2 border-cyan-400/50 shadow-md">
+                <div>
+                  <h3 class="text-base font-bold text-white">${c.name}</h3>
+                  <span class="text-[10px] text-cyan-400 font-mono">ID #${c.id}</span>
+                </div>
+              </div>
+              <div class="relative w-14 h-14 flex items-center justify-center">
+                <svg class="w-14 h-14 transform -rotate-90">
+                  <circle cx="28" cy="28" r="22" stroke="rgba(255,255,255,0.08)" stroke-width="4" fill="transparent"></circle>
+                  <circle cx="28" cy="28" r="22" stroke="#22d3ee" stroke-width="4" fill="transparent" stroke-dasharray="138" stroke-dashoffset="${138 - (c.percent_remaining/100)*138}" stroke-linecap="round" class="circle-progress"></circle>
+                </svg>
+                <span class="absolute text-[11px] font-black text-white">${c.percent_remaining}%</span>
+              </div>
+            </div>
 
-      snapText.innerText = "Processando IA...";
-      setTimeout(() => {
-        childPhotoCaptured = true;
-        badge.classList.remove("hidden");
-        snapText.innerText = "Foto Registrada!";
-        snapBtn.className = "px-4 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-semibold";
-        statusText.innerText = "✓ 128 pontos biométricos mapeados e criptografados";
-        statusText.className = "text-[10px] text-emerald-400 font-medium";
-        showToast("Rosto mapeado com sucesso no modelo local!");
-      }, 700);
-    }
+            <div class="grid grid-cols-2 gap-2 text-xs bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80">
+              <div>
+                <span class="text-[10px] text-slate-400">Usado Hoje:</span>
+                <p class="font-bold text-white">${c.used_formatted}</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400">Restante:</span>
+                <p class="font-bold text-cyan-400">${c.remaining_formatted}</p>
+              </div>
+            </div>
 
-    function finishInstallation() {
-      const childName = document.getElementById("wizardChildName").value || "Lucas";
-      document.getElementById("summaryChildName").innerText = `${childName} (${selectedQuota})`;
-      goToStep(5);
-      launchConfetti();
-    }
+            <div class="flex items-center space-x-2 pt-1">
+              <button onclick="injectBonus(${c.id}, 15)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95">
+                +15 min
+              </button>
+              <button onclick="injectBonus(${c.id}, 30)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95">
+                +30 min
+              </button>
+              <button onclick="openEditModal(${c.id}, '${c.name}', ${c.limit_seconds / 3600})" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-white transition-all">
+                ✏️
+              </button>
+            </div>
+          </div>
+        `;
 
-    // -----------------------------------------------------------
-    // STEP 5: CONFETTI ANIMATION EFFECT
-    // -----------------------------------------------------------
-    function launchConfetti() {
-      const canvas = document.getElementById("confettiCanvas");
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
-
-      const particles = [];
-      const colors = ["#06b6d4", "#22d3ee", "#38bdf8", "#34d399", "#f59e0b", "#ec4899", "#8b5cf6"];
-
-      for (let i = 0; i < 90; i++) {
-        particles.push({
-          x: canvas.width / 2,
-          y: canvas.height / 2 + 30,
-          vx: (Math.random() - 0.5) * 12,
-          vy: (Math.random() - 1.2) * 10 - 2,
-          size: Math.random() * 7 + 4,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          rotation: Math.random() * 360,
-          rotationSpeed: (Math.random() - 0.5) * 10,
-          opacity: 1
-        });
-      }
-
-      let animationFrame;
-      function animate() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let active = 0;
-
-        particles.forEach(p => {
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vy += 0.25; // gravity
-          p.rotation += p.rotationSpeed;
-          p.opacity -= 0.007;
-
-          if (p.opacity > 0) {
-            active++;
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate((p.rotation * Math.PI) / 180);
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = Math.max(0, p.opacity);
-            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-            ctx.restore();
-          }
-        });
-
-        if (active > 0) {
-          animationFrame = requestAnimationFrame(animate);
-        }
-      }
-      animate();
-    }
-
-    // -----------------------------------------------------------
-    // ADMIN DASHBOARD TAB NAVIGATION
-    // -----------------------------------------------------------
-    function switchAdminTab(tabKey) {
-      const contents = document.querySelectorAll(".admin-tab-content");
-      contents.forEach(c => c.classList.add("hidden"));
-
-      const target = document.getElementById("tabContent-" + tabKey);
-      if (target) target.classList.remove("hidden");
-
-      const buttons = document.querySelectorAll(".admin-tab-btn");
-      buttons.forEach(btn => {
-        btn.className = "admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all";
+        listHtml += `
+          <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-3">
+              <img src="/api/child/${c.id}/avatar" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'48\\' height=\\'48\\'><circle cx=\\'24\\' cy=\\'24\\' r=\\'24\\' fill=\\'%230891b2\\'/><text x=\\'50%\\' y=\\'55%\\' text-anchor=\\'middle\\' fill=\\'white\\' font-size=\\'18\\' font-weight=\\'bold\\' dy=\\'.3em\\'>${c.name[0]}</text></svg>'" class="w-12 h-12 rounded-full object-cover border-2 border-cyan-400">
+              <div>
+                <h3 class="text-base font-bold text-white">${c.name}</h3>
+                <span class="text-xs text-slate-400">Limite diário: ${(c.limit_seconds / 3600)} horas</span>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 pt-2 border-t border-slate-800">
+              <button onclick="openEditModal(${c.id}, '${c.name}', ${c.limit_seconds / 3600})" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all">
+                Recalibrar Fotos / Limite
+              </button>
+            </div>
+          </div>
+        `;
       });
 
-      const activeBtn = document.getElementById("tabBtn-" + tabKey);
-      if (activeBtn) {
-        activeBtn.className = "admin-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all bg-cyan-500/15 text-cyan-400 border border-cyan-500/30";
+      if (gridOverview) gridOverview.innerHTML = overviewHtml;
+      if (gridList) gridList.innerHTML = listHtml;
+    }
+
+    async function injectBonus(childId, minutes) {
+      showToast(`Adicionando +${minutes}m de bônus...`);
+      const res = await FaceKidsAPI.addBonus(childId, minutes);
+      if (res.ok) {
+        showToast(`+${minutes} minutos adicionados com sucesso!`);
+        syncDashboardData();
       }
     }
 
-    // -----------------------------------------------------------
-    // DASHBOARD ACTIONS: +15m, +30m, PAUSE, SIMULATE
-    // -----------------------------------------------------------
-    function addTimeQuota(childName, minutes) {
-      if (childName === "Lucas") {
-        lucasTotalMinutes += minutes;
-        const remaining = Math.max(0, lucasTotalMinutes - lucasUsedMinutes);
-        
-        // Update Ring
-        updateLucasRing();
-        
-        showToast(`+${minutes} minutos adicionados para ${childName}!`);
-        logActivityEvent(`Tempo estendido: +${minutes}m adicionados para ${childName}`);
-      } else {
-        showToast(`+${minutes} minutos adicionados para ${childName}!`);
-        logActivityEvent(`Tempo estendido: +${minutes}m adicionados para ${childName}`);
-      }
+    // Modal de Cadastro / Edição
+    function openAddChildModal() {
+      editingChildId = null;
+      document.getElementById("childModalTitle").innerText = "Cadastrar Novo Filho(a)";
+      document.getElementById("modalChildName").value = "";
+      document.getElementById("modalEnrollBtnText").innerText = "Capturar Fotos com Webcam (12 Fotos)";
+      document.getElementById("childModal").classList.remove("hidden");
     }
 
-    function updateLucasRing() {
-      const remaining = Math.max(0, lucasTotalMinutes - lucasUsedMinutes);
-      const percentUsed = Math.min(100, Math.round((lucasUsedMinutes / lucasTotalMinutes) * 100));
-
-      // SVG circumference = 2 * PI * 40 ≈ 251.2
-      const circumference = 251.2;
-      const offset = circumference - (percentUsed / 100) * circumference;
-
-      document.getElementById("lucasProgressRing").style.strokeDashoffset = offset;
-      document.getElementById("lucasRemainingPercent").innerText = percentUsed + "%";
-      document.getElementById("lucasTotalQuotaText").innerText = formatHours(lucasTotalMinutes);
-      document.getElementById("lucasRemainingTimeText").innerText = remaining + " min";
-      document.getElementById("statNextLimit").innerText = "em " + remaining + "min";
-    }
-
-    function formatHours(mins) {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${h}h ${m < 10 ? '0' : ''}${m}m`;
-    }
-
-    function togglePauseChild(childName) {
-      isPausedLucas = !isPausedLucas;
-      const btn = document.getElementById("pauseBtnLucas");
-      const badge = document.getElementById("lucasStatusBadge");
-
-      if (isPausedLucas) {
-        btn.innerText = "▶️ Retomar";
-        btn.className = "py-2 px-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold transition-all shadow-md text-center";
-        badge.className = "inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30";
-        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>Pausado pelo Admin</span>`;
-        showToast("Acesso de Lucas pausado imediatamente.");
-        logActivityEvent("Acesso pausado temporariamente pelo painel.");
-      } else {
-        btn.innerText = "⏸️ Pausar";
-        btn.className = "py-2 px-1.5 rounded-xl bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all shadow-sm text-center";
-        badge.className = "inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
-        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Online (Roblox)</span>`;
-        showToast("Acesso de Lucas retomado!");
-        logActivityEvent("Acesso de Lucas retomado normalmente.");
-      }
-    }
-
-    function simulateLoginChild(childName) {
-      const badge = document.getElementById("sofiaStatusBadge");
-      const ring = document.getElementById("sofiaProgressRing");
-      const usedText = document.getElementById("sofiaUsedTimeText");
-
-      badge.className = "inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
-      badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Online (YouTube Kids)</span>`;
-      
-      // Simulate 15m usage
-      ring.style.strokeDashoffset = "210";
-      document.getElementById("sofiaRemainingPercent").innerText = "16%";
-      usedText.innerText = "15m";
-      document.getElementById("sofiaRemainingTimeText").innerText = "1h 15m";
-
-      showToast(`Sofia conectada e reconhecida pela câmera!`);
-      logActivityEvent(`Sofia autenticada via reconhecimento facial às ${getCurrentTime()}`);
-    }
-
-    function triggerSimulatedScan() {
-      showToast("Varredura facial executada: Criança autorizada.");
-      logActivityEvent(`Varredura forçada: Lucas confirmado (99.6% confiança)`);
-    }
-
-    function logActivityEvent(text) {
-      const logContainer = document.getElementById("liveActivityLog");
-      const div = document.createElement("div");
-      div.className = "flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 transition-all";
-      div.innerHTML = `<span class="text-cyan-400 font-sans">✓ ${text}</span><span class="text-slate-500 text-[10px]">${getCurrentTime()}</span>`;
-      logContainer.prepend(div);
-    }
-
-    function getCurrentTime() {
-      const now = new Date();
-      return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    }
-
-    // -----------------------------------------------------------
-    // LOCK SCREEN OVERLAY LOGIC
-    // -----------------------------------------------------------
-    function openLockScreen() {
-      const lockOverlay = document.getElementById("lockScreenOverlay");
-      enteredLockPin = "";
-      updateLockDots();
-      updateLockClock();
-      lockOverlay.classList.remove("hidden");
-    }
-
-    function closeLockScreen() {
-      const lockOverlay = document.getElementById("lockScreenOverlay");
-      lockOverlay.classList.add("hidden");
-    }
-
-    function updateLockClock() {
-      const now = new Date();
-      const hh = now.getHours().toString().padStart(2, '0');
-      const mm = now.getMinutes().toString().padStart(2, '0');
-      document.getElementById("lockClock").innerText = `${hh}:${mm}`;
-    }
-
-    function pressLockKey(digit) {
-      if (enteredLockPin.length < 4) {
-        enteredLockPin += digit;
-        updateLockDots();
-
-        if (enteredLockPin.length === 4) {
-          validateLockPin();
-        }
-      }
-    }
-
-    function backspaceLockKey() {
-      if (enteredLockPin.length > 0) {
-        enteredLockPin = enteredLockPin.slice(0, -1);
-        updateLockDots();
-      }
-    }
-
-    function updateLockDots() {
-      for (let i = 0; i < 4; i++) {
-        const dot = document.getElementById("lockDot" + i);
-        if (i < enteredLockPin.length) {
-          dot.className = "w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all";
-        } else {
-          dot.className = "w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all";
-        }
-      }
-    }
-
-    function validateLockPin() {
-      if (enteredLockPin === registeredPin || enteredLockPin === "1234") {
-        showToast("PIN Correto! Desbloqueando painel...");
-        setTimeout(() => {
-          closeLockScreen();
-        }, 300);
-      } else {
-        // Shake feedback
-        const dotsBox = document.getElementById("lockPinDots");
-        dotsBox.classList.add("shake-anim");
-        showToast("PIN incorreto. Tente novamente.");
-        setTimeout(() => {
-          dotsBox.classList.remove("shake-anim");
-          enteredLockPin = "";
-          updateLockDots();
-        }, 500);
-      }
-    }
-
-    function simulateBiometricUnlock() {
-      showToast("Biometria reconhecida (Windows Hello) ✨");
-      setTimeout(() => {
-        closeLockScreen();
-      }, 400);
-    }
-
-    // -----------------------------------------------------------
-    // MODAL EDIT CHILD
-    // -----------------------------------------------------------
-    function editChildProfile(name) {
+    function openEditModal(id, name, hours) {
+      editingChildId = id;
       document.getElementById("childModalTitle").innerText = `Editar Perfil de ${name}`;
       document.getElementById("modalChildName").value = name;
+      selectModalQuota(hours);
       document.getElementById("childModal").classList.remove("hidden");
     }
 
@@ -1772,58 +773,151 @@
       document.getElementById("childModal").classList.add("hidden");
     }
 
-    function saveChildModal() {
-      const name = document.getElementById("modalChildName").value;
-      const quota = document.getElementById("modalChildQuota").value;
-      closeChildModal();
-      showToast(`Configurações de ${name} salvas! (${quota})`);
-      logActivityEvent(`Cota de ${name} atualizada para ${quota}`);
+    function selectModalQuota(hours) {
+      selectedQuotaHours = hours;
+      document.querySelectorAll(".modal-quota-btn").forEach((btn, idx) => {
+        const h = idx + 1;
+        if (h === hours) {
+          btn.className = "modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold";
+        } else {
+          btn.className = "modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400";
+        }
+      });
     }
 
-    function openAddChildModal() {
-      document.getElementById("childModalTitle").innerText = "Cadastrar Novo Filho(a)";
-      document.getElementById("modalChildName").value = "";
-      document.getElementById("childModal").classList.remove("hidden");
+    async function startModalEnrollment() {
+      const btnText = document.getElementById("modalEnrollBtnText");
+      const statusText = document.getElementById("modalEnrollStatus");
+      const badge = document.getElementById("modalEnrollProgressBadge");
+
+      btnText.innerText = "Iniciando câmera...";
+      badge.classList.remove("hidden");
+
+      const cid = editingChildId || 1;
+      const res = await FaceKidsAPI.startEnrollment(cid);
+      if (!res.ok && res.error && !res.error.includes("em andamento")) {
+        showToast(res.error || "Aviso na câmera");
+      }
+
+      let poll = setInterval(async () => {
+        const st = await FaceKidsAPI.getEnrollmentStatus();
+        if (!st) return;
+
+        if (st.active) {
+          btnText.innerText = `Capturando ${st.samples_count}/${st.total_required}...`;
+          badge.innerText = `Foto ${st.samples_count} de 12`;
+          statusText.innerText = st.message || "Movimente levemente o rosto...";
+        }
+
+        if (st.completed) {
+          clearInterval(poll);
+          btnText.innerText = "✓ 12 Fotos Capturadas";
+          badge.innerText = "✓ Concluído";
+          statusText.innerText = "12 fotos e biometria cadastradas com sucesso!";
+          showToast("Biometria cadastrada com sucesso!");
+        } else if (st.error && !st.active) {
+          clearInterval(poll);
+          btnText.innerText = "Tentar Novamente";
+          statusText.innerText = "Erro: " + st.error;
+        }
+      }, 300);
     }
 
-    function recalibrateChild(name) {
-      showToast(`Iniciando recalibração facial de ${name}...`);
-      logActivityEvent(`Recalibração facial iniciada para ${name}`);
-    }
+    async function saveChildModal() {
+      const name = document.getElementById("modalChildName").value.trim();
+      if (!name) {
+        showToast("Digite o nome da criança.");
+        return;
+      }
 
-    function updateSettingsPin() {
-      const newPin = document.getElementById("settingsPinInput").value;
-      if (newPin.length === 4) {
-        registeredPin = newPin;
-        showToast("Novo PIN dos Pais salvo com sucesso!");
+      showToast("Salvando perfil...");
+      if (editingChildId) {
+        await FaceKidsAPI.setLimit(editingChildId, selectedQuotaHours);
       } else {
-        showToast("O PIN deve ter exatamente 4 dígitos.");
+        await FaceKidsAPI.addChild(name, selectedQuotaHours);
+      }
+      closeChildModal();
+      showToast(`${name} salvo com sucesso!`);
+      syncDashboardData();
+    }
+
+    // Modal de Bloqueio (Lock Screen)
+    function openLockScreen() {
+      enteredLockPin = "";
+      updateLockDots();
+      document.getElementById("lockScreenModal").classList.remove("hidden");
+    }
+
+    function closeLockScreen() {
+      document.getElementById("lockScreenModal").classList.add("hidden");
+    }
+
+    function pressLockKey(digit) {
+      if (enteredLockPin.length < 6) {
+        enteredLockPin += digit;
+        updateLockDots();
+        if (enteredLockPin.length >= 4) {
+          validateLockPin();
+        }
       }
     }
 
-    // -----------------------------------------------------------
-    // TOAST NOTIFICATIONS HELPER
-    // -----------------------------------------------------------
-    let toastTimeout;
+    function clearLockKey() {
+      enteredLockPin = "";
+      updateLockDots();
+    }
+
+    function backspaceLockKey() {
+      enteredLockPin = enteredLockPin.slice(0, -1);
+      updateLockDots();
+    }
+
+    function updateLockDots() {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById("lockDot" + i);
+        if (dot) {
+          dot.className = (i < enteredLockPin.length)
+            ? "w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
+            : "w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all";
+        }
+      }
+    }
+
+    async function saveNewPin() {
+      const pin = document.getElementById("newPinInput").value.trim();
+      if (!pin || pin.length < 4) {
+        showToast("O PIN deve ter pelo menos 4 dígitos.");
+        return;
+      }
+      showToast("Atualizando PIN...");
+      const res = await fetch("/api/settings/pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("PIN atualizado com sucesso!");
+        document.getElementById("newPinInput").value = "";
+      } else {
+        showToast(data.error || "Erro ao salvar PIN.");
+      }
+    }
+
+    let toastTimer;
     function showToast(msg) {
       const toast = document.getElementById("toastNotification");
-      const toastMsg = document.getElementById("toastMessage");
-      toastMsg.innerText = msg;
-
-      clearTimeout(toastTimeout);
+      const msgEl = document.getElementById("toastMessage");
+      if (!toast || !msgEl) return;
+      msgEl.innerText = msg;
+      clearTimeout(toastTimer);
       toast.classList.remove("translate-y-24", "opacity-0");
       toast.classList.add("translate-y-0", "opacity-100");
-
-      toastTimeout = setTimeout(() => {
+      toastTimer = setTimeout(() => {
         toast.classList.remove("translate-y-0", "opacity-100");
         toast.classList.add("translate-y-24", "opacity-0");
       }, 3000);
     }
-
-    function showNotificationToast() {
-      showToast("Notificação: Lucas já utilizou 70% da cota diária!");
-    }
   </script>
-  <script src="/ui/api_bridge.js"></script>
 </body>
 </html>
