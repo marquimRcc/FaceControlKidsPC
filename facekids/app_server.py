@@ -29,17 +29,30 @@ from .camera_service import CameraService
 logger = logging.getLogger("facekids.app_server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-UI_DIR = Path(__file__).resolve().parent / "ui_assets"
+
+def get_ui_dir() -> Path:
+    """Localiza o diretorio de assets HTML/JS tanto no venv quanto no _MEIPASS."""
+    if hasattr(sys, "_MEIPASS"):
+        p1 = Path(sys._MEIPASS) / "facekids" / "ui_assets"
+        if p1.exists():
+            return p1
+        p2 = Path(sys._MEIPASS) / "ui_assets"
+        if p2.exists():
+            return p2
+    return Path(__file__).resolve().parent / "ui_assets"
+
+
+UI_DIR = get_ui_dir()
 
 
 class FaceKidsApiHandler(BaseHTTPRequestHandler):
-    server_token: str = ""
+    last_activity_time = time.time()
 
     def log_message(self, format: str, *args: Any) -> None:
-        # Suprime logs excessivos de polling no console
         pass
 
     def send_json(self, data: Any, status: int = 200) -> None:
+        FaceKidsApiHandler.last_activity_time = time.time()
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -57,6 +70,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        FaceKidsApiHandler.last_activity_time = time.time()
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -66,6 +80,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_diagnostics()
         elif path == "/api/dashboard":
             self.handle_dashboard()
+        elif path == "/api/heartbeat":
+            self.send_json({"ok": True, "time": time.time()})
         elif path == "/api/camera/stream":
             self.handle_camera_stream()
         elif path == "/api/camera/preview":
@@ -80,6 +96,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Endpoint nao encontrado"}, 404)
 
     def do_POST(self) -> None:
+        FaceKidsApiHandler.last_activity_time = time.time()
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -106,7 +123,6 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Endpoint POST desconhecido"}, 404)
 
     def handle_status(self) -> None:
-        """Indica se o sistema ja foi instalado ou se deve abrir o Wizard."""
         has_db = DEFAULT_DB_FILE.exists()
         has_pin = False
         children_count = 0
@@ -255,7 +271,6 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             store.close()
 
     def handle_camera_preview(self) -> None:
-        """Captura um snapshot da camera em Base64 para exibicao no frontend."""
         try:
             import cv2
             cap = cv2.VideoCapture(0, cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY)
@@ -268,16 +283,13 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": "Falha ao capturar quadro"}, 500)
                 return
 
-            # Converte em JPEG e depois base64
             _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             b64 = base64.b64encode(buffer).decode("ascii")
             self.send_json({"ok": True, "image": f"data:image/jpeg;base64,{b64}"})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)}, 500)
 
-
     def handle_camera_stream(self) -> None:
-        """Transmite streaming MJPEG de baixa latência em tempo real."""
         self.send_response(200)
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -287,13 +299,13 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         try:
             cam = CameraService.get_instance()
             for chunk in cam.generate_mjpeg_stream():
+                FaceKidsApiHandler.last_activity_time = time.time()
                 self.wfile.write(chunk)
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
     def handle_camera_enroll_start(self, body: Dict[str, Any]) -> None:
-        """Dispara a captura de 12 fotos para o cadastro biométrico da criança."""
         cid = int(body.get("child_id", 0))
         if cid <= 0:
             if DEFAULT_DB_FILE.exists():
@@ -306,7 +318,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
         if cid <= 0:
-            self.send_json({"ok": False, "error": "Crie o perfil da criança antes de cadastrar a biometria."}, 400)
+            self.send_json({"ok": False, "error": "Crie o perfil da crianca antes de cadastrar a biometria."}, 400)
             return
 
         cam = CameraService.get_instance()
@@ -314,12 +326,10 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         self.send_json(res)
 
     def handle_camera_enroll_status(self) -> None:
-        """Consulta o progresso da captura facial (ex: 5 de 12 fotos)."""
         cam = CameraService.get_instance()
         self.send_json(cam.enrollment_state)
 
     def handle_child_avatar(self, path: str) -> None:
-        """Serve o avatar PNG circular da criança diretamente."""
         try:
             parts = [p for p in path.split("/") if p]
             if len(parts) >= 3 and parts[0] == "api" and parts[1] == "child":
@@ -336,21 +346,21 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                     return
         except Exception:
             pass
-        self.send_error(404, "Avatar não encontrado")
+        self.send_error(404, "Avatar nao encontrado")
 
     def serve_static(self, path: str) -> None:
+        target_dir = get_ui_dir()
         if path in ("/", "/index.html"):
-            target = UI_DIR / "app.html"
+            target = target_dir / "app.html"
         else:
             rel = path.lstrip("/ui/")
-            target = UI_DIR / rel
+            target = target_dir / rel
 
         if not target.exists() or not target.is_file():
-            # Fallback para o HTML principal do Concept A
-            target = UI_DIR / "app.html"
+            target = target_dir / "app.html"
 
         if not target.exists():
-            self.send_error(404, "Arquivo nao encontrado")
+            self.send_error(404, f"Arquivo nao encontrado em {target_dir}")
             return
 
         ctype, _ = mimetypes.guess_type(str(target))
@@ -385,13 +395,3 @@ def run_app_server(port: Optional[int] = None) -> Tuple[HTTPServer, int]:
     server_thread.start()
     logger.info(f"Servidor FaceKids ativo em http://127.0.0.1:{port}")
     return server, port
-
-
-if __name__ == "__main__":
-    server, port = run_app_server()
-    print(f"Servidor FaceKids ativo em http://127.0.0.1:{port}")
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        server.shutdown()

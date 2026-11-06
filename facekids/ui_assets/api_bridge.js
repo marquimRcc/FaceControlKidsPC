@@ -122,6 +122,11 @@ const FaceKidsAPI = {
 
 // Inicializacao automatica ao carregar a interface
 document.addEventListener("DOMContentLoaded", async () => {
+  // Dispara heartbeat periodico para manter o servidor ativo enquanto a janela estiver aberta
+  setInterval(() => {
+    fetch(`${FaceKidsAPI.baseUrl}/api/heartbeat`).catch(() => {});
+  }, 2000);
+
   const status = await FaceKidsAPI.getStatus();
   if (status && status.installed) {
     if (typeof showDashboard === "function") {

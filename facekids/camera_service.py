@@ -25,9 +25,14 @@ from .storage import Storage
 
 logger = logging.getLogger("facekids.camera_service")
 
-# Raiz do projeto para carregar os modelos ONNX
-ROOT_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = ROOT_DIR / "models"
+def get_models_dir() -> Path:
+    if hasattr(sys, "_MEIPASS"):
+        p = Path(sys._MEIPASS) / "models"
+        if p.exists():
+            return p
+    return Path(__file__).resolve().parent.parent / "models"
+
+MODELS_DIR = get_models_dir()
 
 
 class CameraService:

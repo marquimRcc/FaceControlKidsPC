@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from .app_server import run_app_server, find_free_port
+from .app_server import run_app_server, find_free_port, FaceKidsApiHandler
 
 
 EDGE_PATHS = [
@@ -30,7 +30,7 @@ def find_edge_executable() -> str | None:
 
 
 def open_app_window(mode: str = "auto", port: int | None = None) -> int:
-    """Inicia o servidor e exibe a janela da aplicacao."""
+    """Inicia o servidor e exibe a janela da aplicacao mantendo o servidor ativo."""
     server, active_port = run_app_server(port)
     url = f"http://127.0.0.1:{active_port}/"
     if mode in ("wizard", "install"):
@@ -39,8 +39,12 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
         url += "?mode=dashboard"
 
     edge = find_edge_executable()
-    profile_dir = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "FaceKids" / "app_profile"
+    # Usa LOCALAPPDATA para garantir permissao de escrita sem elevacao
+    local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    profile_dir = Path(local_app_data) / "FaceKids" / "app_profile"
     profile_dir.mkdir(parents=True, exist_ok=True)
+
+    FaceKidsApiHandler.last_activity_time = time.time()
 
     if edge and sys.platform == "win32":
         cmd = [
@@ -52,21 +56,32 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
             "--no-default-browser-check"
         ]
         try:
-            proc = subprocess.Popen(cmd)
-            proc.wait()
-            server.shutdown()
-            return 0
+            subprocess.Popen(cmd)
         except Exception:
             pass
+    else:
+        import webbrowser
+        webbrowser.open(url)
 
-    # Fallback para navegador padrao caso o Edge nao esteja presente
-    import webbrowser
-    webbrowser.open(url)
+    # Mantem o servidor ativo enquanto houver comunicacao com a janela (heartbeat / requisicoes)
+    # Periodo de graca inicial de 15 segundos para a janela carregar
+    time.sleep(3)
     try:
+        idle_count = 0
         while True:
             time.sleep(1)
+            elapsed = time.time() - FaceKidsApiHandler.last_activity_time
+            if elapsed > 12.0:
+                idle_count += 1
+                if idle_count >= 5:  # 5 segundos sem requisicao apos o timeout
+                    break
+            else:
+                idle_count = 0
     except KeyboardInterrupt:
+        pass
+    finally:
         server.shutdown()
+
     return 0
 
 

@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Compila o instalador unificado autônomo 'FaceKids-Setup.exe' usando PyInstaller.
+  Compila o instalador unificado autônomo 'FaceKids-Instalador.exe' usando PyInstaller.
 .DESCRIPTION
-  Empacota o frontend moderno (Conceito A), os modelos faciais ONNX,
+  Empacota o pacote facekids completo, o frontend moderno (Conceito A), os modelos faciais ONNX,
   a DLL Credential Provider e o motor de instalação em um único executável .exe.
 #>
 [CmdletBinding()]
@@ -14,7 +14,7 @@ $python = Join-Path $root '.venv\Scripts\python.exe'
 $pyinstaller = Join-Path $root '.venv\Scripts\pyinstaller.exe'
 
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "     Construindo FaceKids-Setup.exe (Instalador Unificado)" -ForegroundColor Cyan
+Write-Host "     Construindo FaceKids-Instalador.exe" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 
 # 1. Garante que a DLL nativa está compilada
@@ -25,10 +25,11 @@ if (-not (Test-Path -LiteralPath $dllPath)) {
 }
 
 # 2. Configura os diretórios de dados a serem embutidos
-$entryScript = Join-Path $root 'scripts\installer_entry.py'
+$entryScript = Join-Path $root 'installer_runner.py'
 $distDir = Join-Path $root 'dist'
 $buildDir = Join-Path $root 'build'
 
+$facekidsPkg = Join-Path $root 'facekids'
 $uiAssets = Join-Path $root 'facekids\ui_assets'
 $modelsDir = Join-Path $root 'models'
 
@@ -39,7 +40,16 @@ $pyinstallerArgs = @(
     '--onefile',
     '--windowed',
     '--uac-admin',
-    '--name', 'FaceKids-Setup',
+    '--name', 'FaceKids-Instalador',
+    '--paths', $root,
+    '--hidden-import', 'facekids.app_window',
+    '--hidden-import', 'facekids.app_server',
+    '--hidden-import', 'facekids.camera_service',
+    '--hidden-import', 'facekids.installer_engine',
+    '--hidden-import', 'facekids.session_secret',
+    '--hidden-import', 'facekids.admin_auth',
+    '--hidden-import', 'facekids.storage',
+    "--add-data", "$facekidsPkg;facekids",
     "--add-data", "$uiAssets;facekids/ui_assets",
     "--add-data", "$modelsDir;models",
     "--add-data", "$dllPath;native/credential_provider_facekids",
@@ -51,18 +61,18 @@ $pyinstallerArgs = @(
 & $pyinstaller @pyinstallerArgs
 
 if ($LASTEXITCODE -ne 0) {
-    throw "Falha ao compilar FaceKids-Setup.exe com PyInstaller."
+    throw "Falha ao compilar FaceKids-Instalador.exe com PyInstaller."
 }
 
-$outputExe = Join-Path $distDir 'FaceKids-Setup.exe'
+$outputExe = Join-Path $distDir 'FaceKids-Instalador.exe'
 if (Test-Path -LiteralPath $outputExe) {
     $sizeMb = [math]::Round(((Get-Item $outputExe).Length / 1MB), 2)
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  FaceKids-Setup.exe GERADO COM SUCESSO!" -ForegroundColor Green
+    Write-Host "  FaceKids-Instalador.exe GERADO COM SUCESSO!" -ForegroundColor Green
     Write-Host "  Caminho: $outputExe" -ForegroundColor Green
     Write-Host "  Tamanho: $sizeMb MB" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
 } else {
-    throw "O arquivo FaceKids-Setup.exe não foi encontrado na pasta dist."
+    throw "O arquivo FaceKids-Instalador.exe não foi encontrado na pasta dist."
 }
