@@ -160,7 +160,6 @@ try {
     & icacls "$env:LOCALAPPDATA\Programs\Python" /grant "Filhos:(OI)(CI)(RX)" /T 2>&1 | Out-Null
     & icacls (Split-Path $root -Parent) /grant "Filhos:(RX)" 2>&1 | Out-Null
     & icacls $root /grant "Filhos:(OI)(CI)(RX)" /T 2>&1 | Out-Null
-    & icacls $programDataDir /grant "Filhos:(OI)(CI)(M)" /T 2>&1 | Out-Null
 } catch {}
 
 # O Python esta no perfil administrativo. Os scripts Tcl/Tk precisam ficar em
@@ -238,6 +237,12 @@ if ($registeredAgent.Principal.UserId -notmatch '(?i)(^|\\)Filhos$' -or
     throw 'A tarefa FaceKidsFilhosAgent nao ficou vinculada a sessao interativa de Filhos.'
 }
 Write-Host "Agente dos Filhos agendado sem senha para $filhosAccount." -ForegroundColor Green
+
+# Aplicar Hardening NTFS em C:\ProgramData\FaceKids
+$blindarScript = Join-Path $PSScriptRoot 'Blindar-Permissoes-FaceKids.ps1'
+if (Test-Path -LiteralPath $blindarScript) {
+    & $blindarScript -Root $programDataDir
+}
 
 # 7. Iniciar os servicos em segundo plano
 Write-Host "Iniciando servicos em segundo plano..." -ForegroundColor Yellow
