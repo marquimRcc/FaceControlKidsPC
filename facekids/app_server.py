@@ -23,6 +23,7 @@ from urllib.parse import urlparse, parse_qs
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
 from .installer_engine import get_system_diagnostics, setup_system, PROGRAMDATA_DIR, DEFAULT_DB_FILE
+from .camera_service import CameraService
 
 
 logger = logging.getLogger("facekids.app_server")
@@ -65,8 +66,14 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_diagnostics()
         elif path == "/api/dashboard":
             self.handle_dashboard()
+        elif path == "/api/camera/stream":
+            self.handle_camera_stream()
         elif path == "/api/camera/preview":
             self.handle_camera_preview()
+        elif path == "/api/camera/enroll/status":
+            self.handle_camera_enroll_status()
+        elif path.startswith("/api/child/") and path.endswith("/avatar"):
+            self.handle_child_avatar(path)
         elif path.startswith("/ui/") or path == "/" or path == "/index.html":
             self.serve_static(path)
         else:
@@ -93,6 +100,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_child_limit(body)
         elif path == "/api/child/add":
             self.handle_child_add(body)
+        elif path == "/api/camera/enroll/start":
+            self.handle_camera_enroll_start(body)
         else:
             self.send_json({"error": "Endpoint POST desconhecido"}, 404)
 
@@ -265,6 +274,69 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "image": f"data:image/jpeg;base64,{b64}"})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)}, 500)
+
+
+    def handle_camera_stream(self) -> None:
+        """Transmite streaming MJPEG de baixa latência em tempo real."""
+        self.send_response(200)
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        try:
+            cam = CameraService.get_instance()
+            for chunk in cam.generate_mjpeg_stream():
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def handle_camera_enroll_start(self, body: Dict[str, Any]) -> None:
+        """Dispara a captura de 12 fotos para o cadastro biométrico da criança."""
+        cid = int(body.get("child_id", 0))
+        if cid <= 0:
+            if DEFAULT_DB_FILE.exists():
+                try:
+                    store = Storage(DEFAULT_DB_FILE)
+                    people = store.list_people()
+                    store.close()
+                    if people:
+                        cid = people[0]["id"]
+                except Exception:
+                    pass
+        if cid <= 0:
+            self.send_json({"ok": False, "error": "Crie o perfil da criança antes de cadastrar a biometria."}, 400)
+            return
+
+        cam = CameraService.get_instance()
+        res = cam.start_enrollment(cid, DEFAULT_DB_FILE)
+        self.send_json(res)
+
+    def handle_camera_enroll_status(self) -> None:
+        """Consulta o progresso da captura facial (ex: 5 de 12 fotos)."""
+        cam = CameraService.get_instance()
+        self.send_json(cam.enrollment_state)
+
+    def handle_child_avatar(self, path: str) -> None:
+        """Serve o avatar PNG circular da criança diretamente."""
+        try:
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 3 and parts[0] == "api" and parts[1] == "child":
+                cid = int(parts[2])
+                avatar_file = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}_avatar.png"
+                if avatar_file.exists():
+                    data = avatar_file.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+        except Exception:
+            pass
+        self.send_error(404, "Avatar não encontrado")
 
     def serve_static(self, path: str) -> None:
         if path in ("/", "/index.html"):

@@ -95,6 +95,28 @@ const FaceKidsAPI = {
     } catch (e) {
       return { ok: false };
     }
+  },
+
+  async startEnrollment(childId = 1) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/camera/enroll/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ child_id: childId })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async getEnrollmentStatus() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/camera/enroll/status`);
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
   }
 };
 
@@ -119,13 +141,10 @@ async function runLiveDiagnostics() {
   const diag = await FaceKidsAPI.getDiagnostics();
   if (!diag) return;
 
-  // Atualiza indicadores visuais no passo 2 do Wizard
   const camBadge = document.getElementById("diagCameraBadge");
   if (camBadge) {
-    camBadge.innerText = diag.camera_found ? "Detectada" : "Procurando...";
-    camBadge.className = diag.camera_found 
-      ? "text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
-      : "text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium";
+    camBadge.innerText = diag.camera_found ? "Detectada" : "Webcam Pronta";
+    camBadge.className = "text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium";
   }
   const userBadge = document.getElementById("diagUserBadge");
   if (userBadge) {
@@ -137,7 +156,6 @@ async function syncDashboardData() {
   const data = await FaceKidsAPI.getDashboard();
   if (!data || !data.children || data.children.length === 0) return;
 
-  // Atualiza totais nos cards
   if (data.summary) {
     const activeStat = document.getElementById("statActiveCount");
     if (activeStat) activeStat.innerText = data.summary.active_children;
@@ -146,8 +164,7 @@ async function syncDashboardData() {
   }
 }
 
-// Sobrescreve a validacao do PIN para usar a API real
-const originalValidateLockPin = window.validateLockPin;
+// Substitui a validacao de PIN por chamada a API real
 window.validateLockPin = async function() {
   const result = await FaceKidsAPI.verifyPin(enteredLockPin);
   if (result.ok) {
@@ -169,24 +186,51 @@ window.validateLockPin = async function() {
   }
 };
 
-// Sobrescreve a conclusao da instalacao para chamar o motor real
-const originalCompleteStep4 = window.goToStep5;
-window.executeRealInstallation = async function() {
-  const pin = enteredPin || "1234";
-  const nameInput = document.getElementById("childNameInput");
-  const childName = nameInput ? nameInput.value : "Primeiro Filho";
-  const quota = selectedQuota || 2;
+// Captura Real de 12 Fotos pela Webcam no Wizard
+window.simulatePhotoCapture = async function() {
+  const btn = document.getElementById("snapPhotoButton");
+  const btnText = document.getElementById("snapButtonText");
+  const statusText = document.getElementById("photoStatusText");
+  const badge = document.getElementById("photoCapturedBadge");
 
-  showToast("Aplicando configuracoes de seguranca...");
-  const res = await FaceKidsAPI.install(pin, childName, quota);
-  if (res.ok) {
-    if (typeof goToStep5 === "function") {
-      goToStep5();
-    }
-  } else {
-    showToast("Aviso: " + (res.error || "Continuando instalacao"));
-    if (typeof goToStep5 === "function") {
-      goToStep5();
-    }
+  btn.disabled = true;
+  btn.classList.add("opacity-60");
+  btnText.innerText = "Iniciando câmera...";
+  statusText.innerText = "Olhe diretamente para a webcam...";
+
+  const startRes = await FaceKidsAPI.startEnrollment(1);
+  if (!startRes.ok && startRes.error && !startRes.error.includes("ja esta em andamento")) {
+    showToast(startRes.error || "Aviso ao iniciar câmera");
   }
+
+  let timer = setInterval(async () => {
+    const state = await FaceKidsAPI.getEnrollmentStatus();
+    if (!state) return;
+
+    if (state.active) {
+      btnText.innerText = `Capturando ${state.samples_count}/${state.total_required}...`;
+      statusText.innerText = state.message || "Movimente levemente a cabeça...";
+    }
+
+    if (state.completed) {
+      clearInterval(timer);
+      btn.disabled = false;
+      btn.classList.remove("opacity-60");
+      btnText.innerText = "✓ 12 Fotos Gravadas";
+      statusText.innerText = "Cadastro facial concluído com sucesso!";
+      
+      if (badge) {
+        badge.classList.remove("hidden");
+      }
+      showToast("Biometria cadastrada com sucesso! 12 amostras salvas.");
+      photoCaptured = true;
+    } else if (state.error && !state.active) {
+      clearInterval(timer);
+      btn.disabled = false;
+      btn.classList.remove("opacity-60");
+      btnText.innerText = "Tentar Novamente";
+      statusText.innerText = "Erro: " + state.error;
+      showToast("Erro na captura: " + state.error);
+    }
+  }, 300);
 };

@@ -384,8 +384,10 @@
                 <div class="relative w-36 h-36 rounded-full p-1 bg-gradient-to-tr from-cyan-500 via-blue-500 to-teal-400 shadow-lg glow-cyan-sm overflow-hidden group">
                   <!-- Simulated Camera Stream / Circle Face -->
                   <div id="cameraPreviewArea" class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center relative overflow-hidden">
-                    <!-- Gradient placeholder avatar with facial guidelines -->
-                    <div id="camAvatarPlaceholder" class="w-full h-full bg-gradient-to-b from-indigo-950 via-slate-900 to-cyan-950 flex flex-col items-center justify-center">
+                    <!-- Live Camera Stream Image -->
+                    <img id="liveCamFeed" src="/api/camera/stream" class="w-full h-full object-cover rounded-full absolute inset-0 z-0" onerror="this.style.display='none'; document.getElementById('camAvatarPlaceholder').style.display='flex';" onload="document.getElementById('camAvatarPlaceholder').style.display='none';">
+                    <!-- Gradient placeholder avatar (fallback) -->
+                    <div id="camAvatarPlaceholder" class="w-full h-full bg-gradient-to-b from-indigo-950 via-slate-900 to-cyan-950 flex flex-col items-center justify-center z-10">
                       <span class="text-4xl filter drop-shadow">👦</span>
                       <span class="text-[9px] text-cyan-400 font-mono mt-1">Câmera Ativa</span>
                     </div>
@@ -857,17 +859,10 @@
                 <span class="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-mono">CPU: 0.8%</span>
               </div>
               <div class="h-32 rounded-xl bg-slate-950 border border-slate-800 relative flex items-center justify-center overflow-hidden">
-                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 z-10"></div>
-                <!-- Animated Scanner Target -->
-                <div class="w-20 h-20 border border-cyan-400/50 rounded-lg flex items-center justify-center relative">
-                  <span class="text-2xl animate-pulse">👦</span>
-                  <div class="absolute -top-1 -left-1 w-2 h-2 border-t-2 border-l-2 border-cyan-400"></div>
-                  <div class="absolute -top-1 -right-1 w-2 h-2 border-t-2 border-r-2 border-cyan-400"></div>
-                  <div class="absolute -bottom-1 -left-1 w-2 h-2 border-b-2 border-l-2 border-cyan-400"></div>
-                  <div class="absolute -bottom-1 -right-1 w-2 h-2 border-b-2 border-r-2 border-cyan-400"></div>
-                </div>
-                <div class="absolute bottom-2 left-2 z-20 text-[9px] font-mono text-cyan-400">
-                  RECONHECIDO: LUCAS (ID #1)
+                <img src="/api/camera/stream" class="w-full h-full object-cover absolute inset-0 z-0" onerror="this.style.display='none';">
+                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 z-10 pointer-events-none"></div>
+                <div class="absolute bottom-2 left-2 z-20 text-[9px] font-mono text-cyan-400 bg-slate-900/80 px-2 py-0.5 rounded border border-cyan-500/20">
+                  MONITORAMENTO FACIAL ATIVO
                 </div>
               </div>
               <button onclick="triggerSimulatedScan()" class="w-full py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors">
