@@ -40,7 +40,7 @@ $pyinstallerArgs = @(
     '--onefile',
     '--windowed',
     '--uac-admin',
-    '--name', 'FaceKids-Instalador-v2',
+    '--name', 'FaceKids-Instalador-v3',
     '--paths', $root,
     '--hidden-import', 'facekids.app_window',
     '--hidden-import', 'facekids.app_server',
@@ -64,7 +64,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Falha ao compilar FaceKids-Instalador.exe com PyInstaller."
 }
 
-$outputExe = Join-Path $distDir 'FaceKids-Instalador-v2.exe'
+$outputExe = Join-Path $distDir 'FaceKids-Instalador-v3.exe'
 if (Test-Path -LiteralPath $outputExe) {
     $sizeMb = [math]::Round(((Get-Item $outputExe).Length / 1MB), 2)
     Write-Host ""

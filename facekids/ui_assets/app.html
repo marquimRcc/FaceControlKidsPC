@@ -158,14 +158,14 @@
             </div>
           </div>
 
-          <button onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2">
+          <button type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
             <span>Iniciar Instalação em 1 Clique</span>
             <span>⚡</span>
           </button>
         </div>
 
         <!-- PASSO 2: AUTO-DETECCAO -->
-        <div id="wizardStep2" class="wizard-step hidden flex flex-col space-y-6 transition-all duration-300">
+        <div id="wizardStep2" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
           <div class="text-left space-y-1">
             <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Verificação de Sistema</span>
             <h2 class="text-xl font-bold text-white">Detectando Pré-requisitos</h2>
@@ -207,13 +207,13 @@
             </div>
           </div>
 
-          <button onclick="goToStep3()" class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+          <button type="button" onclick="goToStep3()" class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all cursor-pointer">
             Continuar para Criar PIN →
           </button>
         </div>
 
         <!-- PASSO 3: CRIAR PIN DOS PAIS -->
-        <div id="wizardStep3" class="wizard-step hidden flex flex-col space-y-6 transition-all duration-300">
+        <div id="wizardStep3" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
           <div class="text-left space-y-1">
             <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
             <h2 class="text-xl font-bold text-white">Crie seu PIN de Administrador</h2>
@@ -554,16 +554,26 @@
 
     // Navegação do Wizard
     function goToStep2() {
-      document.getElementById("wizardStep1").classList.add("hidden");
-      document.getElementById("wizardStep2").classList.remove("hidden");
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "none";
+      if (s2) s2.style.display = "flex";
+      if (s3) s3.style.display = "none";
       document.getElementById("currentStepNumber").innerText = "2";
       document.getElementById("dotStep2").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
-      runLiveDiagnostics();
+      if (typeof runLiveDiagnostics === "function") {
+        runLiveDiagnostics();
+      }
     }
 
     function goToStep3() {
-      document.getElementById("wizardStep2").classList.add("hidden");
-      document.getElementById("wizardStep3").classList.remove("hidden");
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "none";
+      if (s2) s2.style.display = "none";
+      if (s3) s3.style.display = "flex";
       document.getElementById("currentStepNumber").innerText = "3";
       document.getElementById("dotStep3").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
     }
@@ -621,15 +631,21 @@
 
     // Alternador de Visões Principais
     function showWizard() {
-      document.getElementById("wizardView").classList.remove("hidden");
-      document.getElementById("dashboardView").classList.add("hidden");
-      document.getElementById("lockScreenBtn").classList.add("hidden");
+      const w = document.getElementById("wizardView");
+      const d = document.getElementById("dashboardView");
+      const l = document.getElementById("lockScreenBtn");
+      if (w) w.style.display = "flex";
+      if (d) d.style.display = "none";
+      if (l) l.style.display = "none";
     }
 
     function showDashboard() {
-      document.getElementById("wizardView").classList.add("hidden");
-      document.getElementById("dashboardView").classList.remove("hidden");
-      document.getElementById("lockScreenBtn").classList.remove("hidden");
+      const w = document.getElementById("wizardView");
+      const d = document.getElementById("dashboardView");
+      const l = document.getElementById("lockScreenBtn");
+      if (w) w.style.display = "none";
+      if (d) d.style.display = "flex";
+      if (l) l.style.display = "flex";
     }
 
     // Abas do Painel
