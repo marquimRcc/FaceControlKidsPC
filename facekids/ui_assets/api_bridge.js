@@ -127,18 +127,34 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetch(`${FaceKidsAPI.baseUrl}/api/heartbeat`).catch(() => {});
   }, 2000);
 
-  const status = await FaceKidsAPI.getStatus();
-  if (status && status.installed) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const reqMode = urlParams.get("mode");
+
+  if (reqMode === "wizard") {
+    if (typeof showWizard === "function") {
+      showWizard();
+    }
+    runLiveDiagnostics();
+  } else if (reqMode === "dashboard") {
     if (typeof showDashboard === "function") {
       showDashboard();
     }
     await syncDashboardData();
     setInterval(syncDashboardData, 4000);
   } else {
-    if (typeof showWizard === "function") {
-      showWizard();
+    const status = await FaceKidsAPI.getStatus();
+    if (status && status.installed) {
+      if (typeof showDashboard === "function") {
+        showDashboard();
+      }
+      await syncDashboardData();
+      setInterval(syncDashboardData, 4000);
+    } else {
+      if (typeof showWizard === "function") {
+        showWizard();
+      }
+      runLiveDiagnostics();
     }
-    runLiveDiagnostics();
   }
 });
 
