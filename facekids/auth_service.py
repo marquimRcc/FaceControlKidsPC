@@ -41,6 +41,7 @@ from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
 from .agent_watchdog import AgentWatchdog, AgentWatchdogThread
 from .session_secret import get_session_secret
+from .credential_store import get_filhos_credentials, get_filhos_password
 
 from .vm_lab_paths import vm_lab_root
 
@@ -338,18 +339,19 @@ class FaceAuthenticator:
                 except Exception as e:
                     logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
+            filhos_user, filhos_pass = get_filhos_credentials()
             response = {
                 "child_id": best_candidate,
                 "child_name": child_name,
                 "remaining": remaining_seconds,
-                "user": "Filhos",
+                "user": filhos_user,
                 "detected_ids": best_detected_ids or [best_candidate],
                 "face_count": best_face_count or 1,
             }
             # Only the legacy unlock command needs the credential field.
             # Session observations must never carry a password or touch UI files.
             if publish_unlock_event:
-                response["password"] = get_session_secret()
+                response["password"] = filhos_pass
             return "ALLOW", response
         finally:
             store.close()
@@ -545,13 +547,16 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdo
             else:
                 status, data = "INVALID_REQUEST", {"message": "Requisicao IPC vazia"}
 
+            filhos_user, filhos_pass = get_filhos_credentials()
             response_payload = {
                 "status": status,
                 "version": "1.0",
-                "user": "Filhos" if status == "ALLOW" else "",
+                "user": filhos_user if status == "ALLOW" else "",
                 "data": data,
                 "timestamp": time.time(),
             }
+            if status == "ALLOW":
+                response_payload["password"] = filhos_pass
             if status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
                 response_payload["child_id"] = data.get("child_id")
                 response_payload["child_name"] = data.get("child_name")

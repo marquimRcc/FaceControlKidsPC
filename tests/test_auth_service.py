@@ -81,12 +81,20 @@ class TestAuthService(unittest.TestCase):
             mock_cap.read.return_value = (True, dummy_frame)
 
             with patch("cv2.VideoCapture", return_value=mock_cap), \
-                 patch("facekids.auth_service.save_child_photo"):
+                 patch("facekids.auth_service.save_child_photo"), \
+                 patch("facekids.auth_service.get_filhos_credentials", return_value=("Filhos", "1")):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["user"], "Filhos")
             self.assertEqual(data["password"], "1")
+
+            with patch("cv2.VideoCapture", return_value=mock_cap), \
+                 patch("facekids.auth_service.save_child_photo"), \
+                 patch("facekids.auth_service.get_filhos_credentials", return_value=("Filhos", "CustomSecret123!")):
+                status2, data2 = auth.evaluate(camera_index=0, timeout_seconds=1.0)
+            self.assertEqual(status2, "ALLOW")
+            self.assertEqual(data2["password"], "CustomSecret123!")
             self.assertEqual(data["child_id"], pid)
             self.assertEqual(data["child_name"], "Filho Smoke")
             self.assertGreater(data["remaining"], 0)

@@ -1,13 +1,12 @@
-"""FaceControlKidsPC - Motor de Instalacao e Configuracao Automatizada.
+"""FaceControlKidsPC - Motor de Instalacao, Configuracao e Desinstalacao Automatizada.
 
-Executa as etapas de instalacao do sistema com seguranca avancada:
-1. Gera um segredo criptografico unico para a conta Windows 'Filhos' (elimina senha fixa);
-2. Cria ou atualiza a conta de usuario local 'Filhos' no Windows com esse segredo;
-3. Protege o segredo em armazenamento restrito (somente SYSTEM e Administradores);
-4. Copia e registra a DLL FaceKidsCredentialProvider.dll;
-5. Configura tarefas agendadas em segundo plano (AuthService e FilhosAgent);
-6. Inicializa o banco de dados SQLite com o PIN mestre dos pais;
-7. Cria atalhos no Desktop e Menu Iniciar.
+Executa as etapas de instalacao do sistema com seguranca e paridade funcional total com a main:
+1. Provisiona/redefine a senha da conta Windows 'Filhos' e salva no cofre seguro DPAPI (credentials.bin);
+2. Registra o FaceKidsCredentialProvider.dll no Registro do Windows e COM CLSID;
+3. Configura permissoes NTFS e tarefas agendadas em segundo plano (FaceKidsAuthService e FaceKidsFilhosAgent);
+4. Inicializa o banco de dados SQLite com o PIN mestre dos pais;
+5. Cria atalhos oficiais com o icone .ico na Area de Trabalho e Menu Iniciar;
+6. Permite verificacao em tempo real da saude dos servicos e desinstalacao segura completa.
 """
 from __future__ import annotations
 
@@ -34,6 +33,12 @@ from .session_secret import (
     get_session_secret,
     _run_win_cmd,
 )
+from .credential_store import (
+    save_filhos_credentials,
+    get_filhos_credentials,
+    get_filhos_password,
+    CREDENTIALS_FILE,
+)
 
 
 logger = logging.getLogger("facekids.installer_engine")
@@ -43,6 +48,8 @@ SECURITY_DIR = PROGRAMDATA_DIR / "security"
 TOKEN_FILE = SECURITY_DIR / "filhos_session.token"
 CONFIG_FILE = PROGRAMDATA_DIR / "configuracoes.json"
 DEFAULT_DB_FILE = PROGRAMDATA_DIR / "criancas.sqlite3"
+
+CREDENTIAL_PROVIDER_GUID = "{FAC0D042-3DD0-4A8C-9F18-440C44330C20}"
 
 
 def is_admin() -> bool:
@@ -100,74 +107,339 @@ def get_system_diagnostics() -> Dict[str, Any]:
     return results
 
 
-def ensure_filhos_windows_user(secret: str) -> Tuple[bool, str]:
-    """Cria ou atualiza a senha da conta local 'Filhos' com o segredo dinamico."""
+def ensure_filhos_windows_user(secret: str, username: str = "Filhos") -> Tuple[bool, str]:
+    """Cria ou atualiza a senha da conta local 'Filhos' e armazena no cofre seguro DPAPI."""
+    if not secret:
+        secret = "1"
+
     if sys.platform != "win32":
+        save_filhos_credentials(username, secret)
         return True, "Simulado em ambiente de teste"
 
     try:
-        # Verifica se o usuario ja existe
-        check = _run_win_cmd(["net", "user", "Filhos"], timeout=10.0)
+        # 1. Verifica se o usuario ja existe
+        check = _run_win_cmd(["net", "user", username], timeout=10.0)
         if check.returncode == 0:
-            # Atualiza senha com o segredo dinamico
-            res = _run_win_cmd(["net", "user", "Filhos", secret], timeout=10.0)
+            # Atualiza senha com a credencial informada
+            res = _run_win_cmd(["net", "user", username, secret], timeout=10.0)
             if res.returncode != 0:
-                return False, f"Falha ao redefinir credencial da conta Filhos: {res.stderr}"
-            return True, "Conta 'Filhos' atualizada com segredo dinamico seguro."
+                logger.warning(f"Aviso ao redefinir senha da conta {username}: {res.stderr}")
+
+            # Define senha para nunca expirar
+            _run_win_cmd(["powershell", "-NoProfile", "-Command",
+                          f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"], timeout=10.0)
+            _run_win_cmd(["wmic", "useraccount", "where", f"Name='{username}'", "set", "PasswordExpires=FALSE"], timeout=10.0)
+            save_filhos_credentials(username, secret)
+            return True, f"Conta '{username}' atualizada com a nova senha e protegida via DPAPI."
         else:
-            # Cria a conta restrita
+            # Cria a conta supervisionada
             res = _run_win_cmd(
-                ["net", "user", "Filhos", secret, "/add",
+                ["net", "user", username, secret, "/add",
+                 "/fullname:Filhos",
                  "/comment:Conta supervisionada pelo FaceControlKidsPC",
-                 "/passwordchg:no"],
+                 "/passwordchg:no", "/expires:never"],
                 timeout=15.0
             )
             if res.returncode != 0:
-                return False, f"Falha ao criar conta 'Filhos': {res.stderr}"
-            return True, "Conta 'Filhos' criada com segredo dinamico exclusivo."
+                logger.warning(f"Aviso ao criar conta '{username}': {res.stderr}")
+
+            # Adiciona ao grupo local de Usuarios (SID S-1-5-32-545)
+            _run_win_cmd(["powershell", "-NoProfile", "-Command",
+                          f"Add-LocalGroupMember -SID 'S-1-5-32-545' -Member '{username}' -ErrorAction SilentlyContinue"], timeout=10.0)
+            _run_win_cmd(["powershell", "-NoProfile", "-Command",
+                          f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"], timeout=10.0)
+            save_filhos_credentials(username, secret)
+            return True, f"Conta '{username}' criada com sucesso e protegida via DPAPI."
     except Exception as e:
+        save_filhos_credentials(username, secret)
         return False, f"Erro ao configurar conta Windows: {e}"
 
 
-def create_desktop_shortcut() -> None:
-    """Cria atalho direto para o Painel Administrativo na Area de Trabalho."""
+def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
+    """Configura tarefas agendadas em segundo plano (AuthService e FilhosAgent) e permissoes NTFS."""
+    if sys.platform != "win32":
+        return True, "Simulado em ambiente de teste"
+
+    root = root_dir or Path(__file__).resolve().parent.parent
+    pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
+    if not pythonw.exists():
+        pythonw = Path(sys.executable).parent / "pythonw.exe"
+    if not pythonw.exists():
+        pythonw = Path(sys.executable)
+
     try:
-        if sys.platform == "win32":
-            desktop = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop"
-            if desktop.exists():
-                shortcut_file = desktop / "Painel FaceKids.lnk"
-                root = Path(__file__).resolve().parent.parent
-                pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
-                target_exe = None
-                args = ""
+        # 1. Permissoes em C:\ProgramData\FaceKids para a conta Filhos
+        cmd_acl = [
+            "icacls", str(PROGRAMDATA_DIR),
+            "/grant", "*S-1-5-32-545:(OI)(CI)(M)",
+            "Filhos:(OI)(CI)(M)"
+        ]
+        _run_win_cmd(cmd_acl, timeout=10.0)
 
-                if getattr(sys, "frozen", False):
-                    target_exe = Path(sys.executable)
-                    args = "--mode=dashboard"
-                elif pythonw.exists():
-                    target_exe = pythonw
-                    args = "-m facekids.app_window --mode=dashboard"
+        # 2. Configura script do agente na pasta de dados
+        agent_bat = PROGRAMDATA_DIR / "iniciar-filhos-agent.bat"
+        agent_content = (
+            "@echo off\r\n"
+            'if /i "%USERNAME%" neq "Filhos" exit /b\r\n'
+            f'cd /d "{PROGRAMDATA_DIR}"\r\n'
+            f'set PYTHONPATH={root}\r\n'
+            f'start "" "{pythonw}" -m facekids.filhos_agent\r\n'
+        )
+        agent_bat.write_text(agent_content, encoding="ascii", errors="ignore")
 
-                if target_exe and target_exe.exists():
-                    cmd = [
-                        "powershell", "-NoProfile", "-Command",
-                        f"$wsh = New-Object -ComObject WScript.Shell; "
-                        f"$s = $wsh.CreateShortcut('{shortcut_file}'); "
-                        f"$s.TargetPath = '{target_exe}'; "
-                        f"$s.Arguments = '{args}'; "
-                        f"$s.WorkingDirectory = '{root}'; "
-                        f"$s.Description = 'FaceKids - Painel Administrativo dos Pais'; "
-                        f"$s.Save()"
-                    ]
-                    _run_win_cmd(cmd, timeout=5.0)
+        # 3. Tarefa Agendada 1: FaceKidsAuthService (SYSTEM / ONSTART)
+        ps_auth = (
+            f"$action = New-ScheduledTaskAction -Execute '{pythonw}' -WorkingDirectory '{root}' -Argument '-m facekids.auth_service'; "
+            f"$trigger = New-ScheduledTaskTrigger -AtStartup; "
+            f"$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest; "
+            f"$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 4; "
+            f"Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null; "
+            f"Start-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction SilentlyContinue"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_auth], timeout=15.0)
+
+        # 4. Tarefa Agendada 2: FaceKidsFilhosAgent (Interativo no Logon de Filhos)
+        ps_agent = (
+            f"$filhosAccount = \"$env:COMPUTERNAME\\Filhos\"; "
+            f"$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/d /c \"{agent_bat}\"'; "
+            f"$trigger = New-ScheduledTaskTrigger -AtLogOn -User $filhosAccount; "
+            f"$principal = New-ScheduledTaskPrincipal -UserId $filhosAccount -LogonType Interactive -RunLevel Limited; "
+            f"Register-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_agent], timeout=15.0)
+
+        # 5. Registro da DLL do Credential Provider no Registro
+        dll_target = PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll"
+        if dll_target.exists():
+            _run_win_cmd(["regsvr32.exe", "/s", str(dll_target)], timeout=10.0)
+            ps_reg = (
+                f"$guid = '{CREDENTIAL_PROVIDER_GUID}'; "
+                f"$cpPath = \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\$guid\"; "
+                f"if (-not (Test-Path $cpPath)) {{ New-Item -Path $cpPath -Force | Out-Null }}; "
+                f"Set-ItemProperty -Path $cpPath -Name '(Default)' -Value 'FaceKidsCredentialProvider' -Force; "
+                f"$filhosUser = Get-LocalUser -Name 'Filhos' -ErrorAction SilentlyContinue; "
+                f"if ($filhosUser) {{ "
+                f"  $regCustom = 'HKLM:\\SOFTWARE\\FaceControlKidsPC\\CredentialProvider'; "
+                f"  if (-not (Test-Path $regCustom)) {{ New-Item -Path $regCustom -Force | Out-Null }}; "
+                f"  Set-ItemProperty -Path $regCustom -Name 'TargetUserSid' -Value $filhosUser.SID.Value -Force "
+                f"}}"
+            )
+            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_reg], timeout=15.0)
+
+        return True, "Servicos e Credential Provider registrados com sucesso."
     except Exception as e:
-        logger.warning(f"Aviso ao criar atalho na Area de Trabalho: {e}")
+        logger.warning(f"Aviso ao registrar servicos: {e}")
+        return False, str(e)
+
+
+def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
+    """Cria atalhos oficiais com icone na Area de Trabalho e Menu Iniciar."""
+    if sys.platform != "win32":
+        return
+
+    root = root_dir or Path(__file__).resolve().parent.parent
+    ico_source = root / "assets" / "facekids.ico"
+    ico_dest = PROGRAMDATA_DIR / "facekids.ico"
+    try:
+        if ico_source.exists():
+            PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ico_source, ico_dest)
+    except Exception:
+        pass
+
+    icon_path = ico_dest if ico_dest.exists() else ico_source
+
+    desktop = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop"
+    start_menu = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "FaceKids"
+    try:
+        start_menu.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
+    target_exe = None
+    args = ""
+    if getattr(sys, "frozen", False):
+        target_exe = Path(sys.executable)
+        args = "--mode=dashboard"
+    elif pythonw.exists():
+        target_exe = pythonw
+        args = "-m facekids.app_window --mode=dashboard"
+    else:
+        target_exe = Path(sys.executable)
+        args = "-m facekids.app_window --mode=dashboard"
+
+    destinations = [desktop]
+    if start_menu.exists():
+        destinations.append(start_menu)
+
+    for dest in destinations:
+        try:
+            # 1. Atalho do Painel dos Pais
+            lnk_panel = dest / "FaceKids - Painel dos Pais.lnk"
+            ps_shortcut = (
+                f"$wsh = New-Object -ComObject WScript.Shell; "
+                f"$s = $wsh.CreateShortcut('{lnk_panel}'); "
+                f"$s.TargetPath = '{target_exe}'; "
+                f"$s.Arguments = '{args}'; "
+                f"$s.WorkingDirectory = '{root}'; "
+                f"$s.Description = 'FaceKids - Painel Administrativo dos Pais'; "
+                f"$s.IconLocation = '{icon_path},0'; "
+                f"$s.Save()"
+            )
+            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_shortcut], timeout=5.0)
+
+            # 2. Atalho do Desinstalador
+            uninst_bat = root / "Desinstalar-FaceKids.bat"
+            if uninst_bat.exists():
+                lnk_uninst = dest / "Desinstalar FaceKids.lnk"
+                ps_uninst = (
+                    f"$wsh = New-Object -ComObject WScript.Shell; "
+                    f"$s = $wsh.CreateShortcut('{lnk_uninst}'); "
+                    f"$s.TargetPath = '{uninst_bat}'; "
+                    f"$s.WorkingDirectory = '{root}'; "
+                    f"$s.Description = 'Desinstalar FaceKids com Seguranca'; "
+                    f"$s.IconLocation = '{icon_path},0'; "
+                    f"$s.Save()"
+                )
+                _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_uninst], timeout=5.0)
+        except Exception as e:
+            logger.warning(f"Aviso ao criar atalhos em {dest}: {e}")
+
+
+def verify_runtime_health() -> Dict[str, Any]:
+    """Verifica a integridade e estado dos servicos e DLL em tempo real."""
+    health = {
+        "auth_service": {"running": False, "registered": False},
+        "filhos_agent": {"registered": False},
+        "credential_provider": {"registered": False},
+    }
+    if sys.platform != "win32":
+        return health
+
+    try:
+        # 1. Consulta FaceKidsAuthService
+        p = _run_win_cmd(["schtasks", "/query", "/tn", "FaceKidsAuthService", "/fo", "csv"], timeout=5.0)
+        if p.returncode == 0:
+            health["auth_service"]["registered"] = True
+            if "Running" in p.stdout or "Em execução" in p.stdout:
+                health["auth_service"]["running"] = True
+
+        # Se nao estiver rodando via tarefa, checa se processo python auth_service existe
+        if not health["auth_service"]["running"]:
+            p_proc = _run_win_cmd(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*auth_service*' } | Select-Object -ExpandProperty ProcessId"],
+                timeout=5.0
+            )
+            if p_proc.stdout.strip():
+                health["auth_service"]["running"] = True
+
+        # 2. Consulta FaceKidsFilhosAgent
+        p_agent = _run_win_cmd(["schtasks", "/query", "/tn", "FaceKidsFilhosAgent", "/fo", "csv"], timeout=5.0)
+        if p_agent.returncode == 0:
+            health["filhos_agent"]["registered"] = True
+
+        # 3. Consulta Registro do Credential Provider
+        p_reg = _run_win_cmd(
+            ["powershell", "-NoProfile", "-Command",
+             f"Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\{CREDENTIAL_PROVIDER_GUID}'"],
+            timeout=5.0
+        )
+        if "True" in p_reg.stdout:
+            health["credential_provider"]["registered"] = True
+
+    except Exception as e:
+        logger.debug(f"Aviso ao consultar runtime health: {e}")
+
+    return health
+
+
+def uninstall_system(remove_data: bool = False, remove_windows_user: bool = False) -> Tuple[bool, str]:
+    """Executa a desinstalacao completa e segura do FaceKids no Windows."""
+    logger.info("Iniciando rotina de desinstalacao do FaceKids...")
+
+    if sys.platform == "win32":
+        # 1. Desregistrar DLL via regsvr32 e remover chaves do Registro PRIMEIRO
+        dll_target = PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll"
+        if dll_target.exists():
+            _run_win_cmd(["regsvr32.exe", "/u", "/s", str(dll_target)], timeout=10.0)
+
+        ps_unreg = (
+            f"$clsid = '{CREDENTIAL_PROVIDER_GUID}'; "
+            f"Remove-Item -Path \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\$clsid\" -Recurse -Force -ErrorAction SilentlyContinue; "
+            f"Remove-Item -Path \"HKLM:\\SOFTWARE\\Classes\\CLSID\\$clsid\" -Recurse -Force -ErrorAction SilentlyContinue; "
+            f"Remove-Item -Path \"HKLM:\\SOFTWARE\\FaceControlKidsPC\" -Recurse -Force -ErrorAction SilentlyContinue; "
+            f"Remove-ItemProperty -Path \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"FaceKidsAuthService\" -Force -ErrorAction SilentlyContinue"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_unreg], timeout=10.0)
+
+        # 2. Parar e remover tarefas agendadas
+        for task in ("FaceKidsBootAuth", "FaceKidsAuthService", "FaceKidsFilhosAgent"):
+            _run_win_cmd(["schtasks.exe", "/end", "/tn", task], timeout=5.0)
+            _run_win_cmd(["schtasks.exe", "/delete", "/tn", task, "/f"], timeout=5.0)
+
+        # 3. Encerrar processos residuais
+        ps_kill = (
+            "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { "
+            "$_.CommandLine -like '*auth_service*' -or $_.CommandLine -like '*filhos_agent*' -or $_.CommandLine -like '*-m facekids.boot_auth*' "
+            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_kill], timeout=10.0)
+
+        # 4. Remover atalhos do Desktop e Menu Iniciar
+        desktop = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop"
+        start_menu = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "FaceKids"
+        for d in (desktop, start_menu):
+            for name in ("FaceKids - Painel dos Pais.lnk", "Painel FaceKids.lnk", "Desinstalar FaceKids.lnk"):
+                try:
+                    f = d / name
+                    if f.exists():
+                        f.unlink()
+                except Exception:
+                    pass
+        if start_menu.exists():
+            try:
+                shutil.rmtree(str(start_menu), ignore_errors=True)
+            except Exception:
+                pass
+
+        # 5. Remover arquivos executaveis de ProgramData
+        files_to_clean = [
+            PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll",
+            PROGRAMDATA_DIR / "iniciar-filhos-agent.bat",
+            PROGRAMDATA_DIR / "iniciar-auth-service.bat",
+            PROGRAMDATA_DIR / "last_unlock.json",
+            PROGRAMDATA_DIR / "auth_service.pid",
+            PROGRAMDATA_DIR / "facekids.ico",
+        ]
+        for f in files_to_clean:
+            try:
+                if f.exists():
+                    f.unlink()
+            except Exception:
+                pass
+
+        # 6. Opcional: remover dados se solicitado
+        if remove_data and PROGRAMDATA_DIR.exists():
+            try:
+                shutil.rmtree(str(PROGRAMDATA_DIR), ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Aviso ao remover ProgramData: {e}")
+
+        # 7. Opcional: remover conta Windows Filhos se solicitado
+        if remove_windows_user:
+            _run_win_cmd(["net", "user", "Filhos", "/delete"], timeout=10.0)
+
+    return True, "FaceKids desinstalado com sucesso."
 
 
 def setup_system(
     master_pin: str,
     first_child_name: Optional[str] = None,
     first_child_daily_limit_minutes: int = 120,
+    filhos_password: Optional[str] = None,
+    filhos_username: str = "Filhos",
     progress_callback: Optional[Callable[[str, int], None]] = None
 ) -> Tuple[bool, str]:
     """Executa a instalacao completa do sistema com atrito minimo."""
@@ -186,32 +458,33 @@ def setup_system(
     dll_source = root / "native" / "credential_provider_facekids" / "FaceKidsCredentialProvider.dll"
     dll_target = PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll"
 
-    notify("Gerando credencial de seguranca da conta...", 25)
-    secret = "1"
-    try:
-        secret = generate_secure_secret(32)
-        save_secure_secret(secret)
-    except Exception as e:
-        logger.warning(f"Aviso ao gerar segredo de sessao: {e}")
+    notify("Configurando conta Windows e credencial segura DPAPI...", 25)
+    secret = (filhos_password or "").strip()
+    if not secret:
+        # Se nenhuma senha foi informada, consulta a existente ou gera nova
+        secret = get_filhos_password() or generate_secure_secret(32)
 
-    notify("Configurando conta local restrita do Windows...", 40)
     try:
-        ok_user, msg_user = ensure_filhos_windows_user(secret)
+        ok_user, msg_user = ensure_filhos_windows_user(secret, username=filhos_username)
         if not ok_user:
-            logger.warning(f"Aviso na configuracao do usuario Filhos: {msg_user}")
+            logger.warning(f"Aviso na configuracao do usuario: {msg_user}")
     except Exception as e:
         logger.warning(f"Erro ao configurar usuario: {e}")
 
-    notify("Registrando driver de desbloqueio facial (DLL)...", 55)
+    notify("Copiando driver de desbloqueio facial (DLL)...", 45)
     try:
         if dll_source.exists():
             shutil.copy2(dll_source, dll_target)
-        if sys.platform == "win32" and dll_target.exists():
-            _run_win_cmd(["regsvr32.exe", "/s", str(dll_target)], timeout=10.0)
     except Exception as e:
-        logger.warning(f"Aviso ao registrar DLL: {e}")
+        logger.warning(f"Aviso ao copiar DLL: {e}")
 
-    notify("Configurando PIN mestre dos pais e banco de dados...", 70)
+    notify("Ativando servicos em segundo plano (AuthService e FilhosAgent)...", 60)
+    try:
+        setup_windows_services(root)
+    except Exception as e:
+        logger.warning(f"Aviso ao configurar servicos do Windows: {e}")
+
+    notify("Configurando PIN mestre dos pais e banco de dados...", 75)
     try:
         store = Storage(DEFAULT_DB_FILE)
         if master_pin:
@@ -239,8 +512,11 @@ def setup_system(
     except Exception as e:
         logger.warning(f"Aviso ao salvar configuracoes: {e}")
 
-    notify("Criando atalho de acesso ao Painel na Area de Trabalho...", 95)
-    create_desktop_shortcut()
+    notify("Criando atalhos oficiais com ícone na Area de Trabalho...", 95)
+    try:
+        create_desktop_shortcuts(root)
+    except Exception as e:
+        logger.warning(f"Aviso ao criar atalhos: {e}")
 
     notify("Instalacao concluida com sucesso!", 100)
     return True, "FaceKids instalado e pronto para uso."

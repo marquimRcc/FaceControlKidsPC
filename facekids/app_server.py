@@ -23,13 +23,37 @@ from urllib.parse import urlparse, parse_qs
 
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
-from .installer_engine import get_system_diagnostics, setup_system, PROGRAMDATA_DIR, DEFAULT_DB_FILE
+from .installer_engine import (
+    get_system_diagnostics,
+    setup_system,
+    uninstall_system,
+    verify_runtime_health,
+    ensure_filhos_windows_user,
+    PROGRAMDATA_DIR,
+    DEFAULT_DB_FILE,
+    _run_win_cmd,
+)
 from .session_secret import get_session_secret
+from .credential_store import (
+    get_filhos_credentials,
+    get_filhos_password,
+    save_filhos_credentials,
+)
+from .avatar_utils import (
+    get_child_sample_photos,
+    select_child_sample_photo,
+    get_child_avatar_path,
+    remove_child_avatar_files,
+    AVATAR_DIR,
+)
 from .camera_service import CameraService
 
 
 logger = logging.getLogger("facekids.app_server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+ASSETS_DIR = ROOT_DIR / "assets"
 
 
 def get_ui_dir() -> Path:
@@ -89,6 +113,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_status()
             elif path == "/api/diagnostics":
                 self.handle_diagnostics()
+            elif path == "/api/service/status":
+                self.handle_service_status()
             elif path == "/api/dashboard":
                 self.handle_dashboard()
             elif path == "/api/heartbeat":
@@ -105,6 +131,12 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_camera_enroll_status()
             elif path.startswith("/api/child/") and path.endswith("/avatar"):
                 self.handle_child_avatar(path)
+            elif path.startswith("/api/children/") and "/photos/" in path:
+                self.handle_child_photo_sample(path)
+            elif path.startswith("/api/children/") and path.endswith("/photos"):
+                self.handle_child_photos_list(path)
+            elif path.startswith("/assets/") or path == "/favicon.ico":
+                self.serve_asset(path)
             elif path.startswith("/ui/") or path == "/" or path == "/index.html":
                 self.serve_static(path)
             else:
@@ -135,12 +167,24 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_install(body)
             elif path == "/api/auth/verify":
                 self.handle_auth_verify(body)
+            elif path == "/api/settings/windows-account":
+                self.handle_settings_windows_account(body)
+            elif path == "/api/service/restart":
+                self.handle_service_restart(body)
+            elif path.startswith("/api/children/") and path.endswith("/photos/select"):
+                self.handle_child_photo_select(path, body)
+            elif path.startswith("/api/children/") and path.endswith("/recapture"):
+                self.handle_child_recapture(path, body)
+            elif path == "/api/uninstall":
+                self.handle_uninstall(body)
             elif path == "/api/child/bonus":
                 self.handle_child_bonus(body)
             elif path == "/api/child/limit":
                 self.handle_child_limit(body)
             elif path == "/api/child/add":
                 self.handle_child_add(body)
+            elif path == "/api/child/delete":
+                self.handle_child_delete(body)
             elif path == "/api/camera/enroll/start":
                 self.handle_camera_enroll_start(body)
             elif path == "/api/settings/pin":
@@ -175,16 +219,47 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 pass
 
         is_installed = has_db and has_pin
+        u, _ = get_filhos_credentials()
         self.send_json({
             "installed": is_installed,
             "has_pin": has_pin,
             "children_count": children_count,
+            "windows_user": u,
             "default_mode": "dashboard" if is_installed else "wizard"
         })
 
     def handle_diagnostics(self) -> None:
         diag = get_system_diagnostics()
         self.send_json(diag)
+
+    def handle_service_status(self) -> None:
+        health = verify_runtime_health()
+        self.send_json({"ok": True, "health": health})
+
+    def handle_service_restart(self, data: Optional[Dict[str, Any]] = None) -> None:
+        service_name = "FaceKidsAuthService"
+        if data and data.get("service"):
+            cand = str(data.get("service")).strip()
+            if cand in ("FaceKidsAuthService", "FaceKidsFilhosAgent"):
+                service_name = cand
+            else:
+                self.send_json({"ok": False, "error": f"Servico '{cand}' nao autorizado."}, 400)
+                return
+
+        if sys.platform == "win32":
+            _run_win_cmd(["schtasks", "/run", "/tn", service_name], timeout=5.0)
+        self.send_json({"ok": True, "message": f"Servico {service_name} reiniciado com sucesso."})
+
+    def handle_settings_windows_account(self, data: Dict[str, Any]) -> None:
+        username = str(data.get("username", "Filhos")).strip() or "Filhos"
+        password = str(data.get("password", "")).strip()
+
+        if not password:
+            self.send_json({"ok": False, "error": "A senha nao pode ser vazia."}, 400)
+            return
+
+        ok, msg = ensure_filhos_windows_user(password, username=username)
+        self.send_json({"ok": ok, "message": msg})
 
     def handle_install(self, data: Dict[str, Any]) -> None:
         FaceKidsApiHandler.is_installing = True
@@ -194,6 +269,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             first_child = str(data.get("child_name", "")).strip()
             limit_hours = float(data.get("daily_limit_hours", 2.0))
             limit_minutes = int(limit_hours * 60)
+            filhos_pass = str(data.get("filhos_password", "")).strip()
+            filhos_user = str(data.get("filhos_username", "Filhos")).strip() or "Filhos"
 
             if not master_pin or len(master_pin) < 4:
                 self.send_json({"ok": False, "error": "O PIN mestre precisa ter pelo menos 4 digitos."}, 400)
@@ -202,7 +279,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             ok, msg = setup_system(
                 master_pin=master_pin,
                 first_child_name=first_child if first_child else None,
-                first_child_daily_limit_minutes=limit_minutes
+                first_child_daily_limit_minutes=limit_minutes,
+                filhos_password=filhos_pass if filhos_pass else None,
+                filhos_username=filhos_user
             )
             current_token = get_session_secret()
             self.send_json({
@@ -299,17 +378,110 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         finally:
             store.close()
 
+    def handle_child_photos_list(self, path: str) -> None:
+        parts = [p for p in path.split("/") if p]
+        try:
+            cid = int(parts[2])
+        except Exception:
+            self.send_json({"ok": False, "error": "ID da crianca invalido."}, 400)
+            return
+
+        store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
+        try:
+            samples = get_child_sample_photos(cid, store=store)
+            items = []
+            for s in samples:
+                idx = s["index"]
+                items.append({
+                    "index": idx,
+                    "label": s.get("label", f"Foto {idx}"),
+                    "selected": s.get("selected", False),
+                    "url": f"/api/children/{cid}/photos/{idx}"
+                })
+            self.send_json({"ok": True, "child_id": cid, "photos": items})
+        finally:
+            if store:
+                store.close()
+
+    def handle_child_photo_sample(self, path: str) -> None:
+        parts = [p for p in path.split("/") if p]
+        try:
+            cid = int(parts[2])
+            idx = int(parts[4])
+        except Exception:
+            self.send_error(400, "Parametros invalidos")
+            return
+
+        sample_p = PROGRAMDATA_DIR / "fotos" / f"amostras_{cid}" / f"amostra_{idx}.jpg"
+        if sample_p.exists() and sample_p.stat().st_size > 0:
+            data = sample_p.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        # Fallback para crianca_cid.jpg
+        fallback_p = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}.jpg"
+        if fallback_p.exists():
+            data = fallback_p.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        self.send_error(404, "Amostra nao encontrada")
+
+    def handle_child_photo_select(self, path: str, body: Dict[str, Any]) -> None:
+        parts = [p for p in path.split("/") if p]
+        try:
+            cid = int(parts[2])
+            idx = int(body.get("index", 1))
+        except Exception:
+            self.send_json({"ok": False, "error": "Parametros invalidos"}, 400)
+            return
+
+        sample_p = PROGRAMDATA_DIR / "fotos" / f"amostras_{cid}" / f"amostra_{idx}.jpg"
+        if not sample_p.exists():
+            self.send_json({"ok": False, "error": "Arquivo de amostra nao encontrado"}, 404)
+            return
+
+        store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
+        try:
+            ok = select_child_sample_photo(cid, sample_p, store=store, sample_index=idx)
+            self.send_json({"ok": ok, "message": f"Foto {idx} selecionada como avatar oficial."})
+        finally:
+            if store:
+                store.close()
+
+    def handle_child_recapture(self, path: str, body: Dict[str, Any]) -> None:
+        parts = [p for p in path.split("/") if p]
+        try:
+            cid = int(parts[2])
+        except Exception:
+            self.send_json({"ok": False, "error": "Parametro invalido"}, 400)
+            return
+
+        cam = CameraService.get_instance()
+        res = cam.start_enrollment(cid, DEFAULT_DB_FILE)
+        self.send_json(res)
+
     def handle_child_bonus(self, data: Dict[str, Any]) -> None:
         cid = int(data.get("child_id", 0))
         minutes = int(data.get("minutes", 15))
-        if cid <= 0 or minutes <= 0:
+        if cid <= 0:
             self.send_json({"ok": False, "error": "Parametros invalidos"}, 400)
             return
 
         store = Storage(DEFAULT_DB_FILE)
         try:
             store.add_bonus(cid, minutes)
-            self.send_json({"ok": True, "message": f"Bonus de {minutes}m concedido."})
+            self.send_json({"ok": True, "message": f"Ajuste de {minutes:+d}m aplicado com sucesso."})
         finally:
             store.close()
 
@@ -341,6 +513,38 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "id": new_id, "name": name})
         finally:
             store.close()
+
+    def handle_child_delete(self, body: Dict[str, Any]) -> None:
+        cid = int(body.get("child_id", 0))
+        if cid <= 0:
+            self.send_json({"ok": False, "error": "ID da crianca invalido."}, 400)
+            return
+
+        store = Storage(DEFAULT_DB_FILE)
+        try:
+            store.remove_person(cid)
+            remove_child_avatar_files(cid)
+            self.send_json({"ok": True, "message": "Perfil infantil removido com sucesso."})
+        finally:
+            store.close()
+
+    def handle_uninstall(self, body: Dict[str, Any]) -> None:
+        pin = str(body.get("pin", "")).strip()
+        remove_data = bool(body.get("remove_data", False))
+        remove_user = bool(body.get("remove_windows_user", False))
+
+        if DEFAULT_DB_FILE.exists():
+            store = Storage(DEFAULT_DB_FILE)
+            try:
+                stored = store.get_setting(AUTH_SETTING)
+                if stored and not verify_pin(pin, stored):
+                    self.send_json({"ok": False, "error": "PIN incorreto para confirmar a desinstalacao."}, 400)
+                    return
+            finally:
+                store.close()
+
+        ok, msg = uninstall_system(remove_data=remove_data, remove_windows_user=remove_user)
+        self.send_json({"ok": ok, "message": msg})
 
     def handle_camera_preview(self) -> None:
         try:
@@ -416,9 +620,44 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(data)
                     return
+                # Tenta jpg
+                jpg_file = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}.jpg"
+                if jpg_file.exists():
+                    data = jpg_file.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
         except Exception:
             pass
         self.send_error(404, "Avatar nao encontrado")
+
+    def serve_asset(self, path: str) -> None:
+        if path == "/favicon.ico":
+            target = ASSETS_DIR / "facekids.ico"
+        else:
+            rel = path.lstrip("/assets/")
+            target = ASSETS_DIR / rel
+
+        if not target.exists() or not target.is_file():
+            self.send_error(404, "Asset nao encontrado")
+            return
+
+        ctype, _ = mimetypes.guess_type(str(target))
+        ctype = ctype or "application/octet-stream"
+        try:
+            content = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self.send_error(500, f"Erro ao servir asset: {e}")
 
     def serve_static(self, path: str) -> None:
         target_dir = get_ui_dir()

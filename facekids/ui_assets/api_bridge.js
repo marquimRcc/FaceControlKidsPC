@@ -38,15 +38,44 @@ const FaceKidsAPI = {
     }
   },
 
-  async install(pin, childName, limitHours) {
+  async getServiceStatus() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/service/status`, {
+        headers: this.getHeaders()
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, health: {} };
+    }
+  },
+
+  async restartService() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/service/restart`, {
+        method: "POST",
+        headers: this.getHeaders()
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async install(pin, childName, limitHours, filhosPassword = "", filhosUsername = "Filhos") {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos de timeout tolerante
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout seguro
 
       const res = await fetch(`${this.baseUrl}/api/install`, {
         method: "POST",
         headers: this.getHeaders(),
-        body: JSON.stringify({ pin, child_name: childName, daily_limit_hours: limitHours }),
+        body: JSON.stringify({
+          pin,
+          child_name: childName,
+          daily_limit_hours: limitHours,
+          filhos_password: filhosPassword,
+          filhos_username: filhosUsername
+        }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -68,6 +97,19 @@ const FaceKidsAPI = {
         return { ok: false, error: "A instalação demorou mais de 60 segundos e expirou." };
       }
       return { ok: false, error: `Falha de conexão: ${e.message}` };
+    }
+  },
+
+  async updateWindowsAccount(username, password) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/settings/windows-account`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ username, password })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
   },
 
@@ -131,6 +173,73 @@ const FaceKidsAPI = {
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify({ name, daily_limit_hours: limitHours })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async deleteChild(childId) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/child/delete`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ child_id: childId })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async getChildPhotos(childId) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/photos`, {
+        headers: this.getHeaders()
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, photos: [] };
+    }
+  },
+
+  async selectChildPhoto(childId, photoIndex) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/photos/select`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ index: photoIndex })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async recaptureChild(childId) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/recapture`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({})
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async uninstall(pin, removeData = false, removeUser = false) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/uninstall`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          pin,
+          remove_data: removeData,
+          remove_windows_user: removeUser
+        })
       });
       return await res.json();
     } catch (e) {
@@ -232,6 +341,11 @@ async function syncDashboardData() {
   if (typeof renderChildrenCards === "function") {
     renderChildrenCards(data.children || []);
   }
+
+  // Atualiza saude dos servicos se a aba ou indicador estiver visivel
+  if (typeof syncServicesHealth === "function") {
+    syncServicesHealth();
+  }
 }
 
 // Substitui a validacao de PIN por chamada a API real
@@ -254,53 +368,4 @@ window.validateLockPin = async function() {
       updateLockDots();
     }, 500);
   }
-};
-
-// Captura Real de 12 Fotos pela Webcam no Wizard
-window.simulatePhotoCapture = async function() {
-  const btn = document.getElementById("snapPhotoButton");
-  const btnText = document.getElementById("snapButtonText");
-  const statusText = document.getElementById("photoStatusText");
-  const badge = document.getElementById("photoCapturedBadge");
-
-  btn.disabled = true;
-  btn.classList.add("opacity-60");
-  btnText.innerText = "Iniciando câmera...";
-  statusText.innerText = "Olhe diretamente para a webcam...";
-
-  const startRes = await FaceKidsAPI.startEnrollment(1);
-  if (!startRes.ok && startRes.error && !startRes.error.includes("ja esta em andamento")) {
-    showToast(startRes.error || "Aviso ao iniciar câmera");
-  }
-
-  let timer = setInterval(async () => {
-    const state = await FaceKidsAPI.getEnrollmentStatus();
-    if (!state) return;
-
-    if (state.active) {
-      btnText.innerText = `Capturando ${state.samples_count}/${state.total_required}...`;
-      statusText.innerText = state.message || "Movimente levemente a cabeça...";
-    }
-
-    if (state.completed) {
-      clearInterval(timer);
-      btn.disabled = false;
-      btn.classList.remove("opacity-60");
-      btnText.innerText = "✓ 12 Fotos Gravadas";
-      statusText.innerText = "Cadastro facial concluído com sucesso!";
-      
-      if (badge) {
-        badge.classList.remove("hidden");
-      }
-      showToast("Biometria cadastrada com sucesso! 12 amostras salvas.");
-      photoCaptured = true;
-    } else if (state.error && !state.active) {
-      clearInterval(timer);
-      btn.disabled = false;
-      btn.classList.remove("opacity-60");
-      btnText.innerText = "Tentar Novamente";
-      statusText.innerText = "Erro: " + state.error;
-      showToast("Erro na captura: " + state.error);
-    }
-  }, 300);
 };
