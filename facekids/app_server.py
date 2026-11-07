@@ -83,6 +83,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         FaceKidsApiHandler.last_activity_time = time.time()
         payload_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
         try:
+            self.close_connection = True
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload_bytes)))

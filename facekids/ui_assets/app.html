@@ -460,7 +460,7 @@
           <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
             <h3 class="text-sm font-bold text-white">Teste do Reconhecimento Facial em Tempo Real</h3>
             <div class="w-full h-64 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
-              <img id="tabServicesStream" src="/api/camera/stream" class="w-full h-full object-cover">
+              <img id="tabServicesStream" src="" class="w-full h-full object-cover">
             </div>
             <p class="text-[11px] text-slate-400">Transmissão contínua com detecção facial YuNet em tempo real.</p>
           </div>
@@ -638,7 +638,7 @@
         <div class="space-y-2 pt-2 border-t border-slate-800">
           <label class="block text-xs font-semibold text-slate-300">Biometria Facial (12 Amostras Limpas)</label>
           <div class="w-full h-44 rounded-2xl bg-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center">
-            <img id="modalCamPreview" src="/api/camera/stream" class="w-full h-full object-cover">
+            <img id="modalCamPreview" src="" class="w-full h-full object-cover">
             <div id="modalEnrollProgressBadge" class="hidden absolute bottom-2 left-2 bg-slate-900/90 text-cyan-400 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-cyan-500/30">
               Capturando...
             </div>
@@ -875,8 +875,16 @@
           }
         } catch (err) {
           lastError = err;
+          // Se falhou por erro de rede (Failed to fetch), verifica se o servidor ja concluiu a instalacao
+          try {
+            const check = await fetch("/api/status").then(r => r.json()).catch(() => null);
+            if (check && check.installed) {
+              res = { ok: true, status: "success", token: check.token || window.__FACEKIDS_TOKEN__ };
+              break;
+            }
+          } catch (_) {}
           if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, 1200));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
@@ -948,8 +956,14 @@
         navEl.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
       }
 
-      if (tabId === "services") {
-        syncServicesHealth();
+      const srvStream = document.getElementById("tabServicesStream");
+      if (srvStream) {
+        if (tabId === "services") {
+          srvStream.src = "/api/camera/stream";
+          syncServicesHealth();
+        } else {
+          srvStream.src = "";
+        }
       }
     }
 
@@ -1291,10 +1305,14 @@
     function openAddChildModal() {
       const m = document.getElementById("childModal");
       if (m) m.classList.remove("hidden");
+      const cam = document.getElementById("modalCamPreview");
+      if (cam) cam.src = "/api/camera/stream";
     }
     function closeChildModal() {
       const m = document.getElementById("childModal");
       if (m) m.classList.add("hidden");
+      const cam = document.getElementById("modalCamPreview");
+      if (cam) cam.src = "";
     }
     function selectModalQuota(h) {
       selectedQuotaHours = h;

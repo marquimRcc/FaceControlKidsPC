@@ -118,17 +118,20 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos") -> Tuple[b
 
     try:
         # 1. Verifica se o usuario ja existe
-        check = _run_win_cmd(["net", "user", username], timeout=10.0)
+        check = _run_win_cmd(["net", "user", username], timeout=5.0)
         if check.returncode == 0:
             # Atualiza senha com a credencial informada
-            res = _run_win_cmd(["net", "user", username, secret], timeout=10.0)
+            res = _run_win_cmd(["net", "user", username, secret], timeout=5.0)
             if res.returncode != 0:
                 logger.warning(f"Aviso ao redefinir senha da conta {username}: {res.stderr}")
 
             # Define senha para nunca expirar
-            _run_win_cmd(["powershell", "-NoProfile", "-Command",
-                          f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"], timeout=10.0)
-            _run_win_cmd(["wmic", "useraccount", "where", f"Name='{username}'", "set", "PasswordExpires=FALSE"], timeout=10.0)
+            _run_win_cmd(
+                ["powershell", "-NoProfile", "-Command",
+                 f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"],
+                timeout=5.0,
+                capture=False,
+            )
             save_filhos_credentials(username, secret)
             return True, f"Conta '{username}' atualizada com a nova senha e protegida via DPAPI."
         else:
@@ -138,16 +141,24 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos") -> Tuple[b
                  "/fullname:Filhos",
                  "/comment:Conta supervisionada pelo FaceControlKidsPC",
                  "/passwordchg:no", "/expires:never"],
-                timeout=15.0
+                timeout=5.0
             )
             if res.returncode != 0:
                 logger.warning(f"Aviso ao criar conta '{username}': {res.stderr}")
 
             # Adiciona ao grupo local de Usuarios (SID S-1-5-32-545)
-            _run_win_cmd(["powershell", "-NoProfile", "-Command",
-                          f"Add-LocalGroupMember -SID 'S-1-5-32-545' -Member '{username}' -ErrorAction SilentlyContinue"], timeout=10.0)
-            _run_win_cmd(["powershell", "-NoProfile", "-Command",
-                          f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"], timeout=10.0)
+            _run_win_cmd(
+                ["powershell", "-NoProfile", "-Command",
+                 f"Add-LocalGroupMember -SID 'S-1-5-32-545' -Member '{username}' -ErrorAction SilentlyContinue"],
+                timeout=5.0,
+                capture=False,
+            )
+            _run_win_cmd(
+                ["powershell", "-NoProfile", "-Command",
+                 f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"],
+                timeout=5.0,
+                capture=False,
+            )
             save_filhos_credentials(username, secret)
             return True, f"Conta '{username}' criada com sucesso e protegida via DPAPI."
     except Exception as e:
@@ -161,11 +172,20 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
         return True, "Simulado em ambiente de teste"
 
     root = root_dir or Path(__file__).resolve().parent.parent
-    pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
-    if not pythonw.exists():
-        pythonw = Path(sys.executable).parent / "pythonw.exe"
-    if not pythonw.exists():
+    is_frozen = getattr(sys, "frozen", False)
+    venv_pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
+    if venv_pythonw.exists():
+        pythonw = venv_pythonw
+    elif is_frozen:
         pythonw = Path(sys.executable)
+    else:
+        pythonw = Path(sys.executable).parent / "pythonw.exe"
+        if not pythonw.exists():
+            pythonw = Path(sys.executable)
+
+    is_python = "python" in pythonw.name.lower()
+    auth_cmd_arg = "-m facekids.auth_service" if is_python else "--auth-service"
+    agent_cmd_arg = "-m facekids.filhos_agent" if is_python else "--filhos-agent"
 
     try:
         # 1. Permissoes em C:\ProgramData\FaceKids para a conta Filhos
@@ -174,7 +194,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             "/grant", "*S-1-5-32-545:(OI)(CI)(M)",
             "Filhos:(OI)(CI)(M)"
         ]
-        _run_win_cmd(cmd_acl, timeout=10.0)
+        _run_win_cmd(cmd_acl, timeout=5.0, capture=False)
 
         # 2. Configura script do agente na pasta de dados
         agent_bat = PROGRAMDATA_DIR / "iniciar-filhos-agent.bat"
@@ -183,7 +203,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             'if /i "%USERNAME%" neq "Filhos" exit /b\r\n'
             f'cd /d "{PROGRAMDATA_DIR}"\r\n'
             f'set PYTHONPATH={root}\r\n'
-            f'start "" "{pythonw}" -m facekids.filhos_agent\r\n'
+            f'start "" "{pythonw}" {agent_cmd_arg}\r\n'
         )
         agent_bat.write_text(agent_content, encoding="ascii", errors="ignore")
 
@@ -193,25 +213,28 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             "@echo off\r\n"
             f'cd /d "{PROGRAMDATA_DIR}"\r\n'
             f'set PYTHONPATH={root}\r\n'
-            f'start "" "{pythonw}" -m facekids.auth_service\r\n'
+            f'start "" "{pythonw}" {auth_cmd_arg}\r\n'
         )
         auth_bat.write_text(auth_content, encoding="ascii", errors="ignore")
 
-        # 4. Limpeza de processos residuais e tarefas anteriores
+        # 4. Limpeza de processos residuais e tarefas anteriores (com protecao ao PID atual)
+        current_pid = os.getpid()
         ps_cleanup = (
-            "schtasks.exe /end /tn FaceKidsBootAuth /f 2>$null; "
+            "schtasks.exe /end /tn FaceKidsBootAuth 2>$null; "
             "schtasks.exe /delete /tn FaceKidsBootAuth /f 2>$null; "
-            "schtasks.exe /end /tn FaceKidsAuthService /f 2>$null; "
+            "schtasks.exe /end /tn FaceKidsAuthService 2>$null; "
             "schtasks.exe /delete /tn FaceKidsAuthService /f 2>$null; "
-            "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { "
-            "$_.CommandLine -like '*auth_service*' -or $_.CommandLine -like '*boot_auth*' "
-            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+            f"Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {{ "
+            f"$_.ProcessId -ne $PID -and $_.ProcessId -ne {current_pid} -and "
+            f"($_.Name -like 'python*') -and "
+            f"($_.CommandLine -like '*facekids.auth_service*' -or $_.CommandLine -like '*facekids.boot_auth*') "
+            f"}} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_cleanup], timeout=10.0)
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_cleanup], timeout=8.0, capture=False)
 
         # 5. Tarefa Agendada 1: FaceKidsAuthService (Interativa com privilegios elevados)
         # O Windows 10/11 bloqueia acesso a webcam na Sessao 0 (SYSTEM). Para autenticar
-        # na tela de bloqueio (Win+L), o servico deve rodar na sessao interativa do usuario.
+        # na tela de bloqueio (Win+L), o servico roda na sessao interativa do usuario.
         ps_auth = (
             f"$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name; "
             f"$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/d /c \"{auth_bat}\"'; "
@@ -221,20 +244,21 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             f"Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null; "
             f"Start-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction SilentlyContinue"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_auth], timeout=15.0)
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_auth], timeout=10.0, capture=False)
 
-        # 6. Atalho no Startup do usuario como contingencia garantida e inicializacao imediata
-        ps_startup = (
-            f"$userStartup = \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\"; "
-            f"$vbsPath = Join-Path $userStartup 'FaceKidsAuthService.vbs'; "
-            f"$vbsCode = 'Set WshShell = CreateObject(\"WScript.Shell\")' + [Environment]::NewLine + "
-            f"'WshShell.CurrentDirectory = \"{PROGRAMDATA_DIR}\"' + [Environment]::NewLine + "
-            f"'WshShell.Run \"\"\"{pythonw}\"\" -m facekids.auth_service\", 0, False'; "
-            f"Set-Content -Path $vbsPath -Value $vbsCode -Encoding ASCII -Force; "
-            f"Start-Process -FilePath 'wscript.exe' -ArgumentList \"`\"$vbsPath`\"\" -WindowStyle Hidden"
-        )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_startup], timeout=10.0)
-
+        # 6. Atalho no Startup do usuario como contingencia garantida (sem duplicar processo)
+        try:
+            appdata_dir = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+            vbs_startup = Path(appdata_dir) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "FaceKidsAuthService.vbs"
+            if vbs_startup.parent.exists():
+                vbs_code = (
+                    'Set WshShell = CreateObject("WScript.Shell")\r\n'
+                    f'WshShell.CurrentDirectory = "{PROGRAMDATA_DIR}"\r\n'
+                    f'WshShell.Run """{pythonw}"" {auth_cmd_arg}", 0, False\r\n'
+                )
+                vbs_startup.write_text(vbs_code, encoding="ascii", errors="replace")
+        except Exception as e:
+            logger.warning(f"Aviso ao registrar VBS no Startup: {e}")
         # 7. Tarefa Agendada 2: FaceKidsFilhosAgent (Interativo no Logon de Filhos)
         ps_agent = (
             f"$filhosAccount = \"$env:COMPUTERNAME\\Filhos\"; "
@@ -243,12 +267,12 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             f"$principal = New-ScheduledTaskPrincipal -UserId $filhosAccount -LogonType Interactive -RunLevel Limited; "
             f"Register-ScheduledTask -TaskName 'FaceKidsFilhosAgent' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_agent], timeout=15.0)
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_agent], timeout=10.0, capture=False)
 
-        # 5. Registro da DLL do Credential Provider no Registro
+        # 8. Registro da DLL do Credential Provider no Registro
         dll_target = PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll"
         if dll_target.exists():
-            _run_win_cmd(["regsvr32.exe", "/s", str(dll_target)], timeout=10.0)
+            _run_win_cmd(["regsvr32.exe", "/s", str(dll_target)], timeout=5.0, capture=False)
             ps_reg = (
                 f"$guid = '{CREDENTIAL_PROVIDER_GUID}'; "
                 f"$cpPath = \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\$guid\"; "
@@ -261,7 +285,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
                 f"  Set-ItemProperty -Path $regCustom -Name 'TargetUserSid' -Value $filhosUser.SID.Value -Force "
                 f"}}"
             )
-            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_reg], timeout=15.0)
+            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_reg], timeout=8.0, capture=False)
 
         return True, "Servicos e Credential Provider registrados com sucesso."
     except Exception as e:
@@ -324,7 +348,7 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
                 f"$s.IconLocation = '{icon_path},0'; "
                 f"$s.Save()"
             )
-            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_shortcut], timeout=5.0)
+            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_shortcut], timeout=5.0, capture=False)
 
             # 2. Atalho do Desinstalador
             uninst_bat = root / "Desinstalar-FaceKids.bat"
@@ -339,7 +363,7 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
                     f"$s.IconLocation = '{icon_path},0'; "
                     f"$s.Save()"
                 )
-                _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_uninst], timeout=5.0)
+                _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_uninst], timeout=5.0, capture=False)
         except Exception as e:
             logger.warning(f"Aviso ao criar atalhos em {dest}: {e}")
 
@@ -415,8 +439,8 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
 
         # 2. Parar e remover tarefas agendadas
         for task in ("FaceKidsBootAuth", "FaceKidsAuthService", "FaceKidsFilhosAgent"):
-            _run_win_cmd(["schtasks.exe", "/end", "/tn", task], timeout=5.0)
-            _run_win_cmd(["schtasks.exe", "/delete", "/tn", task, "/f"], timeout=5.0)
+            _run_win_cmd(["schtasks.exe", "/end", "/tn", task], timeout=5.0, capture=False)
+            _run_win_cmd(["schtasks.exe", "/delete", "/tn", task, "/f"], timeout=5.0, capture=False)
 
         # 3. Encerrar processos residuais
         ps_kill = (
@@ -481,12 +505,12 @@ def setup_system(
     filhos_username: str = "Filhos",
     progress_callback: Optional[Callable[[str, int], None]] = None
 ) -> Tuple[bool, str]:
-    """Executa a instalacao completa do sistema com atrito minimo."""
+    """Executa a instalacao completa do sistema com alta performance e sem travar a resposta HTTP."""
     def notify(msg: str, pct: int):
         if progress_callback:
             progress_callback(msg, pct)
 
-    notify("Criando diretorios protegidos do sistema...", 10)
+    notify("Criando diretorios protegidos do sistema...", 15)
     try:
         PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
         SECURITY_DIR.mkdir(parents=True, exist_ok=True)
@@ -497,18 +521,13 @@ def setup_system(
     dll_source = root / "native" / "credential_provider_facekids" / "FaceKidsCredentialProvider.dll"
     dll_target = PROGRAMDATA_DIR / "FaceKidsCredentialProvider.dll"
 
-    notify("Configurando conta Windows e credencial segura DPAPI...", 25)
+    notify("Configurando credencial segura DPAPI...", 30)
     secret = (filhos_password or "").strip()
     if not secret:
-        # Se nenhuma senha foi informada, consulta a existente ou gera nova
         secret = get_filhos_password() or generate_secure_secret(32)
 
-    try:
-        ok_user, msg_user = ensure_filhos_windows_user(secret, username=filhos_username)
-        if not ok_user:
-            logger.warning(f"Aviso na configuracao do usuario: {msg_user}")
-    except Exception as e:
-        logger.warning(f"Erro ao configurar usuario: {e}")
+    # Grava credencial imediatamente no cofre DPAPI
+    save_filhos_credentials(filhos_username, secret)
 
     notify("Copiando driver de desbloqueio facial (DLL)...", 45)
     try:
@@ -517,13 +536,7 @@ def setup_system(
     except Exception as e:
         logger.warning(f"Aviso ao copiar DLL: {e}")
 
-    notify("Ativando servicos em segundo plano (AuthService e FilhosAgent)...", 60)
-    try:
-        setup_windows_services(root)
-    except Exception as e:
-        logger.warning(f"Aviso ao configurar servicos do Windows: {e}")
-
-    notify("Configurando PIN mestre dos pais e banco de dados...", 75)
+    notify("Configurando PIN mestre dos pais e banco de dados...", 60)
     try:
         store = Storage(DEFAULT_DB_FILE)
         if master_pin:
@@ -538,7 +551,7 @@ def setup_system(
     except Exception as e:
         logger.warning(f"Aviso ao inicializar banco de dados: {e}")
 
-    notify("Configurando politicas de inatividade e servicos...", 85)
+    notify("Configurando politicas de inatividade e servicos...", 75)
     try:
         if not CONFIG_FILE.exists():
             default_settings = {
@@ -551,11 +564,22 @@ def setup_system(
     except Exception as e:
         logger.warning(f"Aviso ao salvar configuracoes: {e}")
 
-    notify("Criando atalhos oficiais com ícone na Area de Trabalho...", 95)
-    try:
-        create_desktop_shortcuts(root)
-    except Exception as e:
-        logger.warning(f"Aviso ao criar atalhos: {e}")
+    # Provisionamento do Windows: usuario local, servicos/tarefas e atalhos
+    notify("Ativando servicos e integracoes do Windows...", 85)
+    if sys.platform == "win32":
+        def _provision_windows():
+            try:
+                ensure_filhos_windows_user(secret, username=filhos_username)
+                setup_windows_services(root)
+                create_desktop_shortcuts(root)
+            except Exception as e:
+                logger.warning(f"Aviso no provisionamento Windows: {e}")
+
+        import threading
+        t = threading.Thread(target=_provision_windows, daemon=True)
+        t.start()
+        # Aguarda ate 1.0 segundo para adiantar passos sem segurar o HTTP
+        t.join(timeout=1.0)
 
     notify("Instalacao concluida com sucesso!", 100)
     return True, "FaceKids instalado e pronto para uso."
