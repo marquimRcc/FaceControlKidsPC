@@ -86,13 +86,21 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
             if proc is not None and proc.poll() is None:
                 continue
 
-            # 4. Grace period inicial de abertura: pelo menos 120 segundos
-            if time.time() - start_time < 120.0:
+            # 4. Grace period inicial de abertura: pelo menos 180 segundos
+            if time.time() - start_time < 180.0:
                 continue
 
-            # 5. Timeout generoso de inatividade (padrao 300 segundos sem nenhum heartbeat)
+            # 5. No modo assistente/instalacao (wizard/install), o instalador NUNCA encerra
+            # por inatividade enquanto o usuario estiver configurando
+            if mode in ("wizard", "install"):
+                elapsed = time.time() - FaceKidsApiHandler.last_activity_time
+                if elapsed > 1800.0:
+                    break
+                continue
+
+            # 6. Timeout generoso de inatividade no painel (600 segundos sem nenhum heartbeat)
             elapsed = time.time() - FaceKidsApiHandler.last_activity_time
-            if elapsed > 300.0:
+            if elapsed > 600.0:
                 break
     except KeyboardInterrupt:
         pass
