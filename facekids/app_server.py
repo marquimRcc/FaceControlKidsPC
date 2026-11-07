@@ -185,6 +185,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_child_add(body)
             elif path == "/api/child/delete":
                 self.handle_child_delete(body)
+            elif path == "/api/child/rename":
+                self.handle_child_rename(body)
             elif path == "/api/camera/enroll/start":
                 self.handle_camera_enroll_start(body)
             elif path == "/api/settings/pin":
@@ -266,7 +268,10 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         FaceKidsApiHandler.last_activity_time = time.time()
         try:
             master_pin = str(data.get("pin", "")).strip()
-            first_child = str(data.get("child_name", "")).strip()
+            raw_child = data.get("child_name")
+            first_child = str(raw_child).strip() if raw_child is not None else ""
+            if not first_child or first_child.lower() in ("none", "null"):
+                first_child = "Filho" 
             limit_hours = float(data.get("daily_limit_hours", 2.0))
             limit_minutes = int(limit_hours * 60)
             filhos_pass = str(data.get("filhos_password", "")).strip()
@@ -418,10 +423,34 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(data)
             return
+
+        # Fallback para profile_photos no SQLite
+        store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
+        if store and hasattr(store, "profile_photos"):
+            try:
+                db_photos = store.profile_photos(cid)
+                if 0 <= idx - 1 < len(db_photos):
+                    data = db_photos[idx - 1][1]
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Expires", "0")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    store.close()
+                    return
+            except Exception:
+                pass
+        if store:
+            store.close()
 
         # Fallback para crianca_cid.jpg
         fallback_p = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}.jpg"
@@ -430,7 +459,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(data)
             return
@@ -447,13 +478,21 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             return
 
         sample_p = PROGRAMDATA_DIR / "fotos" / f"amostras_{cid}" / f"amostra_{idx}.jpg"
-        if not sample_p.exists():
-            self.send_json({"ok": False, "error": "Arquivo de amostra nao encontrado"}, 404)
-            return
-
         store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
         try:
-            ok = select_child_sample_photo(cid, sample_p, store=store, sample_index=idx)
+            if sample_p.exists() and sample_p.stat().st_size > 0:
+                ok = select_child_sample_photo(cid, sample_p, store=store, sample_index=idx)
+            else:
+                photo_bytes = None
+                if store and hasattr(store, "profile_photos"):
+                    photos = store.profile_photos(cid)
+                    if 0 <= idx - 1 < len(photos):
+                        photo_bytes = photos[idx - 1][1]
+                if photo_bytes:
+                    ok = select_child_sample_photo(cid, photo_bytes, store=store, sample_index=idx)
+                else:
+                    self.send_json({"ok": False, "error": "Arquivo de amostra nao encontrado"}, 404)
+                    return
             self.send_json({"ok": ok, "message": f"Foto {idx} selecionada como avatar oficial."})
         finally:
             if store:
@@ -511,6 +550,20 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         try:
             new_id = store.add_person(name, int(hours * 60))
             self.send_json({"ok": True, "id": new_id, "name": name})
+        finally:
+            store.close()
+
+    def handle_child_rename(self, body: Dict[str, Any]) -> None:
+        cid = int(body.get("child_id", 0))
+        new_name = str(body.get("name", "")).strip()
+        if cid <= 0 or not new_name or len(new_name) > 80:
+            self.send_json({"ok": False, "error": "ID e nome valido sao obrigatorios."}, 400)
+            return
+
+        store = Storage(DEFAULT_DB_FILE)
+        try:
+            store.update_person_name(cid, new_name)
+            self.send_json({"ok": True, "message": f"Perfil #{cid} renomeado para '{new_name}'."})
         finally:
             store.close()
 
@@ -616,7 +669,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                     self.send_response(200)
                     self.send_header("Content-Type", "image/png")
                     self.send_header("Content-Length", str(len(data)))
-                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Expires", "0")
                     self.end_headers()
                     self.wfile.write(data)
                     return
@@ -627,7 +682,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                     self.send_response(200)
                     self.send_header("Content-Type", "image/jpeg")
                     self.send_header("Content-Length", str(len(data)))
-                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Expires", "0")
                     self.end_headers()
                     self.wfile.write(data)
                     return

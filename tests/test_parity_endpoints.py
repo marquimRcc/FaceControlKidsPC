@@ -166,6 +166,22 @@ class TestParityEndpoints(unittest.TestCase):
             self.assertTrue(data.get("ok"))
             mock_store.remove_person.assert_called_once_with(5)
 
+    def test_child_rename_endpoint(self):
+        """Valida POST /api/child/rename atualizando nome da crianca no banco de dados."""
+        with patch("facekids.app_server.Storage") as mock_storage_cls:
+            mock_store = MagicMock()
+            mock_storage_cls.return_value = mock_store
+            status, data = self._post_json("/api/child/rename", {"child_id": 1, "name": "Lucas"})
+            self.assertEqual(status, 200)
+            self.assertTrue(data.get("ok"))
+            mock_store.update_person_name.assert_called_once_with(1, "Lucas")
+
+    def test_child_rename_validation(self):
+        """Valida rejeicao de nome vazio ou ID invalido."""
+        status, data = self._post_json("/api/child/rename", {"child_id": 0, "name": ""})
+        self.assertEqual(status, 400)
+        self.assertFalse(data.get("ok"))
+
     def test_uninstall_endpoint(self):
         """Valida POST /api/uninstall executando desinstalacao completa do sistema."""
         with tempfile.TemporaryDirectory() as td:

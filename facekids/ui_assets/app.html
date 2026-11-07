@@ -111,6 +111,17 @@
     <section id="wizardView" class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500">
       <div class="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 space-y-6 text-center glow-cyan border border-slate-700/60">
         
+        <!-- Banner se ja instalado -->
+        <div id="wizardAlreadyInstalledBanner" class="p-3 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-xs text-cyan-200 flex items-center justify-between shadow-lg">
+          <div class="flex items-center space-x-2 text-left">
+            <span>🛡️</span>
+            <span>FaceKids já configurado neste computador.</span>
+          </div>
+          <button type="button" onclick="showDashboard()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all shadow-md">
+            Abrir Painel dos Pais ➔
+          </button>
+        </div>
+
         <!-- Indicador de Passos -->
         <div class="flex items-center justify-center space-x-3 text-xs font-medium text-slate-400">
           <span id="dotStep1" class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
@@ -326,6 +337,10 @@
         <button onclick="openAddChildModal()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center space-x-1.5 cursor-pointer">
           <span>➕</span>
           <span>Cadastrar Novo Perfil</span>
+        </button>
+        <button type="button" onclick="showWizard()" class="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5 mt-2" title="Executar Assistente de Instalação">
+          <span>⚙️</span>
+          <span>Assistente de Instalação</span>
         </button>
       </aside>
 
@@ -572,9 +587,15 @@
         <!-- Injetado dinamicamente via JavaScript -->
       </div>
 
-      <div class="flex items-center justify-between pt-3 border-t border-slate-800">
-        <span class="text-[11px] text-slate-400">Clique em qualquer foto para selecioná-la como o avatar oficial.</span>
-        <button onclick="closePhotoGalleryModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white">Fechar</button>
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
+        <span class="text-[11px] text-slate-400">Clique em qualquer foto para defini-la como avatar ou tire novas fotos.</span>
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="startModalRecapture()" class="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md active:scale-95 transition-all">
+            <span>📷</span>
+            <span>Tirar Novas 12 Fotos</span>
+          </button>
+          <button type="button" onclick="closePhotoGalleryModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-all">Fechar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -692,6 +713,7 @@
     let selectedQuotaHours = 2.0;
     let editingChildId = null;
     let activeGalleryChildId = null;
+    window.avatarTimestamps = {};
 
     // Relogio ao vivo
     setInterval(() => {
@@ -891,7 +913,20 @@
       }
     }
 
-    // Renderizacao dos Cards com Galeria de 12 fotos e acoes da main
+    async function editChildName(childId, currentName) {
+      const defaultVal = (!currentName || currentName === "None") ? "" : currentName;
+      const newName = prompt(`Informe o novo nome para o Perfil #${childId}:`, defaultVal);
+      if (!newName || !newName.trim()) return;
+      const res = await FaceKidsAPI.renameChild(childId, newName.trim());
+      if (res && res.ok) {
+        showToast(`Perfil #${childId} renomeado para '${newName.trim()}'.`);
+        syncDashboardData();
+      } else {
+        showToast((res && res.error) ? res.error : "Erro ao renomear perfil.");
+      }
+    }
+
+    // Renderizacao dos Cards com Galeria de 12 fotos, edicao de nome e cache-busting
     function renderChildrenCards(children) {
       const grid = document.getElementById("childrenCardsGrid");
       const emptyState = document.getElementById("noChildrenState");
@@ -910,18 +945,22 @@
         const radius = 24;
         const circ = 2 * Math.PI * radius;
         const offset = circ - (c.percent_remaining / 100) * circ;
+        const displayName = (c.name && c.name !== "None") ? c.name : "Filho";
+        const ts = window.avatarTimestamps[c.id] || "";
+        const avatarUrl = ts ? `/api/child/${c.id}/avatar?t=${ts}` : `/api/child/${c.id}/avatar`;
 
         html += `
           <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 shadow-xl">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3.5">
-                <div class="relative cursor-pointer" onclick="openPhotoGalleryModal(${c.id}, '${c.name}')" title="Clique para escolher foto de perfil">
-                  <img src="/api/child/${c.id}/avatar" onerror="this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg">
+                <div class="relative cursor-pointer group" onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" title="Clique para escolher foto de perfil ativa">
+                  <img src="${avatarUrl}" data-child-avatar="${c.id}" onerror="this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg group-hover:scale-105 transition-all">
                   <span class="absolute bottom-0 right-0 bg-slate-900 text-[10px] p-0.5 rounded-full border border-cyan-500/40">🖼️</span>
                 </div>
                 <div>
-                  <h3 class="text-base font-bold text-white flex items-center space-x-2">
-                    <span>${c.name}</span>
+                  <h3 class="text-base font-bold text-white flex items-center space-x-1.5">
+                    <span>${displayName}</span>
+                    <button type="button" onclick="editChildName(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-all text-xs" title="Editar Nome">✏️</button>
                     <span class="text-[10px] text-cyan-400 font-mono font-normal">#${c.id}</span>
                   </h3>
                   <span class="text-[10px] text-slate-400">Limite: ${Math.round(c.limit_seconds / 3600)}h/dia</span>
@@ -954,8 +993,8 @@
               <button onclick="injectBonus(${c.id}, 15)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 15 minutos">+15m</button>
               <button onclick="injectBonus(${c.id}, 30)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 30 minutos">+30m</button>
               <button onclick="injectBonus(${c.id}, -15)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 border border-amber-500/30 transition-all active:scale-95" title="Subtrair 15 minutos">-15m</button>
-              <button onclick="openPhotoGalleryModal(${c.id}, '${c.name}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
-              <button onclick="deleteChildProfile(${c.id}, '${c.name}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
+              <button onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
+              <button onclick="deleteChildProfile(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
             </div>
           </div>
         `;
@@ -964,24 +1003,26 @@
       grid.innerHTML = html;
     }
 
-    // Modal de Galeria de 12 Fotos
+    // Modal de Galeria de 12 Fotos com Recaptura Webcam
     async function openPhotoGalleryModal(childId, childName) {
       activeGalleryChildId = childId;
       const modal = document.getElementById("photoGalleryModal");
       const title = document.getElementById("galleryChildSubtitle");
       const grid = document.getElementById("galleryGrid");
-      if (title) title.innerText = `Perfil de ${childName}: escolha a foto oficial do rosto.`;
-      if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-4 text-center'>Carregando amostras faciais...</p>";
+      if (title) title.innerText = childName ? `Perfil de ${childName}: escolha a foto oficial do rosto.` : "Escolha a foto oficial do perfil.";
+      if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-6 text-center animate-pulse'>Carregando amostras faciais...</p>";
       if (modal) modal.classList.remove("hidden");
 
       const res = await FaceKidsAPI.getChildPhotos(childId);
+      const cacheBust = Date.now();
       if (res && res.photos && res.photos.length > 0) {
         let html = "";
         res.photos.forEach(p => {
           const isSelected = p.selected;
+          const photoUrl = `${p.url}?t=${cacheBust}`;
           html += `
             <div onclick="selectActivePhoto(${childId}, ${p.index})" class="group cursor-pointer rounded-2xl p-2 bg-slate-900/90 border ${isSelected ? 'border-cyan-400 ring-2 ring-cyan-400/50' : 'border-slate-800 hover:border-slate-600'} transition-all relative flex flex-col items-center">
-              <img src="${p.url}" class="w-full h-24 object-cover rounded-xl mb-1.5 shadow-md">
+              <img src="${photoUrl}" class="w-full h-24 object-cover rounded-xl mb-1.5 shadow-md">
               <span class="text-[10px] font-semibold ${isSelected ? 'text-cyan-400' : 'text-slate-400'}">${p.label}</span>
               ${isSelected ? '<span class="absolute top-3 right-3 bg-cyan-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">ATIVA</span>' : ''}
             </div>
@@ -989,7 +1030,7 @@
         });
         if (grid) grid.innerHTML = html;
       } else {
-        if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-4 text-center'>Nenhuma amostra salva ainda. Realize o cadastro com a webcam.</p>";
+        if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Clique no botão abaixo para capturar as 12 fotos com a webcam!</p></div>";
       }
     }
 
@@ -1004,11 +1045,50 @@
       const res = await FaceKidsAPI.selectChildPhoto(childId, photoIndex);
       if (res && res.ok) {
         showToast("Foto oficial atualizada!");
+        const now = Date.now();
+        if (!window.avatarTimestamps) window.avatarTimestamps = {};
+        window.avatarTimestamps[childId] = now;
+        
+        // Atualiza imediatamente na tela os elementos de imagem
+        document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
+          el.src = `/api/child/${childId}/avatar?t=${now}`;
+        });
+        
         await openPhotoGalleryModal(childId, "");
         if (typeof syncDashboardData === "function") syncDashboardData();
       } else {
         showToast((res && res.error) ? res.error : "Falha ao selecionar foto.");
       }
+    }
+
+    async function startModalRecapture() {
+      const childId = activeGalleryChildId;
+      if (!childId) return;
+      const grid = document.getElementById("galleryGrid");
+      const subtitle = document.getElementById("galleryChildSubtitle");
+      if (subtitle) subtitle.innerText = "Capturando 12 novas fotos na webcam...";
+      if (grid) grid.innerHTML = "<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>Webcam ativada: Olhe para a câmera</p><p class='text-xs text-slate-400'>Mova levemente o rosto para registrar variações de ângulo...</p></div>";
+
+      const startRes = await FaceKidsAPI.startEnrollment(childId);
+      let t = setInterval(async () => {
+        const s = await FaceKidsAPI.getEnrollmentStatus();
+        if (!s) return;
+        if (s.active && grid) {
+          grid.innerHTML = `<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>${s.message || 'Capturando...'}</p><p class='text-xs text-cyan-400 font-mono font-bold'>${s.samples_count || 0} de 12 fotos capturadas</p></div>`;
+        }
+        if (s.completed) {
+          clearInterval(t);
+          showToast("12 novas amostras biométricas capturadas com sucesso!");
+          const now = Date.now();
+          if (!window.avatarTimestamps) window.avatarTimestamps = {};
+          window.avatarTimestamps[childId] = now;
+          document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
+            el.src = `/api/child/${childId}/avatar?t=${now}`;
+          });
+          await openPhotoGalleryModal(childId, "");
+          if (typeof syncDashboardData === "function") syncDashboardData();
+        }
+      }, 400);
     }
 
     async function deleteChildProfile(childId, childName) {

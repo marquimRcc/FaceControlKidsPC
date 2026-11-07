@@ -230,6 +230,19 @@ const FaceKidsAPI = {
     }
   },
 
+  async renameChild(childId, name) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/child/rename`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ child_id: childId, name })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
   async uninstall(pin, removeData = false, removeUser = false) {
     try {
       const res = await fetch(`${this.baseUrl}/api/uninstall`, {
