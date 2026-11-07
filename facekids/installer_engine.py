@@ -129,6 +129,41 @@ def ensure_filhos_windows_user(secret: str) -> Tuple[bool, str]:
         return False, f"Erro ao configurar conta Windows: {e}"
 
 
+def create_desktop_shortcut() -> None:
+    """Cria atalho direto para o Painel Administrativo na Area de Trabalho."""
+    try:
+        if sys.platform == "win32":
+            desktop = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop"
+            if desktop.exists():
+                shortcut_file = desktop / "Painel FaceKids.lnk"
+                root = Path(__file__).resolve().parent.parent
+                pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
+                target_exe = None
+                args = ""
+
+                if getattr(sys, "frozen", False):
+                    target_exe = Path(sys.executable)
+                    args = "--mode=dashboard"
+                elif pythonw.exists():
+                    target_exe = pythonw
+                    args = "-m facekids.app_window --mode=dashboard"
+
+                if target_exe and target_exe.exists():
+                    cmd = [
+                        "powershell", "-NoProfile", "-Command",
+                        f"$wsh = New-Object -ComObject WScript.Shell; "
+                        f"$s = $wsh.CreateShortcut('{shortcut_file}'); "
+                        f"$s.TargetPath = '{target_exe}'; "
+                        f"$s.Arguments = '{args}'; "
+                        f"$s.WorkingDirectory = '{root}'; "
+                        f"$s.Description = 'FaceKids - Painel Administrativo dos Pais'; "
+                        f"$s.Save()"
+                    ]
+                    _run_win_cmd(cmd, timeout=5.0)
+    except Exception as e:
+        logger.warning(f"Aviso ao criar atalho na Area de Trabalho: {e}")
+
+
 def setup_system(
     master_pin: str,
     first_child_name: Optional[str] = None,
@@ -203,6 +238,9 @@ def setup_system(
             CONFIG_FILE.write_text(json.dumps(default_settings, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning(f"Aviso ao salvar configuracoes: {e}")
+
+    notify("Criando atalho de acesso ao Painel na Area de Trabalho...", 95)
+    create_desktop_shortcut()
 
     notify("Instalacao concluida com sucesso!", 100)
     return True, "FaceKids instalado e pronto para uso."
