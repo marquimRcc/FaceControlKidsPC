@@ -197,6 +197,38 @@ class TestParityEndpoints(unittest.TestCase):
                 self.assertIn("Desinstalado com sucesso", data.get("message", ""))
                 mock_uninst.assert_called_once_with(remove_data=True, remove_windows_user=False)
 
+    def test_child_bonus_positive_and_negative(self):
+        """Valida POST /api/child/bonus com valores positivos (+30m) e reduções negativas (-15m)."""
+        from facekids.storage import Storage
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "kids.sqlite3"
+            store = Storage(db_path)
+            cid = store.add_person("Gabriel", 120)
+            store.close()
+
+            with patch("facekids.app_server.DEFAULT_DB_FILE", db_path):
+                # 1. Bônus positivo (+30m)
+                status, data = self._post_json("/api/child/bonus", {"child_id": cid, "minutes": 30})
+                self.assertEqual(status, 200)
+                self.assertTrue(data.get("ok"))
+                self.assertIn("+30m", data.get("message", ""))
+
+                # 2. Redução negativa (-15m)
+                status, data = self._post_json("/api/child/bonus", {"child_id": cid, "minutes": -15})
+                self.assertEqual(status, 200)
+                self.assertTrue(data.get("ok"))
+                self.assertIn("15m", data.get("message", ""))
+
+                # Verifica no banco que o saldo reduziu para 15m (900s)
+                chk_store = Storage(db_path)
+                self.assertEqual(chk_store.bonus(cid), 900)
+                chk_store.close()
+
+                # 3. ID inválido
+                status, data = self._post_json("/api/child/bonus", {"child_id": 0, "minutes": 15})
+                self.assertEqual(status, 400)
+                self.assertFalse(data.get("ok"))
+
 
 class TestCredentialStoreDPAPI(unittest.TestCase):
     def test_save_and_retrieve_credentials(self):

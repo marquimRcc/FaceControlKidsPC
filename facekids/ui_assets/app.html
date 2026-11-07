@@ -1,1347 +1,1449 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FaceKids - Controle Parental Inteligente</title>
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <!-- Tailwind CSS Play CDN para renderizacao de alta fidelidade sem build step complexo -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg-dark: #060a14;
-      --card-bg: rgba(14, 23, 42, 0.75);
-      --border: rgba(56, 189, 248, 0.15);
-      --cyan-glow: rgba(34, 211, 238, 0.25);
-    }
-    body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background-color: var(--bg-dark);
-      color: #f8fafc;
-      overflow-x: hidden;
-      user-select: none;
-    }
-    .font-mono {
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .glass-panel {
-      background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
-    }
-    .glow-cyan {
-      box-shadow: 0 0 25px -5px var(--cyan-glow);
-    }
-    .circle-progress {
-      transition: stroke-dashoffset 0.8s ease-in-out;
-    }
-    /* Animacao suave de shake para erro de PIN */
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      20%, 60% { transform: translateX(-8px); }
-      40%, 80% { transform: translateX(8px); }
-    }
-    .shake-anim {
-      animation: shake 0.4s ease-in-out;
-    }
-  </style>
-</head>
-<body class="bg-[#060a14] min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
-
-  <!-- ======================================================== -->
-  <!-- HEADER GLOBAL UNIFICADO (Status, Relógio e Indicadores)  -->
-  <!-- ======================================================== -->
-  <header class="w-full border-b border-[var(--border)] bg-[#080e1e]/80 backdrop-blur-xl sticky top-0 z-40 px-4 sm:px-6 py-2.5 flex items-center justify-between">
-    <div class="flex items-center space-x-3">
-      <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
-        <span class="text-lg">🛡️</span>
-      </div>
-      <div>
-        <div class="flex items-center space-x-2">
-          <span class="font-extrabold text-sm tracking-tight text-white">FaceKids</span>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-semibold">v2.0 PRO</span>
-        </div>
-        <p class="text-[10px] text-slate-400">Controle Facial & Limite Diário de Tela</p>
-      </div>
-    </div>
-
-    <!-- Indicadores de Servicos em Tempo Real -->
-    <div class="hidden md:flex items-center space-x-2 text-[11px] font-mono">
-      <div id="serviceAuthPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
-        <span class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
-        <span class="text-slate-300">AuthService</span>
-      </div>
-      <div id="serviceAgentPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
-        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
-        <span class="text-slate-300">FilhosAgent</span>
-      </div>
-      <div id="serviceDllPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
-        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
-        <span class="text-slate-300">CredentialProvider</span>
-      </div>
-      <button onclick="restartServices()" title="Reiniciar Servicos" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 border border-slate-700 transition-all">
-        🔄
-      </button>
-    </div>
-
-    <!-- Controles da Direita -->
-    <div class="flex items-center space-x-3">
-      <div class="text-right">
-        <span id="liveClock" class="font-mono text-xs font-semibold text-slate-200">--:--</span>
-        <span class="hidden sm:block text-[10px] text-emerald-400">Conexão 100% Local</span>
-      </div>
-      <button onclick="openLockScreen()" id="lockScreenBtn" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60" title="Bloquear Painel dos Pais">
-        🔒
-      </button>
-    </div>
-  </header>
-
-  <!-- ======================================================== -->
-  <!-- CONTAINER PRINCIPAL                                      -->
-  <!-- ======================================================== -->
-  <main class="flex-1 flex flex-col relative overflow-hidden">
-
-    <!-- ======================================================== -->
-    <!-- VIEW 1: ASSISTENTE DE INSTALAÇÃO (1-CLICK SETUP WIZARD)  -->
-    <!-- ======================================================== -->
-    <section id="wizardView" class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500">
-      <div class="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 space-y-6 text-center glow-cyan border border-slate-700/60">
-        
-        <!-- Banner se ja instalado -->
-        <div id="wizardAlreadyInstalledBanner" class="p-3 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-xs text-cyan-200 flex items-center justify-between shadow-lg">
-          <div class="flex items-center space-x-2 text-left">
-            <span>🛡️</span>
-            <span>FaceKids já configurado neste computador.</span>
-          </div>
-          <button type="button" onclick="showDashboard()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all shadow-md">
-            Abrir Painel dos Pais ➔
-          </button>
-        </div>
-
-        <!-- Indicador de Passos -->
-        <div class="flex items-center justify-center space-x-3 text-xs font-medium text-slate-400">
-          <span id="dotStep1" class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-          <span class="h-0.5 w-8 bg-slate-800"></span>
-          <span id="dotStep2" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
-          <span class="h-0.5 w-8 bg-slate-800"></span>
-          <span id="dotStep3" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
-          <span class="ml-2 text-cyan-300 font-mono text-[11px]">Passo <span id="currentStepNumber">1</span> de 3</span>
-        </div>
-
-        <!-- PASSO 1: BOAS-VINDAS -->
-        <div id="wizardStep1" class="wizard-step flex flex-col space-y-5">
-          <div class="w-16 h-16 rounded-3xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
-            🛡️
-          </div>
-          <div class="space-y-2">
-            <h1 class="text-2xl font-black tracking-tight text-white sm:text-3xl">Proteja o Tempo dos Filhos no PC</h1>
-            <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
-              O FaceKids bloqueia automaticamente o computador quando o limite diário expira ou quando a criança sai da frente da tela.
-            </p>
-          </div>
-
-          <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-left text-xs space-y-2.5 max-w-md mx-auto">
-            <div class="flex items-center space-x-2 text-slate-300">
-              <span class="text-cyan-400">✓</span>
-              <span>Reconhecimento facial instantâneo e offline (YuNet + SFace)</span>
-            </div>
-            <div class="flex items-center space-x-2 text-slate-300">
-              <span class="text-emerald-400">✓</span>
-              <span>100% Local e Privado: nenhuma foto sai do computador</span>
-            </div>
-            <div class="flex items-center space-x-2 text-slate-300">
-              <span class="text-emerald-400">✓</span>
-              <span>Desbloqueio seguro por DPAPI na conta Windows supervisionada</span>
-            </div>
-          </div>
-
-          <button id="btnStartWizard" type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
-            <span>Iniciar Instalação em 1 Clique</span>
-            <span>⚡</span>
-          </button>
-        </div>
-
-        <!-- PASSO 2: AUTO-DETECCAO -->
-        <div id="wizardStep2" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
-          <div class="text-left space-y-1">
-            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Verificação de Sistema</span>
-            <h2 class="text-xl font-bold text-white">Detectando Pré-requisitos</h2>
-            <p class="text-xs text-slate-400">O FaceKids está preparando os componentes do sistema automaticamente.</p>
-          </div>
-
-          <div class="space-y-3">
-            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-              <div class="flex items-center space-x-3">
-                <span class="text-xl">📷</span>
-                <div>
-                  <h4 class="text-xs font-bold text-white">Câmera / Webcam</h4>
-                  <p class="text-[10px] text-slate-400">Reconhecimento facial biométrico</p>
-                </div>
-              </div>
-              <span id="diagCameraBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Detectada</span>
-            </div>
-
-            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-              <div class="flex items-center space-x-3">
-                <span class="text-xl">👤</span>
-                <div>
-                  <h4 class="text-xs font-bold text-white">Conta Windows 'Filhos'</h4>
-                  <p class="text-[10px] text-slate-400">Ambiente supervisionado com cota</p>
-                </div>
-              </div>
-              <span id="diagUserBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Configurada</span>
-            </div>
-
-            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-              <div class="flex items-center space-x-3">
-                <span class="text-xl">🧠</span>
-                <div>
-                  <h4 class="text-xs font-bold text-white">Motor de IA YuNet + SFace</h4>
-                  <p class="text-[10px] text-slate-400">Detecção e embeddings faciais offline</p>
-                </div>
-              </div>
-              <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Pronto</span>
-            </div>
-          </div>
-
-          <button type="button" onclick="goToStep3()" class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all cursor-pointer">
-            Continuar para Credenciais e PIN →
-          </button>
-        </div>
-
-        <!-- PASSO 3: CRIAR PIN DOS PAIS E SENHA DA CONTA FILHOS -->
-        <div id="wizardStep3" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
-          <div class="text-left space-y-1">
-            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
-            <h2 class="text-xl font-bold text-white">Defina o PIN e a Senha da Conta</h2>
-            <p class="text-xs text-slate-400">Crie o PIN de administrador e informe a senha da conta supervisionada.</p>
-          </div>
-
-          <!-- PIN Display -->
-          <div class="flex flex-col items-center space-y-3 py-1">
-            <span class="text-xs text-slate-300 font-semibold">PIN Mestre dos Pais (4 a 6 dígitos)</span>
-            <div id="pinDotsDisplay" class="flex items-center space-x-3">
-              <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot4" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot5" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-            </div>
-
-            <!-- Teclado Numérico -->
-            <div class="grid grid-cols-3 gap-2 w-full max-w-[220px]">
-              <button onclick="pressPinKey('1')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">1</button>
-              <button onclick="pressPinKey('2')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">2</button>
-              <button onclick="pressPinKey('3')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">3</button>
-              <button onclick="pressPinKey('4')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">4</button>
-              <button onclick="pressPinKey('5')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">5</button>
-              <button onclick="pressPinKey('6')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">6</button>
-              <button onclick="pressPinKey('7')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">7</button>
-              <button onclick="pressPinKey('8')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">8</button>
-              <button onclick="pressPinKey('9')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">9</button>
-              <button onclick="clearPinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
-              <button onclick="pressPinKey('0')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">0</button>
-              <button onclick="backspacePinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
-            </div>
-          </div>
-
-          <!-- Configuracao de Senha da Conta Windows Filhos (Cofre DPAPI) -->
-          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 text-left">
-            <div class="flex items-center space-x-2">
-              <span class="text-cyan-400">🛡️</span>
-              <h3 class="text-xs font-bold text-white uppercase tracking-wider">Conta Windows das Crianças</h3>
-            </div>
-            <p class="text-[11px] text-slate-400 leading-relaxed">
-              Esta senha será configurada na conta Windows e criptografada via <strong>Windows DPAPI</strong> para permitir o desbloqueio facial automático sem que as crianças saibam a senha.
-            </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div>
-                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da Conta Local</label>
-                <input id="wizardFilhosUser" type="text" value="Filhos" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Senha da Conta Windows</label>
-                <div class="relative">
-                  <input id="wizardFilhosPass" type="password" value="1" placeholder="Digite uma senha..." class="w-full px-3 py-2 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
-                  <button type="button" onclick="togglePasswordVisibility('wizardFilhosPass', this)" class="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs">👁️</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
-            Concluir Instalação e Abrir Painel 🚀
-          </button>
-        </div>
-
-      </div>
-    </section>
-
-
-    <!-- ======================================================== -->
-    <!-- VIEW 2: PAINEL ADMINISTRATIVO (COMPLETO / PARIDADE MAIN)  -->
-    <!-- ======================================================== -->
-    <section id="dashboardView" class="hidden flex-1 flex flex-col lg:flex-row overflow-hidden">
-      
-      <!-- SIDEBAR COMPLETA COM ICONES DA MAIN -->
-      <aside class="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-[var(--border)] bg-[#0c1222]/80 p-4 space-y-4 flex flex-col justify-between shrink-0">
-        <div class="space-y-4">
-          <!-- Profile Badge -->
-          <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-lg shadow-md">
-              👨‍👩‍👧
-            </div>
-            <div>
-              <h3 class="text-xs font-bold text-white">Painel dos Pais</h3>
-              <span class="text-[10px] text-emerald-400 font-medium flex items-center space-x-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span>Modo Supervisionado</span>
-              </span>
-            </div>
-          </div>
-
-          <!-- Navigation Links (6 Abas Completas) -->
-          <nav class="space-y-1">
-            <button onclick="switchTab('overview')" id="navTabOverview" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all">
-              <span>👥</span>
-              <span>Perfis das Crianças</span>
-            </button>
-            <button onclick="switchTab('session')" id="navTabSession" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span>⏱️</span>
-              <span>Controle de Tempo & Sessão</span>
-            </button>
-            <button onclick="switchTab('services')" id="navTabServices" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span>🛡️</span>
-              <span>Serviços & Desbloqueio</span>
-            </button>
-            <button onclick="switchTab('settings')" id="navTabSettings" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span>🔑</span>
-              <span>Segurança & Conta Filhos</span>
-            </button>
-            <button onclick="switchTab('logs')" id="navTabLogs" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-              <span>📋</span>
-              <span>Logs & Auditoria</span>
-            </button>
-            <button onclick="switchTab('maintenance')" id="navTabMaintenance" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-400/80 hover:text-red-300 hover:bg-red-500/10 transition-all">
-              <span>🗑️</span>
-              <span>Manutenção & Desinstalação</span>
-            </button>
-          </nav>
-        </div>
-
-        <button onclick="openAddChildModal()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center space-x-1.5 cursor-pointer">
-          <span>➕</span>
-          <span>Cadastrar Novo Perfil</span>
-        </button>
-        <button type="button" onclick="showWizard()" class="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5 mt-2" title="Executar Assistente de Instalação">
-          <span>⚙️</span>
-          <span>Assistente de Instalação</span>
-        </button>
-      </aside>
-
-      <!-- CONTENT AREA -->
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-
-        <!-- ABA 1: PERFIS DAS CRIANCAS (CARDS COM AVATAR, BÔNUS E GALERIA) -->
-        <div id="tabOverview" class="tab-content space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h1 class="text-xl font-black text-white">Perfis das Crianças</h1>
-              <p class="text-xs text-slate-400">Gerencie cotas diárias, bônus e o avatar oficial de cada perfil.</p>
-            </div>
-            <button onclick="syncDashboardData()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all flex items-center space-x-1">
-              <span>🔄</span>
-              <span>Atualizar</span>
-            </button>
-          </div>
-
-          <!-- Grid de Cards de Crianças -->
-          <div id="childrenCardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Injetado dinamicamente via JavaScript -->
-          </div>
-
-          <div id="noChildrenState" class="hidden glass-panel rounded-3xl p-8 text-center space-y-4 border border-dashed border-slate-700">
-            <span class="text-4xl block">👶</span>
-            <h3 class="text-base font-bold text-white">Nenhum perfil cadastrado</h3>
-            <p class="text-xs text-slate-400 max-w-sm mx-auto">Cadastre o perfil dos seus filhos para começar a supervisionar o tempo de uso.</p>
-            <button onclick="openAddChildModal()" class="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs">Cadastrar Agora</button>
-          </div>
-        </div>
-
-
-        <!-- ABA 2: CONTROLE DE TEMPO & SESSAO ATIVA -->
-        <div id="tabSession" class="tab-content hidden space-y-6">
-          <div>
-            <h1 class="text-xl font-black text-white">Controle de Sessão do Windows</h1>
-            <p class="text-xs text-slate-400">Status atual da sessão interativa dos filhos e monitor de presença.</p>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
-              <span class="text-xs text-slate-400">Conta Supervisionada</span>
-              <p id="sessionAccountName" class="text-base font-bold text-white">Filhos</p>
-              <span class="text-[10px] text-emerald-400">● Conectada ao Windows</span>
-            </div>
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
-              <span class="text-xs text-slate-400">Tempo Ativo Total Hoje</span>
-              <p id="statTotalUsed" class="text-base font-bold text-cyan-400">0h 0m</p>
-              <span class="text-[10px] text-slate-400">Soma de todos os perfis</span>
-            </div>
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
-              <span class="text-xs text-slate-400">Perfis Ativos</span>
-              <p id="statActiveCount" class="text-base font-bold text-white">0</p>
-              <span class="text-[10px] text-slate-400">Configurados com cota</span>
-            </div>
-          </div>
-
-          <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-            <h3 class="text-sm font-bold text-white">Ações Imediatas de Controle</h3>
-            <p class="text-xs text-slate-400">Conceda tempo adicional ou bloqueie preventivamente o computador.</p>
-            <div class="flex flex-wrap gap-2">
-              <button onclick="injectAllBonus(15)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30">+15 min para todos</button>
-              <button onclick="injectAllBonus(30)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30">+30 min para todos</button>
-            </div>
-          </div>
-        </div>
-
-
-        <!-- ABA 3: SERVICOS & DESBLOQUEIO WINDOWS (STATUS REAL) -->
-        <div id="tabServices" class="tab-content hidden space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h1 class="text-xl font-black text-white">Serviços & Credential Provider</h1>
-              <p class="text-xs text-slate-400">Integridade dos daemons de segundo plano e driver de autenticação facial.</p>
-            </div>
-            <button onclick="restartServices()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center space-x-1">
-              <span>🔄</span>
-              <span>Reiniciar Serviços</span>
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-white">FaceKidsAuthService</span>
-                <span id="badgeServiceAuth" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
-              </div>
-              <p class="text-[11px] text-slate-400">Serviço SYSTEM de escuta do Named Pipe para LogonUI.</p>
-            </div>
-
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-white">FaceKidsFilhosAgent</span>
-                <span id="badgeServiceAgent" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
-              </div>
-              <p class="text-[11px] text-slate-400">Agente de sessão interativa com Watchdog de presença.</p>
-            </div>
-
-            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-white">Credential Provider DLL</span>
-                <span id="badgeServiceDll" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
-              </div>
-              <p class="text-[11px] text-slate-400">FaceKidsCredentialProvider registrado no Registro HKLM.</p>
-            </div>
-          </div>
-
-          <!-- Teste ao Vivo da Câmera -->
-          <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-            <h3 class="text-sm font-bold text-white">Teste do Reconhecimento Facial em Tempo Real</h3>
-            <div class="w-full h-64 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
-              <img id="tabServicesStream" src="/api/camera/stream" class="w-full h-full object-cover">
-            </div>
-            <p class="text-[11px] text-slate-400">Transmissão contínua com detecção facial YuNet em tempo real.</p>
-          </div>
-        </div>
-
-
-        <!-- ABA 4: SEGURANCA & CONTA FILHOS (PIN DOS PAIS E SENHA DPAPI) -->
-        <div id="tabSettings" class="tab-content hidden space-y-6">
-          <div>
-            <h1 class="text-xl font-black text-white">Segurança & Credenciais</h1>
-            <p class="text-xs text-slate-400">Altere o PIN Mestre dos Pais ou a Senha da conta Windows Filhos.</p>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Alterar PIN Mestre -->
-            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-              <h3 class="text-sm font-bold text-white">Alterar PIN Mestre dos Pais</h3>
-              <p class="text-xs text-slate-400">PIN de 4 a 6 dígitos numéricos usado para desbloquear este painel.</p>
-              <div class="space-y-3">
-                <input id="inputNewPin" type="password" maxlength="6" placeholder="Novo PIN (4-6 dígitos)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 font-mono">
-                <input id="inputConfirmPin" type="password" maxlength="6" placeholder="Confirmar Novo PIN" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 font-mono">
-                <button onclick="updateMasterPin()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all">
-                  Atualizar PIN dos Pais
-                </button>
-              </div>
-            </div>
-
-            <!-- Alterar Senha Windows / DPAPI -->
-            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-              <h3 class="text-sm font-bold text-white">Senha da Conta Windows (Filhos)</h3>
-              <p class="text-xs text-slate-400">Redefina a senha no Windows e sincronize com o cofre seguro DPAPI.</p>
-              <div class="space-y-3">
-                <input id="inputWindowsUser" type="text" value="Filhos" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-cyan-400">
-                <div class="relative">
-                  <input id="inputWindowsPass" type="password" placeholder="Nova senha da conta Windows..." class="w-full px-3.5 py-2.5 pr-8 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
-                  <button type="button" onclick="togglePasswordVisibility('inputWindowsPass', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs">👁️</button>
-                </div>
-                <button onclick="updateWindowsAccount()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all">
-                  Salvar e Sincronizar Senha no Windows & DPAPI
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-        <!-- ABA 5: LOGS & AUDITORIA -->
-        <div id="tabLogs" class="tab-content hidden space-y-6">
-          <div>
-            <h1 class="text-xl font-black text-white">Histórico & Logs de Auditoria</h1>
-            <p class="text-xs text-slate-400">Eventos de desbloqueio facial, saldo de cotas e watchdog de presença.</p>
-          </div>
-
-          <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-3">
-            <h3 class="text-sm font-bold text-white">Eventos Recentes do Sistema</h3>
-            <div id="auditLogsContainer" class="p-4 rounded-2xl bg-slate-950 font-mono text-[11px] text-slate-300 space-y-1.5 h-64 overflow-y-auto border border-slate-900">
-              <p class="text-emerald-400">[OK] Servidor de aplicacao local ativo em porta segura.</p>
-              <p class="text-cyan-400">[INFO] Named Pipe \\.\pipe\FaceKidsAuthPipe inicializado com DACL restrita.</p>
-              <p class="text-slate-400">[INFO] Monitor de presenca e cotas ativo.</p>
-            </div>
-          </div>
-        </div>
-
-
-        <!-- ABA 6: MANUTENCAO & DESINSTALACAO -->
-        <div id="tabMaintenance" class="tab-content hidden space-y-6">
-          <div>
-            <h1 class="text-xl font-black text-white">Manutenção & Desinstalação</h1>
-            <p class="text-xs text-slate-400">Reexecute configurações ou remova com segurança o FaceKids do Windows.</p>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-              <h3 class="text-sm font-bold text-white">Reiniciar Assistente de Configuração</h3>
-              <p class="text-xs text-slate-400">Permite refazer os passos do assistente de instalação sem apagar dados anteriores.</p>
-              <button onclick="showWizard(); goToStep1();" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-white border border-slate-700 font-semibold transition-all">
-                Abrir Assistente de Instalação ⚡
-              </button>
-            </div>
-
-            <!-- Desinstalador Seguro -->
-            <div class="glass-panel p-5 rounded-3xl border border-red-500/30 bg-red-950/10 space-y-4">
-              <h3 class="text-sm font-bold text-red-400">Desinstalar o FaceKids do Computador ⚠️</h3>
-              <p class="text-xs text-slate-300">
-                Remove o Credential Provider do Registro do Windows, cancela as tarefas agendadas e apaga os atalhos.
-              </p>
-              
-              <div class="space-y-2 text-xs text-slate-300">
-                <label class="flex items-center space-x-2 cursor-pointer">
-                  <input id="uninstRemoveData" type="checkbox" class="rounded bg-slate-900 border-slate-700 text-red-500 focus:ring-0">
-                  <span>Apagar também banco SQLite, fotos e configurações</span>
-                </label>
-                <label class="flex items-center space-x-2 cursor-pointer">
-                  <input id="uninstRemoveUser" type="checkbox" class="rounded bg-slate-900 border-slate-700 text-red-500 focus:ring-0">
-                  <span>Remover também a conta Windows 'Filhos'</span>
-                </label>
-              </div>
-
-              <div class="pt-2">
-                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Confirme com seu PIN Mestre dos Pais:</label>
-                <input id="uninstPinConfirm" type="password" maxlength="6" placeholder="Digite seu PIN..." class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs mb-3 font-mono">
-                <button onclick="executeUninstall()" class="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-500/20 active:scale-95 transition-all">
-                  Executar Desinstalação Segura
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-  </main>
-
-
-  <!-- ======================================================== -->
-  <!-- MODAL: GALERIA DE 12 FOTOS E ESCOLHA DE AVATAR ATIVO     -->
-  <!-- ======================================================== -->
-  <div id="photoGalleryModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="w-full max-w-2xl glass-panel rounded-3xl p-6 border border-slate-700 space-y-5 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div>
-          <h3 class="text-base font-bold text-white">Galeria de Amostras Faciais (12 Fotos)</h3>
-          <p id="galleryChildSubtitle" class="text-xs text-slate-400">Escolha a foto que ficará como avatar oficial do perfil.</p>
-        </div>
-        <button onclick="closePhotoGalleryModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
-      </div>
-
-      <!-- Grade de 12 Fotos -->
-      <div id="galleryGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
-        <!-- Injetado dinamicamente via JavaScript -->
-      </div>
-
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
-        <span class="text-[11px] text-slate-400">Clique em qualquer foto para defini-la como avatar ou tire novas fotos.</span>
-        <div class="flex items-center space-x-2">
-          <button type="button" onclick="startModalRecapture()" class="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md active:scale-95 transition-all">
-            <span>📷</span>
-            <span>Tirar Novas 12 Fotos</span>
-          </button>
-          <button type="button" onclick="closePhotoGalleryModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-all">Fechar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ======================================================== -->
-  <!-- MODAL: CADASTRAR / EDITAR FILHO COM CAMERA REAL          -->
-  <!-- ======================================================== -->
-  <div id="childModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="w-full max-w-lg glass-panel rounded-3xl p-6 border border-slate-700 space-y-5 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 id="childModalTitle" class="text-base font-bold text-white">Cadastrar Novo Filho(a)</h3>
-        <button onclick="closeChildModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
-      </div>
-
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Nome do Filho(a)</label>
-          <input id="modalChildName" type="text" placeholder="Ex: Lucas, Sofia, Gabriel..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Limite Diário de Uso</label>
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <button type="button" onclick="selectModalQuota(1)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">1 hora</button>
-            <button type="button" onclick="selectModalQuota(2)" class="modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold">2 horas</button>
-            <button type="button" onclick="selectModalQuota(3)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">3 horas</button>
-            <button type="button" onclick="selectModalQuota(4)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">4 horas</button>
-          </div>
-        </div>
-
-        <!-- Câmera e Captura de Fotos Real -->
-        <div class="space-y-2 pt-2 border-t border-slate-800">
-          <label class="block text-xs font-semibold text-slate-300">Biometria Facial (12 Amostras Limpas)</label>
-          <div class="w-full h-44 rounded-2xl bg-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center">
-            <img id="modalCamPreview" src="/api/camera/stream" class="w-full h-full object-cover">
-            <div id="modalEnrollProgressBadge" class="hidden absolute bottom-2 left-2 bg-slate-900/90 text-cyan-400 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-cyan-500/30">
-              Capturando...
-            </div>
-          </div>
-
-          <div class="flex items-center space-x-2">
-            <button id="modalStartEnrollBtn" onclick="startModalEnrollment()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/30 text-xs font-semibold text-cyan-300 transition-all active:scale-95 flex items-center justify-center space-x-1.5">
-              <span>📸</span>
-              <span id="modalEnrollBtnText">Capturar Fotos com Webcam (12 Fotos)</span>
-            </button>
-          </div>
-          <span id="modalEnrollStatus" class="block text-[11px] text-slate-400 text-center">Posicione o rosto da criança em frente à câmera.</span>
-        </div>
-      </div>
-
-      <div class="flex items-center space-x-3 pt-3 border-t border-slate-800">
-        <button onclick="closeChildModal()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all">Cancelar</button>
-        <button onclick="saveChildModal()" class="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-slate-950 shadow-md shadow-cyan-500/20 transition-all">Salvar Perfil</button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ======================================================== -->
-  <!-- MODAL: LOCK SCREEN (PIN DOS PAIS)                        -->
-  <!-- ======================================================== -->
-  <div id="lockScreenModal" class="hidden fixed inset-0 z-50 bg-[#060a14]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4">
-    <div class="w-full max-w-sm glass-panel rounded-3xl p-8 border border-slate-800 text-center space-y-6 shadow-2xl">
-      <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
-        🔒
-      </div>
-      <div>
-        <h2 class="text-xl font-black text-white">Painel Bloqueado</h2>
-        <p class="text-xs text-slate-400 mt-1">Digite seu PIN de Administrador para acessar</p>
-      </div>
-
-      <div class="flex flex-col items-center space-y-4">
-        <div id="lockPinDots" class="flex items-center space-x-3">
-          <div id="lockDot0" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-          <div id="lockDot1" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-          <div id="lockDot2" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-          <div id="lockDot3" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-          <div id="lockDot4" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-          <div id="lockDot5" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2.5 w-full max-w-[210px]">
-          <button onclick="pressLockKey('1')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">1</button>
-          <button onclick="pressLockKey('2')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">2</button>
-          <button onclick="pressLockKey('3')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">3</button>
-          <button onclick="pressLockKey('4')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">4</button>
-          <button onclick="pressLockKey('5')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">5</button>
-          <button onclick="pressLockKey('6')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">6</button>
-          <button onclick="pressLockKey('7')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">7</button>
-          <button onclick="pressLockKey('8')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">8</button>
-          <button onclick="pressLockKey('9')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">9</button>
-          <button onclick="clearLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
-          <button onclick="pressLockKey('0')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">0</button>
-          <button onclick="backspaceLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
-    <div class="px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-cyan-500/40 text-xs text-white font-medium shadow-2xl flex items-center space-x-2">
-      <span class="text-cyan-400">🔔</span>
-      <span id="toastMessage">Notificação</span>
-    </div>
-  </div>
-
-  <!-- INLINE LOGIC CORE -->
-  <script src="/ui/api_bridge.js"></script>
-  <script>
-    let enteredWizardPin = "";
-    let enteredLockPin = "";
-    let selectedQuotaHours = 2.0;
-    let editingChildId = null;
-    let activeGalleryChildId = null;
-    window.avatarTimestamps = {};
-
-    // Relogio ao vivo
-    setInterval(() => {
-      const now = new Date();
-      const el = document.getElementById("liveClock");
-      if (el) el.innerText = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    }, 1000);
-
-    function togglePasswordVisibility(inputId, btn) {
-      const input = document.getElementById(inputId);
-      if (!input) return;
-      if (input.type === "password") {
-        input.type = "text";
-        if (btn) btn.innerText = "🔒";
-      } else {
-        input.type = "password";
-        if (btn) btn.innerText = "👁️";
-      }
-    }
-
-    // Navegacao do Wizard
-    window.goToStep1 = function() {
-      const s1 = document.getElementById("wizardStep1");
-      const s2 = document.getElementById("wizardStep2");
-      const s3 = document.getElementById("wizardStep3");
-      if (s1) s1.style.display = "flex";
-      if (s2) s2.style.display = "none";
-      if (s3) s3.style.display = "none";
-      const stepEl = document.getElementById("currentStepNumber");
-      if (stepEl) stepEl.innerText = "1";
-    };
-
-    window.goToStep2 = function() {
-      const s1 = document.getElementById("wizardStep1");
-      const s2 = document.getElementById("wizardStep2");
-      const s3 = document.getElementById("wizardStep3");
-      if (s1) s1.style.display = "none";
-      if (s2) s2.style.display = "flex";
-      if (s3) s3.style.display = "none";
-      const stepEl = document.getElementById("currentStepNumber");
-      if (stepEl) stepEl.innerText = "2";
-      const dotEl = document.getElementById("dotStep2");
-      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
-      if (typeof runLiveDiagnostics === "function") {
-        runLiveDiagnostics();
-      }
-    };
-
-    window.goToStep3 = function() {
-      const s1 = document.getElementById("wizardStep1");
-      const s2 = document.getElementById("wizardStep2");
-      const s3 = document.getElementById("wizardStep3");
-      if (s1) s1.style.display = "none";
-      if (s2) s2.style.display = "none";
-      if (s3) s3.style.display = "flex";
-      const stepEl = document.getElementById("currentStepNumber");
-      if (stepEl) stepEl.innerText = "3";
-      const dotEl = document.getElementById("dotStep3");
-      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
-    };
-
-    function pressPinKey(digit) {
-      if (enteredWizardPin.length < 6) {
-        enteredWizardPin += digit;
-        updatePinDots();
-      }
-    }
-
-    function clearPinKey() {
-      enteredWizardPin = "";
-      updatePinDots();
-    }
-
-    function backspacePinKey() {
-      enteredWizardPin = enteredWizardPin.slice(0, -1);
-      updatePinDots();
-    }
-
-    function updatePinDots() {
-      for (let i = 0; i < 6; i++) {
-        const dot = document.getElementById("pinDot" + i);
-        if (dot) {
-          dot.className = (i < enteredWizardPin.length)
-            ? "w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
-            : "w-4 h-4 rounded-full border-2 border-slate-600 transition-all";
-        }
-      }
-      const finishBtn = document.getElementById("finishInstallBtn");
-      if (finishBtn) finishBtn.disabled = enteredWizardPin.length < 4;
-    }
-
-    async function finishInstallation(event) {
-      if (event && typeof event.preventDefault === "function") {
-        event.preventDefault();
-      }
-      const finishBtn = document.getElementById("finishInstallBtn");
-      if (finishBtn) {
-        if (finishBtn.dataset.busy === "true") return;
-        finishBtn.dataset.busy = "true";
-        finishBtn.disabled = true;
-        finishBtn.innerText = "Configurando sistema com DPAPI...";
-      }
-      showToast("Configurando conta Windows e serviços...");
-
-      const passInput = document.getElementById("wizardFilhosPass");
-      const userInput = document.getElementById("wizardFilhosUser");
-      const filhosPass = passInput ? passInput.value.trim() : "1";
-      const filhosUser = userInput ? userInput.value.trim() : "Filhos";
-
-      let res;
-      try {
-        if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
-          res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0, filhosPass, filhosUser);
-        } else {
-          const resp = await fetch("/api/install", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pin: enteredWizardPin,
-              child_name: null,
-              daily_limit_hours: 2.0,
-              filhos_password: filhosPass,
-              filhos_username: filhosUser
-            })
-          });
-          res = await resp.json().catch(() => null);
-        }
-      } catch (err) {
-        res = { ok: false, error: err.message };
-      }
-
-      if (res && res.token) {
-        window.__FACEKIDS_TOKEN__ = res.token;
-        if (window.FaceKidsAPI) window.FaceKidsAPI.token = res.token;
-      }
-
-      if (res && res.ok) {
-        showToast("Instalação concluída com sucesso!");
-        setTimeout(() => {
-          showDashboard();
-          if (typeof syncDashboardData === "function") syncDashboardData();
-        }, 150);
-      } else {
-        showToast((res && res.error) ? res.error : "Erro na instalação.");
-        if (finishBtn) {
-          finishBtn.dataset.busy = "false";
-          finishBtn.disabled = false;
-          finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
-        }
-      }
-    }
-
-    function showWizard() {
-      const w = document.getElementById("wizardView");
-      const d = document.getElementById("dashboardView");
-      const l = document.getElementById("lockScreenBtn");
-      if (w) w.style.display = "flex";
-      if (d) d.style.display = "none";
-      if (l) l.style.display = "none";
-    }
-
-    function showDashboard() {
-      const w = document.getElementById("wizardView");
-      const d = document.getElementById("dashboardView");
-      const l = document.getElementById("lockScreenBtn");
-      if (w) w.style.display = "none";
-      if (d) d.style.display = "flex";
-      if (l) l.style.display = "flex";
-      syncServicesHealth();
-    }
-
-    function switchTab(tabId) {
-      document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
-      document.querySelectorAll(".nav-item").forEach(el => {
-        el.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all";
-      });
-
-      const tabMap = {
-        overview: ["tabOverview", "navTabOverview"],
-        session: ["tabSession", "navTabSession"],
-        services: ["tabServices", "navTabServices"],
-        settings: ["tabSettings", "navTabSettings"],
-        logs: ["tabLogs", "navTabLogs"],
-        maintenance: ["tabMaintenance", "navTabMaintenance"]
-      };
-
-      const pair = tabMap[tabId] || tabMap.overview;
-      const tabEl = document.getElementById(pair[0]);
-      const navEl = document.getElementById(pair[1]);
-      if (tabEl) tabEl.classList.remove("hidden");
-      if (navEl) {
-        navEl.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
-      }
-
-      if (tabId === "services") {
-        syncServicesHealth();
-      }
-    }
-
-    async function editChildName(childId, currentName) {
-      const defaultVal = (!currentName || currentName === "None") ? "" : currentName;
-      const newName = prompt(`Informe o novo nome para o Perfil #${childId}:`, defaultVal);
-      if (!newName || !newName.trim()) return;
-      const res = await FaceKidsAPI.renameChild(childId, newName.trim());
-      if (res && res.ok) {
-        showToast(`Perfil #${childId} renomeado para '${newName.trim()}'.`);
-        syncDashboardData();
-      } else {
-        showToast((res && res.error) ? res.error : "Erro ao renomear perfil.");
-      }
-    }
-
-    // Renderizacao dos Cards com Galeria de 12 fotos, edicao de nome e cache-busting
-    function renderChildrenCards(children) {
-      const grid = document.getElementById("childrenCardsGrid");
-      const emptyState = document.getElementById("noChildrenState");
-      if (!grid) return;
-
-      if (!children || children.length === 0) {
-        if (emptyState) emptyState.classList.remove("hidden");
-        grid.innerHTML = "";
-        return;
-      }
-
-      if (emptyState) emptyState.classList.add("hidden");
-      let html = "";
-
-      children.forEach(c => {
-        const radius = 24;
-        const circ = 2 * Math.PI * radius;
-        const offset = circ - (c.percent_remaining / 100) * circ;
-        const displayName = (c.name && c.name !== "None") ? c.name : "Filho";
-        const ts = window.avatarTimestamps[c.id] || "";
-        const avatarUrl = ts ? `/api/child/${c.id}/avatar?t=${ts}` : `/api/child/${c.id}/avatar`;
-
-        html += `
-          <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 shadow-xl">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center space-x-3.5">
-                <div class="relative cursor-pointer group" onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" title="Clique para escolher foto de perfil ativa">
-                  <img src="${avatarUrl}" data-child-avatar="${c.id}" onerror="this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg group-hover:scale-105 transition-all">
-                  <span class="absolute bottom-0 right-0 bg-slate-900 text-[10px] p-0.5 rounded-full border border-cyan-500/40">🖼️</span>
-                </div>
-                <div>
-                  <h3 class="text-base font-bold text-white flex items-center space-x-1.5">
-                    <span>${displayName}</span>
-                    <button type="button" onclick="editChildName(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-all text-xs" title="Editar Nome">✏️</button>
-                    <span class="text-[10px] text-cyan-400 font-mono font-normal">#${c.id}</span>
-                  </h3>
-                  <span class="text-[10px] text-slate-400">Limite: ${Math.round(c.limit_seconds / 3600)}h/dia</span>
-                </div>
-              </div>
-
-              <!-- Indicador Circular -->
-              <div class="relative w-14 h-14 flex items-center justify-center">
-                <svg class="w-14 h-14 transform -rotate-90">
-                  <circle cx="28" cy="28" r="22" stroke="rgba(255,255,255,0.08)" stroke-width="4" fill="transparent"></circle>
-                  <circle cx="28" cy="28" r="22" stroke="#22d3ee" stroke-width="4" fill="transparent" stroke-dasharray="138" stroke-dashoffset="${138 - (c.percent_remaining/100)*138}" stroke-linecap="round" class="circle-progress"></circle>
-                </svg>
-                <span class="absolute text-[11px] font-black text-white">${c.percent_remaining}%</span>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 text-xs bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80">
-              <div>
-                <span class="text-[10px] text-slate-400">Usado Hoje:</span>
-                <p class="font-bold text-white">${c.used_formatted}</p>
-              </div>
-              <div>
-                <span class="text-[10px] text-slate-400">Tempo Restante:</span>
-                <p class="font-bold text-cyan-400">${c.remaining_formatted}</p>
-              </div>
-            </div>
-
-            <!-- Botoes de Controle de Tempo -->
-            <div class="flex items-center space-x-2 pt-1">
-              <button onclick="injectBonus(${c.id}, 15)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 15 minutos">+15m</button>
-              <button onclick="injectBonus(${c.id}, 30)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 30 minutos">+30m</button>
-              <button onclick="injectBonus(${c.id}, -15)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 border border-amber-500/30 transition-all active:scale-95" title="Subtrair 15 minutos">-15m</button>
-              <button onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
-              <button onclick="deleteChildProfile(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
-            </div>
-          </div>
-        `;
-      });
-
-      grid.innerHTML = html;
-    }
-
-    // Modal de Galeria de 12 Fotos com Recaptura Webcam
-    async function openPhotoGalleryModal(childId, childName) {
-      activeGalleryChildId = childId;
-      const modal = document.getElementById("photoGalleryModal");
-      const title = document.getElementById("galleryChildSubtitle");
-      const grid = document.getElementById("galleryGrid");
-      if (title) title.innerText = childName ? `Perfil de ${childName}: escolha a foto oficial do rosto.` : "Escolha a foto oficial do perfil.";
-      if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-6 text-center animate-pulse'>Carregando amostras faciais...</p>";
-      if (modal) modal.classList.remove("hidden");
-
-      const res = await FaceKidsAPI.getChildPhotos(childId);
-      const cacheBust = Date.now();
-      if (res && res.photos && res.photos.length > 0) {
-        let html = "";
-        res.photos.forEach(p => {
-          const isSelected = p.selected;
-          const photoUrl = `${p.url}?t=${cacheBust}`;
-          html += `
-            <div onclick="selectActivePhoto(${childId}, ${p.index})" class="group cursor-pointer rounded-2xl p-2 bg-slate-900/90 border ${isSelected ? 'border-cyan-400 ring-2 ring-cyan-400/50' : 'border-slate-800 hover:border-slate-600'} transition-all relative flex flex-col items-center">
-              <img src="${photoUrl}" class="w-full h-24 object-cover rounded-xl mb-1.5 shadow-md">
-              <span class="text-[10px] font-semibold ${isSelected ? 'text-cyan-400' : 'text-slate-400'}">${p.label}</span>
-              ${isSelected ? '<span class="absolute top-3 right-3 bg-cyan-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">ATIVA</span>' : ''}
-            </div>
-          `;
-        });
-        if (grid) grid.innerHTML = html;
-      } else {
-        if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Clique no botão abaixo para capturar as 12 fotos com a webcam!</p></div>";
-      }
-    }
-
-    function closePhotoGalleryModal() {
-      const modal = document.getElementById("photoGalleryModal");
-      if (modal) modal.classList.add("hidden");
-      activeGalleryChildId = null;
-    }
-
-    async function selectActivePhoto(childId, photoIndex) {
-      showToast("Definindo nova foto oficial...");
-      const res = await FaceKidsAPI.selectChildPhoto(childId, photoIndex);
-      if (res && res.ok) {
-        showToast("Foto oficial atualizada!");
-        const now = Date.now();
-        if (!window.avatarTimestamps) window.avatarTimestamps = {};
-        window.avatarTimestamps[childId] = now;
-        
-        // Atualiza imediatamente na tela os elementos de imagem
-        document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
-          el.src = `/api/child/${childId}/avatar?t=${now}`;
-        });
-        
-        await openPhotoGalleryModal(childId, "");
-        if (typeof syncDashboardData === "function") syncDashboardData();
-      } else {
-        showToast((res && res.error) ? res.error : "Falha ao selecionar foto.");
-      }
-    }
-
-    async function startModalRecapture() {
-      const childId = activeGalleryChildId;
-      if (!childId) return;
-      const grid = document.getElementById("galleryGrid");
-      const subtitle = document.getElementById("galleryChildSubtitle");
-      if (subtitle) subtitle.innerText = "Capturando 12 novas fotos na webcam...";
-      if (grid) grid.innerHTML = "<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>Webcam ativada: Olhe para a câmera</p><p class='text-xs text-slate-400'>Mova levemente o rosto para registrar variações de ângulo...</p></div>";
-
-      const startRes = await FaceKidsAPI.startEnrollment(childId);
-      let t = setInterval(async () => {
-        const s = await FaceKidsAPI.getEnrollmentStatus();
-        if (!s) return;
-        if (s.active && grid) {
-          grid.innerHTML = `<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>${s.message || 'Capturando...'}</p><p class='text-xs text-cyan-400 font-mono font-bold'>${s.samples_count || 0} de 12 fotos capturadas</p></div>`;
-        }
-        if (s.completed) {
-          clearInterval(t);
-          showToast("12 novas amostras biométricas capturadas com sucesso!");
-          const now = Date.now();
-          if (!window.avatarTimestamps) window.avatarTimestamps = {};
-          window.avatarTimestamps[childId] = now;
-          document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
-            el.src = `/api/child/${childId}/avatar?t=${now}`;
-          });
-          await openPhotoGalleryModal(childId, "");
-          if (typeof syncDashboardData === "function") syncDashboardData();
-        }
-      }, 400);
-    }
-
-    async function deleteChildProfile(childId, childName) {
-      if (!confirm(`Deseja realmente excluir o perfil de '${childName}'?`)) return;
-      const res = await FaceKidsAPI.deleteChild(childId);
-      if (res && res.ok) {
-        showToast("Perfil removido com sucesso.");
-        syncDashboardData();
-      } else {
-        showToast(res.error || "Erro ao remover perfil.");
-      }
-    }
-
-    // Monitoramento Real dos Servicos
-    async function syncServicesHealth() {
-      const res = await FaceKidsAPI.getServiceStatus();
-      if (!res || !res.health) return;
-      const h = res.health;
-
-      // AuthService
-      const authRunning = h.auth_service && h.auth_service.running;
-      const pillAuth = document.getElementById("serviceAuthPill");
-      const badgeAuth = document.getElementById("badgeServiceAuth");
-      if (pillAuth) pillAuth.innerHTML = `<span class="w-2 h-2 rounded-full ${authRunning ? 'bg-emerald-400' : 'bg-red-500'}"></span><span class="${authRunning ? 'text-emerald-300' : 'text-red-300'}">AuthService</span>`;
-      if (badgeAuth) {
-        badgeAuth.innerText = authRunning ? "● Em Execução" : "● Parado";
-        badgeAuth.className = `text-[10px] px-2 py-0.5 rounded-full ${authRunning ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`;
-      }
-
-      // FilhosAgent
-      const agentReg = h.filhos_agent && h.filhos_agent.registered;
-      const pillAgent = document.getElementById("serviceAgentPill");
-      const badgeAgent = document.getElementById("badgeServiceAgent");
-      if (pillAgent) pillAgent.innerHTML = `<span class="w-2 h-2 rounded-full ${agentReg ? 'bg-emerald-400' : 'bg-amber-500'}"></span><span class="text-slate-300">FilhosAgent</span>`;
-      if (badgeAgent) {
-        badgeAgent.innerText = agentReg ? "● Registrado" : "● Não Registrado";
-        badgeAgent.className = `text-[10px] px-2 py-0.5 rounded-full ${agentReg ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`;
-      }
-
-      // DLL
-      const dllReg = h.credential_provider && h.credential_provider.registered;
-      const pillDll = document.getElementById("serviceDllPill");
-      const badgeDll = document.getElementById("badgeServiceDll");
-      if (pillDll) pillDll.innerHTML = `<span class="w-2 h-2 rounded-full ${dllReg ? 'bg-emerald-400' : 'bg-red-500'}"></span><span class="text-slate-300">CredentialProvider</span>`;
-      if (badgeDll) {
-        badgeDll.innerText = dllReg ? "● Registrado HKLM" : "● Ausente";
-        badgeDll.className = `text-[10px] px-2 py-0.5 rounded-full ${dllReg ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`;
-      }
-    }
-
-    async function restartServices() {
-      showToast("Reiniciando serviços do Windows...");
-      const res = await FaceKidsAPI.restartService();
-      if (res && res.ok) {
-        showToast("Serviço reiniciado com sucesso!");
-        setTimeout(syncServicesHealth, 1500);
-      } else {
-        showToast(res.error || "Aviso ao reiniciar serviço.");
-      }
-    }
-
-    async function updateWindowsAccount() {
-      const u = document.getElementById("inputWindowsUser").value.trim();
-      const p = document.getElementById("inputWindowsPass").value.trim();
-      if (!p) {
-        showToast("Digite a nova senha para a conta Windows.");
-        return;
-      }
-      showToast("Atualizando senha no Windows e no cofre DPAPI...");
-      const res = await FaceKidsAPI.updateWindowsAccount(u, p);
-      if (res && res.ok) {
-        showToast("Senha Windows & DPAPI sincronizadas com sucesso!");
-        document.getElementById("inputWindowsPass").value = "";
-      } else {
-        showToast((res && res.error) ? res.error : "Erro ao atualizar senha.");
-      }
-    }
-
-    async function updateMasterPin() {
-      const p1 = document.getElementById("inputNewPin").value.trim();
-      const p2 = document.getElementById("inputConfirmPin").value.trim();
-      if (p1.length < 4 || p1 !== p2) {
-        showToast("Os PINs precisam ser iguais e ter pelo menos 4 dígitos.");
-        return;
-      }
-      const resp = await fetch("/api/settings/pin", {
-        method: "POST",
-        headers: FaceKidsAPI.getHeaders(),
-        body: JSON.stringify({ pin: p1 })
-      });
-      const data = await resp.json().catch(() => null);
-      if (data && data.ok) {
-        showToast("PIN Mestre atualizado com sucesso!");
-        document.getElementById("inputNewPin").value = "";
-        document.getElementById("inputConfirmPin").value = "";
-      } else {
-        showToast((data && data.error) ? data.error : "Erro ao atualizar PIN.");
-      }
-    }
-
-    async function executeUninstall() {
-      const pin = document.getElementById("uninstPinConfirm").value.trim();
-      if (!pin) {
-        showToast("Digite seu PIN Mestre para confirmar.");
-        return;
-      }
-      const removeData = document.getElementById("uninstRemoveData").checked;
-      const removeUser = document.getElementById("uninstRemoveUser").checked;
-
-      if (!confirm("Tem certeza que deseja desinstalar o FaceKids? O Credential Provider será removido e os serviços serão encerrados.")) {
-        return;
-      }
-
-      showToast("Executando desinstalação segura...");
-      const res = await FaceKidsAPI.uninstall(pin, removeData, removeUser);
-      if (res && res.ok) {
-        alert("FaceKids desinstalado com sucesso! A janela será encerrada.");
-        try {
-          await fetch("/api/shutdown");
-        } catch(e) {}
-        window.close();
-      } else {
-        showToast(res.error || "Erro na desinstalação.");
-      }
-    }
-
-    function injectBonus(childId, minutes) {
-      FaceKidsAPI.addBonus(childId, minutes).then(res => {
-        if (res && res.ok) {
-          showToast(res.message || "Ajuste aplicado!");
-          syncDashboardData();
-        } else {
-          showToast("Erro ao ajustar tempo.");
-        }
-      });
-    }
-
-    function injectAllBonus(minutes) {
-      FaceKidsAPI.getDashboard().then(data => {
-        if (data && data.children) {
-          data.children.forEach(c => FaceKidsAPI.addBonus(c.id, minutes));
-          setTimeout(syncDashboardData, 400);
-          showToast(`Bônus de ${minutes}m aplicado a todos.`);
-        }
-      });
-    }
-
-    function showToast(msg) {
-      const t = document.getElementById("toastNotification");
-      const m = document.getElementById("toastMessage");
-      if (!t || !m) return;
-      m.innerText = msg;
-      t.classList.remove("translate-y-24", "opacity-0");
-      setTimeout(() => {
-        t.classList.add("translate-y-24", "opacity-0");
-      }, 3500);
-    }
-
-    // Modal de Cadastro de Filho
-    function openAddChildModal() {
-      const m = document.getElementById("childModal");
-      if (m) m.classList.remove("hidden");
-    }
-    function closeChildModal() {
-      const m = document.getElementById("childModal");
-      if (m) m.classList.add("hidden");
-    }
-    function selectModalQuota(h) {
-      selectedQuotaHours = h;
-      document.querySelectorAll(".modal-quota-btn").forEach(b => {
-        b.className = "modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400";
-      });
-      if (event && event.target) {
-        event.target.className = "modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold";
-      }
-    }
-    async function saveChildModal() {
-      const name = document.getElementById("modalChildName").value.trim();
-      if (!name) {
-        showToast("Informe o nome da criança.");
-        return;
-      }
-      const res = await FaceKidsAPI.addChild(name, selectedQuotaHours);
-      if (res && res.ok) {
-        showToast(`Perfil de '${name}' criado com sucesso!`);
-        closeChildModal();
-        document.getElementById("modalChildName").value = "";
-        syncDashboardData();
-      } else {
-        showToast("Erro ao criar perfil.");
-      }
-    }
-    async function startModalEnrollment() {
-      const btn = document.getElementById("modalEnrollBtnText");
-      const badge = document.getElementById("modalEnrollProgressBadge");
-      const status = document.getElementById("modalEnrollStatus");
-      if (btn) btn.innerText = "Capturando 12 Fotos...";
-      if (badge) badge.classList.remove("hidden");
-      if (status) status.innerText = "Olhe para a câmera e mova levemente a cabeça...";
-
-      const startRes = await FaceKidsAPI.startEnrollment(1);
-      let t = setInterval(async () => {
-        const s = await FaceKidsAPI.getEnrollmentStatus();
-        if (!s) return;
-        if (s.active && status) {
-          status.innerText = s.message || `Capturando ${s.samples_count}/12...`;
-        }
-        if (s.completed) {
-          clearInterval(t);
-          if (btn) btn.innerText = "✓ 12 Fotos Capturadas";
-          if (badge) badge.classList.add("hidden");
-          if (status) status.innerText = "Fotos gravadas com sucesso!";
-          showToast("12 amostras biométricas salvas com sucesso!");
-        }
-      }, 350);
-    }
-
-    // Lockscreen
-    function openLockScreen() {
-      const m = document.getElementById("lockScreenModal");
-      if (m) m.classList.remove("hidden");
-    }
-    function closeLockScreen() {
-      const m = document.getElementById("lockScreenModal");
-      if (m) m.classList.add("hidden");
-    }
-    function pressLockKey(d) {
-      if (enteredLockPin.length < 6) {
-        enteredLockPin += d;
-        updateLockDots();
-        if (enteredLockPin.length >= 4) {
-          window.validateLockPin();
-        }
-      }
-    }
-    function clearLockKey() {
-      enteredLockPin = "";
-      updateLockDots();
-    }
-    function backspaceLockKey() {
-      enteredLockPin = enteredLockPin.slice(0, -1);
-      updateLockDots();
-    }
-    function updateLockDots() {
-      for (let i = 0; i < 6; i++) {
-        const dot = document.getElementById("lockDot" + i);
-        if (dot) {
-          dot.className = (i < enteredLockPin.length)
-            ? "w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
-            : "w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all";
-        }
-      }
-    }
-  </script>
-</body>
-</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceKids - Controle Parental Inteligente</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <!-- Tailwind CSS Play CDN para renderizacao de alta fidelidade sem build step complexo -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #060a14;
+      --card-bg: rgba(14, 23, 42, 0.75);
+      --border: rgba(56, 189, 248, 0.15);
+      --cyan-glow: rgba(34, 211, 238, 0.25);
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-dark);
+      color: #f8fafc;
+      overflow-x: hidden;
+      user-select: none;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px -5px var(--cyan-glow);
+    }
+    .circle-progress {
+      transition: stroke-dashoffset 0.8s ease-in-out;
+    }
+    /* Animacao suave de shake para erro de PIN */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .shake-anim {
+      animation: shake 0.4s ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-[#060a14] min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+  <!-- ======================================================== -->
+  <!-- HEADER GLOBAL UNIFICADO (Status, Relógio e Indicadores)  -->
+  <!-- ======================================================== -->
+  <header class="w-full border-b border-[var(--border)] bg-[#080e1e]/80 backdrop-blur-xl sticky top-0 z-40 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+        <span class="text-lg">🛡️</span>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="font-extrabold text-sm tracking-tight text-white">FaceKids</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-semibold">v2.0 PRO</span>
+        </div>
+        <p class="text-[10px] text-slate-400">Controle Facial & Limite Diário de Tela</p>
+      </div>
+    </div>
+
+    <!-- Indicadores de Servicos em Tempo Real -->
+    <div class="hidden md:flex items-center space-x-2 text-[11px] font-mono">
+      <div id="serviceAuthPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <span class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
+        <span class="text-slate-300">AuthService</span>
+      </div>
+      <div id="serviceAgentPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span class="text-slate-300">FilhosAgent</span>
+      </div>
+      <div id="serviceDllPill" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
+        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span class="text-slate-300">CredentialProvider</span>
+      </div>
+      <button onclick="restartServices()" title="Reiniciar Servicos" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 border border-slate-700 transition-all">
+        🔄
+      </button>
+    </div>
+
+    <!-- Controles da Direita -->
+    <div class="flex items-center space-x-3">
+      <div class="text-right">
+        <span id="liveClock" class="font-mono text-xs font-semibold text-slate-200">--:--</span>
+        <span class="hidden sm:block text-[10px] text-emerald-400">Conexão 100% Local</span>
+      </div>
+      <button onclick="openLockScreen()" id="lockScreenBtn" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60" title="Bloquear Painel dos Pais">
+        🔒
+      </button>
+    </div>
+  </header>
+
+  <!-- ======================================================== -->
+  <!-- CONTAINER PRINCIPAL                                      -->
+  <!-- ======================================================== -->
+  <main class="flex-1 flex flex-col relative overflow-hidden">
+
+    <!-- ======================================================== -->
+    <!-- VIEW 1: ASSISTENTE DE INSTALAÇÃO (1-CLICK SETUP WIZARD)  -->
+    <!-- ======================================================== -->
+    <section id="wizardView" class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500">
+      <div class="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 space-y-6 text-center glow-cyan border border-slate-700/60">
+        
+        <!-- Banner se ja instalado -->
+        <div id="wizardAlreadyInstalledBanner" class="p-3 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-xs text-cyan-200 flex items-center justify-between shadow-lg">
+          <div class="flex items-center space-x-2 text-left">
+            <span>🛡️</span>
+            <span>FaceKids já configurado neste computador.</span>
+          </div>
+          <button type="button" onclick="showDashboard()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all shadow-md">
+            Abrir Painel dos Pais ➔
+          </button>
+        </div>
+
+        <!-- Indicador de Passos -->
+        <div class="flex items-center justify-center space-x-3 text-xs font-medium text-slate-400">
+          <span id="dotStep1" class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+          <span class="h-0.5 w-8 bg-slate-800"></span>
+          <span id="dotStep2" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+          <span class="h-0.5 w-8 bg-slate-800"></span>
+          <span id="dotStep3" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+          <span class="ml-2 text-cyan-300 font-mono text-[11px]">Passo <span id="currentStepNumber">1</span> de 3</span>
+        </div>
+
+        <!-- PASSO 1: BOAS-VINDAS -->
+        <div id="wizardStep1" class="wizard-step flex flex-col space-y-5">
+          <div class="w-16 h-16 rounded-3xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
+            🛡️
+          </div>
+          <div class="space-y-2">
+            <h1 class="text-2xl font-black tracking-tight text-white sm:text-3xl">Proteja o Tempo dos Filhos no PC</h1>
+            <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+              O FaceKids bloqueia automaticamente o computador quando o limite diário expira ou quando a criança sai da frente da tela.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-left text-xs space-y-2.5 max-w-md mx-auto">
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-cyan-400">✓</span>
+              <span>Reconhecimento facial instantâneo e offline (YuNet + SFace)</span>
+            </div>
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-emerald-400">✓</span>
+              <span>100% Local e Privado: nenhuma foto sai do computador</span>
+            </div>
+            <div class="flex items-center space-x-2 text-slate-300">
+              <span class="text-emerald-400">✓</span>
+              <span>Desbloqueio seguro por DPAPI na conta Windows supervisionada</span>
+            </div>
+          </div>
+
+          <button id="btnStartWizard" type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
+            <span>Iniciar Instalação em 1 Clique</span>
+            <span>⚡</span>
+          </button>
+        </div>
+
+        <!-- PASSO 2: AUTO-DETECCAO -->
+        <div id="wizardStep2" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
+          <div class="text-left space-y-1">
+            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Verificação de Sistema</span>
+            <h2 class="text-xl font-bold text-white">Detectando Pré-requisitos</h2>
+            <p class="text-xs text-slate-400">O FaceKids está preparando os componentes do sistema automaticamente.</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">📷</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Câmera / Webcam</h4>
+                  <p class="text-[10px] text-slate-400">Reconhecimento facial biométrico</p>
+                </div>
+              </div>
+              <span id="diagCameraBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Detectada</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">👤</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Conta Windows 'Filhos'</h4>
+                  <p class="text-[10px] text-slate-400">Ambiente supervisionado com cota</p>
+                </div>
+              </div>
+              <span id="diagUserBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Configurada</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">🧠</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Motor de IA YuNet + SFace</h4>
+                  <p class="text-[10px] text-slate-400">Detecção e embeddings faciais offline</p>
+                </div>
+              </div>
+              <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Pronto</span>
+            </div>
+          </div>
+
+          <button type="button" onclick="goToStep3()" class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all cursor-pointer">
+            Continuar para Credenciais e PIN →
+          </button>
+        </div>
+
+        <!-- PASSO 3: CRIAR PIN DOS PAIS E SENHA DA CONTA FILHOS -->
+        <div id="wizardStep3" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
+          <div class="text-left space-y-1">
+            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
+            <h2 class="text-xl font-bold text-white">Defina o PIN e a Senha da Conta</h2>
+            <p class="text-xs text-slate-400">Crie o PIN de administrador e informe a senha da conta supervisionada.</p>
+          </div>
+
+          <!-- PIN Display -->
+          <div class="flex flex-col items-center space-y-3 py-1">
+            <span class="text-xs text-slate-300 font-semibold">PIN Mestre dos Pais (4 a 6 dígitos)</span>
+            <div id="pinDotsDisplay" class="flex items-center space-x-3 cursor-pointer" title="Digite pelo teclado numérico do seu computador ou clique abaixo">
+              <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot4" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot5" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+            </div>
+            <p class="text-[10px] text-slate-400 font-medium">💡 Digite pelo teclado numérico do seu PC ou use os botões abaixo</p>
+
+            <!-- Teclado Numérico -->
+            <div class="grid grid-cols-3 gap-2 w-full max-w-[220px]">
+              <button onclick="pressPinKey('1')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">1</button>
+              <button onclick="pressPinKey('2')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">2</button>
+              <button onclick="pressPinKey('3')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">3</button>
+              <button onclick="pressPinKey('4')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">4</button>
+              <button onclick="pressPinKey('5')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">5</button>
+              <button onclick="pressPinKey('6')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">6</button>
+              <button onclick="pressPinKey('7')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">7</button>
+              <button onclick="pressPinKey('8')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">8</button>
+              <button onclick="pressPinKey('9')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">9</button>
+              <button onclick="clearPinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
+              <button onclick="pressPinKey('0')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">0</button>
+              <button onclick="backspacePinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
+            </div>
+          </div>
+
+          <!-- Configuracao de Senha da Conta Windows Filhos (Cofre DPAPI) -->
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 text-left">
+            <div class="flex items-center space-x-2">
+              <span class="text-cyan-400">🛡️</span>
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider">Conta Windows das Crianças</h3>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Esta senha será configurada na conta Windows e criptografada via <strong>Windows DPAPI</strong> para permitir o desbloqueio facial automático sem que as crianças saibam a senha.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da Conta Local</label>
+                <input id="wizardFilhosUser" type="text" value="Filhos" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Senha da Conta Windows</label>
+                <div class="relative">
+                  <input id="wizardFilhosPass" type="password" value="1" placeholder="Digite uma senha..." class="w-full px-3 py-2 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
+                  <button type="button" onclick="togglePasswordVisibility('wizardFilhosPass', this)" class="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs">👁️</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+            Concluir Instalação e Abrir Painel 🚀
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ======================================================== -->
+    <!-- VIEW 2: PAINEL ADMINISTRATIVO (COMPLETO / PARIDADE MAIN)  -->
+    <!-- ======================================================== -->
+    <section id="dashboardView" class="hidden flex-1 flex flex-col lg:flex-row overflow-hidden">
+      
+      <!-- SIDEBAR COMPLETA COM ICONES DA MAIN -->
+      <aside class="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-[var(--border)] bg-[#0c1222]/80 p-4 space-y-4 flex flex-col justify-between shrink-0">
+        <div class="space-y-4">
+          <!-- Profile Badge -->
+          <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-lg shadow-md">
+              👨‍👩‍👧
+            </div>
+            <div>
+              <h3 class="text-xs font-bold text-white">Painel dos Pais</h3>
+              <span class="text-[10px] text-emerald-400 font-medium flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>Modo Supervisionado</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Navigation Links (6 Abas Completas) -->
+          <nav class="space-y-1">
+            <button onclick="switchTab('overview')" id="navTabOverview" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all">
+              <span>👥</span>
+              <span>Perfis das Crianças</span>
+            </button>
+            <button onclick="switchTab('session')" id="navTabSession" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>⏱️</span>
+              <span>Controle de Tempo & Sessão</span>
+            </button>
+            <button onclick="switchTab('services')" id="navTabServices" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>🛡️</span>
+              <span>Serviços & Desbloqueio</span>
+            </button>
+            <button onclick="switchTab('settings')" id="navTabSettings" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>🔑</span>
+              <span>Segurança & Conta Filhos</span>
+            </button>
+            <button onclick="switchTab('logs')" id="navTabLogs" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+              <span>📋</span>
+              <span>Logs & Auditoria</span>
+            </button>
+            <button onclick="switchTab('maintenance')" id="navTabMaintenance" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-400/80 hover:text-red-300 hover:bg-red-500/10 transition-all">
+              <span>🗑️</span>
+              <span>Manutenção & Desinstalação</span>
+            </button>
+          </nav>
+        </div>
+
+        <button onclick="openAddChildModal()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center space-x-1.5 cursor-pointer">
+          <span>➕</span>
+          <span>Cadastrar Novo Perfil</span>
+        </button>
+        <button type="button" onclick="showWizard()" class="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5 mt-2" title="Executar Assistente de Instalação">
+          <span>⚙️</span>
+          <span>Assistente de Instalação</span>
+        </button>
+      </aside>
+
+      <!-- CONTENT AREA -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+
+        <!-- ABA 1: PERFIS DAS CRIANCAS (CARDS COM AVATAR, BÔNUS E GALERIA) -->
+        <div id="tabOverview" class="tab-content space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 class="text-xl font-black text-white">Perfis das Crianças</h1>
+              <p class="text-xs text-slate-400">Gerencie cotas diárias, bônus e o avatar oficial de cada perfil.</p>
+            </div>
+            <div class="flex items-center space-x-2.5">
+              <button onclick="openAddChildModal()" class="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all flex items-center space-x-1.5 cursor-pointer" title="Cadastrar Novo Perfil de Criança">
+                <span>➕</span>
+                <span>Cadastrar Novo Perfil</span>
+              </button>
+              <button onclick="syncDashboardData()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all flex items-center space-x-1 cursor-pointer" title="Atualizar Lista e Saldo">
+                <span>🔄</span>
+                <span>Atualizar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Grid de Cards de Crianças -->
+          <div id="childrenCardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Injetado dinamicamente via JavaScript -->
+          </div>
+
+          <div id="noChildrenState" class="hidden glass-panel rounded-3xl p-8 text-center space-y-4 border border-dashed border-slate-700">
+            <span class="text-4xl block">👶</span>
+            <h3 class="text-base font-bold text-white">Nenhum perfil cadastrado</h3>
+            <p class="text-xs text-slate-400 max-w-sm mx-auto">Cadastre o perfil dos seus filhos para começar a supervisionar o tempo de uso.</p>
+            <button onclick="openAddChildModal()" class="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs">Cadastrar Agora</button>
+          </div>
+        </div>
+
+
+        <!-- ABA 2: CONTROLE DE TEMPO & SESSAO ATIVA -->
+        <div id="tabSession" class="tab-content hidden space-y-6">
+          <div>
+            <h1 class="text-xl font-black text-white">Controle de Sessão do Windows</h1>
+            <p class="text-xs text-slate-400">Status atual da sessão interativa dos filhos e monitor de presença.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
+              <span class="text-xs text-slate-400">Conta Supervisionada</span>
+              <p id="sessionAccountName" class="text-base font-bold text-white">Filhos</p>
+              <span class="text-[10px] text-emerald-400">● Conectada ao Windows</span>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
+              <span class="text-xs text-slate-400">Tempo Ativo Total Hoje</span>
+              <p id="statTotalUsed" class="text-base font-bold text-cyan-400">0h 0m</p>
+              <span class="text-[10px] text-slate-400">Soma de todos os perfis</span>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2">
+              <span class="text-xs text-slate-400">Perfis Ativos</span>
+              <p id="statActiveCount" class="text-base font-bold text-white">0</p>
+              <span class="text-[10px] text-slate-400">Configurados com cota</span>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-white">Ações Imediatas de Controle</h3>
+            <p class="text-xs text-slate-400">Conceda tempo adicional ou bloqueie preventivamente o computador.</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="injectAllBonus(15)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30">+15 min para todos</button>
+              <button onclick="injectAllBonus(30)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30">+30 min para todos</button>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ABA 3: SERVICOS & DESBLOQUEIO WINDOWS (STATUS REAL) -->
+        <div id="tabServices" class="tab-content hidden space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-xl font-black text-white">Serviços & Credential Provider</h1>
+              <p class="text-xs text-slate-400">Integridade dos daemons de segundo plano e driver de autenticação facial.</p>
+            </div>
+            <button onclick="restartServices()" class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center space-x-1">
+              <span>🔄</span>
+              <span>Reiniciar Serviços</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">FaceKidsAuthService</span>
+                <span id="badgeServiceAuth" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Serviço SYSTEM de escuta do Named Pipe para LogonUI.</p>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">FaceKidsFilhosAgent</span>
+                <span id="badgeServiceAgent" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Agente de sessão interativa com Watchdog de presença.</p>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">Credential Provider DLL</span>
+                <span id="badgeServiceDll" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
+              </div>
+              <p class="text-[11px] text-slate-400">FaceKidsCredentialProvider registrado no Registro HKLM.</p>
+            </div>
+          </div>
+
+          <!-- Teste ao Vivo da Câmera -->
+          <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <h3 class="text-sm font-bold text-white">Teste do Reconhecimento Facial em Tempo Real</h3>
+            <div class="w-full h-64 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
+              <img id="tabServicesStream" src="/api/camera/stream" class="w-full h-full object-cover">
+            </div>
+            <p class="text-[11px] text-slate-400">Transmissão contínua com detecção facial YuNet em tempo real.</p>
+          </div>
+        </div>
+
+
+        <!-- ABA 4: SEGURANCA & CONTA FILHOS (PIN DOS PAIS E SENHA DPAPI) -->
+        <div id="tabSettings" class="tab-content hidden space-y-6">
+          <div>
+            <h1 class="text-xl font-black text-white">Segurança & Credenciais</h1>
+            <p class="text-xs text-slate-400">Altere o PIN Mestre dos Pais ou a Senha da conta Windows Filhos.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Alterar PIN Mestre -->
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <h3 class="text-sm font-bold text-white">Alterar PIN Mestre dos Pais</h3>
+              <p class="text-xs text-slate-400">PIN de 4 a 6 dígitos numéricos usado para desbloquear este painel.</p>
+              <div class="space-y-3">
+                <input id="inputNewPin" type="password" maxlength="6" placeholder="Novo PIN (4-6 dígitos)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 font-mono">
+                <input id="inputConfirmPin" type="password" maxlength="6" placeholder="Confirmar Novo PIN" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400 font-mono">
+                <button onclick="updateMasterPin()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all">
+                  Atualizar PIN dos Pais
+                </button>
+              </div>
+            </div>
+
+            <!-- Alterar Senha Windows / DPAPI -->
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <h3 class="text-sm font-bold text-white">Senha da Conta Windows (Filhos)</h3>
+              <p class="text-xs text-slate-400">Redefina a senha no Windows e sincronize com o cofre seguro DPAPI.</p>
+              <div class="space-y-3">
+                <input id="inputWindowsUser" type="text" value="Filhos" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-cyan-400">
+                <div class="relative">
+                  <input id="inputWindowsPass" type="password" placeholder="Nova senha da conta Windows..." class="w-full px-3.5 py-2.5 pr-8 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
+                  <button type="button" onclick="togglePasswordVisibility('inputWindowsPass', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs">👁️</button>
+                </div>
+                <button onclick="updateWindowsAccount()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all">
+                  Salvar e Sincronizar Senha no Windows & DPAPI
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ABA 5: LOGS & AUDITORIA -->
+        <div id="tabLogs" class="tab-content hidden space-y-6">
+          <div>
+            <h1 class="text-xl font-black text-white">Histórico & Logs de Auditoria</h1>
+            <p class="text-xs text-slate-400">Eventos de desbloqueio facial, saldo de cotas e watchdog de presença.</p>
+          </div>
+
+          <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-white">Eventos Recentes do Sistema</h3>
+            <div id="auditLogsContainer" class="p-4 rounded-2xl bg-slate-950 font-mono text-[11px] text-slate-300 space-y-1.5 h-64 overflow-y-auto border border-slate-900">
+              <p class="text-emerald-400">[OK] Servidor de aplicacao local ativo em porta segura.</p>
+              <p class="text-cyan-400">[INFO] Named Pipe \\.\pipe\FaceKidsAuthPipe inicializado com DACL restrita.</p>
+              <p class="text-slate-400">[INFO] Monitor de presenca e cotas ativo.</p>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ABA 6: MANUTENCAO & DESINSTALACAO -->
+        <div id="tabMaintenance" class="tab-content hidden space-y-6">
+          <div>
+            <h1 class="text-xl font-black text-white">Manutenção & Desinstalação</h1>
+            <p class="text-xs text-slate-400">Reexecute configurações ou remova com segurança o FaceKids do Windows.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <h3 class="text-sm font-bold text-white">Reiniciar Assistente de Configuração</h3>
+              <p class="text-xs text-slate-400">Permite refazer os passos do assistente de instalação sem apagar dados anteriores.</p>
+              <button onclick="showWizard(); goToStep1();" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-white border border-slate-700 font-semibold transition-all">
+                Abrir Assistente de Instalação ⚡
+              </button>
+            </div>
+
+            <!-- Desinstalador Seguro -->
+            <div class="glass-panel p-5 rounded-3xl border border-red-500/30 bg-red-950/10 space-y-4">
+              <h3 class="text-sm font-bold text-red-400">Desinstalar o FaceKids do Computador ⚠️</h3>
+              <p class="text-xs text-slate-300">
+                Remove o Credential Provider do Registro do Windows, cancela as tarefas agendadas e apaga os atalhos.
+              </p>
+              
+              <div class="space-y-2 text-xs text-slate-300">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input id="uninstRemoveData" type="checkbox" class="rounded bg-slate-900 border-slate-700 text-red-500 focus:ring-0">
+                  <span>Apagar também banco SQLite, fotos e configurações</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input id="uninstRemoveUser" type="checkbox" class="rounded bg-slate-900 border-slate-700 text-red-500 focus:ring-0">
+                  <span>Remover também a conta Windows 'Filhos'</span>
+                </label>
+              </div>
+
+              <div class="pt-2">
+                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Confirme com seu PIN Mestre dos Pais:</label>
+                <input id="uninstPinConfirm" type="password" maxlength="6" placeholder="Digite seu PIN..." class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs mb-3 font-mono">
+                <button onclick="executeUninstall()" class="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-500/20 active:scale-95 transition-all">
+                  Executar Desinstalação Segura
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: GALERIA DE 12 FOTOS E ESCOLHA DE AVATAR ATIVO     -->
+  <!-- ======================================================== -->
+  <div id="photoGalleryModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl glass-panel rounded-3xl p-6 border border-slate-700 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">Galeria de Amostras Faciais (12 Fotos)</h3>
+          <p id="galleryChildSubtitle" class="text-xs text-slate-400">Escolha a foto que ficará como avatar oficial do perfil.</p>
+        </div>
+        <button onclick="closePhotoGalleryModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- Grade de 12 Fotos -->
+      <div id="galleryGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
+        <!-- Injetado dinamicamente via JavaScript -->
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
+        <span class="text-[11px] text-slate-400">Clique em qualquer foto para defini-la como avatar ou tire novas fotos.</span>
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="startModalRecapture()" class="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md active:scale-95 transition-all">
+            <span>📷</span>
+            <span>Tirar Novas 12 Fotos</span>
+          </button>
+          <button type="button" onclick="closePhotoGalleryModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-all">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: CADASTRAR / EDITAR FILHO COM CAMERA REAL          -->
+  <!-- ======================================================== -->
+  <div id="childModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="w-full max-w-lg glass-panel rounded-3xl p-6 border border-slate-700 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="childModalTitle" class="text-base font-bold text-white">Cadastrar Novo Filho(a)</h3>
+        <button onclick="closeChildModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nome do Filho(a)</label>
+          <input id="modalChildName" type="text" placeholder="Ex: Lucas, Sofia, Gabriel..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Limite Diário de Uso</label>
+          <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <button type="button" onclick="selectModalQuota(1)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">1 hora</button>
+            <button type="button" onclick="selectModalQuota(2)" class="modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold">2 horas</button>
+            <button type="button" onclick="selectModalQuota(3)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">3 horas</button>
+            <button type="button" onclick="selectModalQuota(4)" class="modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400">4 horas</button>
+          </div>
+        </div>
+
+        <!-- Câmera e Captura de Fotos Real -->
+        <div class="space-y-2 pt-2 border-t border-slate-800">
+          <label class="block text-xs font-semibold text-slate-300">Biometria Facial (12 Amostras Limpas)</label>
+          <div class="w-full h-44 rounded-2xl bg-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center">
+            <img id="modalCamPreview" src="/api/camera/stream" class="w-full h-full object-cover">
+            <div id="modalEnrollProgressBadge" class="hidden absolute bottom-2 left-2 bg-slate-900/90 text-cyan-400 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-cyan-500/30">
+              Capturando...
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button id="modalStartEnrollBtn" onclick="startModalEnrollment()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/30 text-xs font-semibold text-cyan-300 transition-all active:scale-95 flex items-center justify-center space-x-1.5">
+              <span>📸</span>
+              <span id="modalEnrollBtnText">Capturar Fotos com Webcam (12 Fotos)</span>
+            </button>
+          </div>
+          <span id="modalEnrollStatus" class="block text-[11px] text-slate-400 text-center">Posicione o rosto da criança em frente à câmera.</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3 pt-3 border-t border-slate-800">
+        <button onclick="closeChildModal()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all">Cancelar</button>
+        <button onclick="saveChildModal()" class="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-slate-950 shadow-md shadow-cyan-500/20 transition-all">Salvar Perfil</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: LOCK SCREEN (PIN DOS PAIS)                        -->
+  <!-- ======================================================== -->
+  <div id="lockScreenModal" class="hidden fixed inset-0 z-50 bg-[#060a14]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-sm glass-panel rounded-3xl p-8 border border-slate-800 text-center space-y-6 shadow-2xl">
+      <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
+        🔒
+      </div>
+      <div>
+        <h2 class="text-xl font-black text-white">Painel Bloqueado</h2>
+        <p class="text-xs text-slate-400 mt-1">Digite seu PIN de Administrador para acessar</p>
+      </div>
+
+      <div class="flex flex-col items-center space-y-4">
+        <div id="lockPinDots" class="flex items-center space-x-3 cursor-pointer" title="Digite pelo teclado numérico do seu computador ou use os botões">
+          <div id="lockDot0" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot1" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot2" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot3" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot4" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot5" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+        </div>
+        <p class="text-[10px] text-slate-400 font-medium">💡 Digite pelo teclado numérico do seu PC ou use os botões</p>
+
+        <div class="grid grid-cols-3 gap-2.5 w-full max-w-[210px]">
+          <button onclick="pressLockKey('1')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">1</button>
+          <button onclick="pressLockKey('2')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">2</button>
+          <button onclick="pressLockKey('3')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">3</button>
+          <button onclick="pressLockKey('4')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">4</button>
+          <button onclick="pressLockKey('5')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">5</button>
+          <button onclick="pressLockKey('6')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">6</button>
+          <button onclick="pressLockKey('7')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">7</button>
+          <button onclick="pressLockKey('8')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">8</button>
+          <button onclick="pressLockKey('9')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">9</button>
+          <button onclick="clearLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
+          <button onclick="pressLockKey('0')" class="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white active:scale-95">0</button>
+          <button onclick="backspaceLockKey()" class="h-11 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-cyan-500/40 text-xs text-white font-medium shadow-2xl flex items-center space-x-2">
+      <span class="text-cyan-400">🔔</span>
+      <span id="toastMessage">Notificação</span>
+    </div>
+  </div>
+
+  <!-- INLINE LOGIC CORE -->
+  <script src="/ui/api_bridge.js"></script>
+  <script>
+    let enteredWizardPin = "";
+    let enteredLockPin = "";
+    let selectedQuotaHours = 2.0;
+    let editingChildId = null;
+    let activeGalleryChildId = null;
+    window.avatarTimestamps = {};
+
+    // Relogio ao vivo
+    setInterval(() => {
+      const now = new Date();
+      const el = document.getElementById("liveClock");
+      if (el) el.innerText = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }, 1000);
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === "password") {
+        input.type = "text";
+        if (btn) btn.innerText = "🔒";
+      } else {
+        input.type = "password";
+        if (btn) btn.innerText = "👁️";
+      }
+    }
+
+    // Navegacao do Wizard
+    window.goToStep1 = function() {
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "flex";
+      if (s2) s2.style.display = "none";
+      if (s3) s3.style.display = "none";
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "1";
+    };
+
+    window.goToStep2 = function() {
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "none";
+      if (s2) s2.style.display = "flex";
+      if (s3) s3.style.display = "none";
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "2";
+      const dotEl = document.getElementById("dotStep2");
+      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
+      if (typeof runLiveDiagnostics === "function") {
+        runLiveDiagnostics();
+      }
+    };
+
+    window.goToStep3 = function() {
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "none";
+      if (s2) s2.style.display = "none";
+      if (s3) s3.style.display = "flex";
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "3";
+      const dotEl = document.getElementById("dotStep3");
+      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
+    };
+
+    function pressPinKey(digit) {
+      if (enteredWizardPin.length < 6) {
+        enteredWizardPin += digit;
+        updatePinDots();
+      }
+    }
+
+    function clearPinKey() {
+      enteredWizardPin = "";
+      updatePinDots();
+    }
+
+    function backspacePinKey() {
+      enteredWizardPin = enteredWizardPin.slice(0, -1);
+      updatePinDots();
+    }
+
+    function updatePinDots() {
+      for (let i = 0; i < 6; i++) {
+        const dot = document.getElementById("pinDot" + i);
+        if (dot) {
+          dot.className = (i < enteredWizardPin.length)
+            ? "w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
+            : "w-4 h-4 rounded-full border-2 border-slate-600 transition-all";
+        }
+      }
+      const finishBtn = document.getElementById("finishInstallBtn");
+      if (finishBtn) finishBtn.disabled = enteredWizardPin.length < 4;
+    }
+
+    async function finishInstallation(event) {
+      if (event && typeof event.preventDefault === "function") {
+        event.preventDefault();
+      }
+      const finishBtn = document.getElementById("finishInstallBtn");
+      if (finishBtn) {
+        if (finishBtn.dataset.busy === "true") return;
+        finishBtn.dataset.busy = "true";
+        finishBtn.disabled = true;
+        finishBtn.innerText = "Configurando sistema com DPAPI...";
+      }
+      showToast("Configurando conta Windows e serviços...");
+
+      const passInput = document.getElementById("wizardFilhosPass");
+      const userInput = document.getElementById("wizardFilhosUser");
+      const filhosPass = passInput ? passInput.value.trim() : "1";
+      const filhosUser = userInput ? userInput.value.trim() : "Filhos";
+
+      let res;
+      try {
+        if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
+          res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0, filhosPass, filhosUser);
+        } else {
+          const resp = await fetch("/api/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pin: enteredWizardPin,
+              child_name: null,
+              daily_limit_hours: 2.0,
+              filhos_password: filhosPass,
+              filhos_username: filhosUser
+            })
+          });
+          res = await resp.json().catch(() => null);
+        }
+      } catch (err) {
+        res = { ok: false, error: err.message };
+      }
+
+      if (res && res.token) {
+        window.__FACEKIDS_TOKEN__ = res.token;
+        if (window.FaceKidsAPI) window.FaceKidsAPI.token = res.token;
+      }
+
+      if (res && res.ok) {
+        showToast("Instalação concluída com sucesso!");
+        setTimeout(() => {
+          showDashboard();
+          if (typeof syncDashboardData === "function") syncDashboardData();
+        }, 150);
+      } else {
+        showToast((res && res.error) ? res.error : "Erro na instalação.");
+        if (finishBtn) {
+          finishBtn.dataset.busy = "false";
+          finishBtn.disabled = false;
+          finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
+        }
+      }
+    }
+
+    function showWizard() {
+      const w = document.getElementById("wizardView");
+      const d = document.getElementById("dashboardView");
+      const l = document.getElementById("lockScreenBtn");
+      if (w) w.style.display = "flex";
+      if (d) d.style.display = "none";
+      if (l) l.style.display = "none";
+    }
+
+    function showDashboard() {
+      const w = document.getElementById("wizardView");
+      const d = document.getElementById("dashboardView");
+      const l = document.getElementById("lockScreenBtn");
+      if (w) w.style.display = "none";
+      if (d) d.style.display = "flex";
+      if (l) l.style.display = "flex";
+      syncServicesHealth();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
+      document.querySelectorAll(".nav-item").forEach(el => {
+        el.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all";
+      });
+
+      const tabMap = {
+        overview: ["tabOverview", "navTabOverview"],
+        session: ["tabSession", "navTabSession"],
+        services: ["tabServices", "navTabServices"],
+        settings: ["tabSettings", "navTabSettings"],
+        logs: ["tabLogs", "navTabLogs"],
+        maintenance: ["tabMaintenance", "navTabMaintenance"]
+      };
+
+      const pair = tabMap[tabId] || tabMap.overview;
+      const tabEl = document.getElementById(pair[0]);
+      const navEl = document.getElementById(pair[1]);
+      if (tabEl) tabEl.classList.remove("hidden");
+      if (navEl) {
+        navEl.className = "nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all";
+      }
+
+      if (tabId === "services") {
+        syncServicesHealth();
+      }
+    }
+
+    async function editChildName(childId, currentName) {
+      const defaultVal = (!currentName || currentName === "None") ? "" : currentName;
+      const newName = prompt(`Informe o novo nome para o Perfil #${childId}:`, defaultVal);
+      if (!newName || !newName.trim()) return;
+      const res = await FaceKidsAPI.renameChild(childId, newName.trim());
+      if (res && res.ok) {
+        showToast(`Perfil #${childId} renomeado para '${newName.trim()}'.`);
+        syncDashboardData();
+      } else {
+        showToast((res && res.error) ? res.error : "Erro ao renomear perfil.");
+      }
+    }
+
+    // Renderizacao dos Cards com Galeria de 12 fotos, edicao de nome e cache-busting
+    function renderChildrenCards(children) {
+      const grid = document.getElementById("childrenCardsGrid");
+      const emptyState = document.getElementById("noChildrenState");
+      if (!grid) return;
+
+      if (!children || children.length === 0) {
+        if (emptyState) emptyState.classList.remove("hidden");
+        grid.innerHTML = "";
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add("hidden");
+      let html = "";
+
+      children.forEach(c => {
+        const radius = 24;
+        const circ = 2 * Math.PI * radius;
+        const offset = circ - (c.percent_remaining / 100) * circ;
+        const displayName = (c.name && c.name !== "None") ? c.name : "Filho";
+        const ts = window.avatarTimestamps[c.id] || "";
+        const avatarUrl = ts ? `/api/child/${c.id}/avatar?t=${ts}` : `/api/child/${c.id}/avatar`;
+
+        html += `
+          <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 shadow-xl">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3.5">
+                <div class="relative cursor-pointer group" onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" title="Clique para escolher foto de perfil ativa">
+                  <img src="${avatarUrl}" data-child-avatar="${c.id}" onerror="this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg group-hover:scale-105 transition-all">
+                  <span class="absolute bottom-0 right-0 bg-slate-900 text-[10px] p-0.5 rounded-full border border-cyan-500/40">🖼️</span>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-white flex items-center space-x-1.5">
+                    <span>${displayName}</span>
+                    <button type="button" onclick="editChildName(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-all text-xs" title="Editar Nome">✏️</button>
+                    <span class="text-[10px] text-cyan-400 font-mono font-normal">#${c.id}</span>
+                  </h3>
+                  <span class="text-[10px] text-slate-400">Limite: ${Math.round(c.limit_seconds / 3600)}h/dia</span>
+                </div>
+              </div>
+
+              <!-- Indicador Circular -->
+              <div class="relative w-14 h-14 flex items-center justify-center">
+                <svg class="w-14 h-14 transform -rotate-90">
+                  <circle cx="28" cy="28" r="22" stroke="rgba(255,255,255,0.08)" stroke-width="4" fill="transparent"></circle>
+                  <circle cx="28" cy="28" r="22" stroke="#22d3ee" stroke-width="4" fill="transparent" stroke-dasharray="138" stroke-dashoffset="${138 - (c.percent_remaining/100)*138}" stroke-linecap="round" class="circle-progress"></circle>
+                </svg>
+                <span class="absolute text-[11px] font-black text-white">${c.percent_remaining}%</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80">
+              <div>
+                <span class="text-[10px] text-slate-400">Usado Hoje:</span>
+                <p class="font-bold text-white">${c.used_formatted}</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400">Tempo Restante:</span>
+                <p class="font-bold text-cyan-400">${c.remaining_formatted}</p>
+              </div>
+            </div>
+
+            <!-- Botoes de Controle de Tempo -->
+            <div class="flex items-center space-x-2 pt-1">
+              <button onclick="injectBonus(${c.id}, 15)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 15 minutos">+15m</button>
+              <button onclick="injectBonus(${c.id}, 30)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 30 minutos">+30m</button>
+              <button onclick="injectBonus(${c.id}, -15)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 border border-amber-500/30 transition-all active:scale-95" title="Subtrair 15 minutos">-15m</button>
+              <button onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
+              <button onclick="deleteChildProfile(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+
+    // Modal de Galeria de 12 Fotos com Recaptura Webcam
+    async function openPhotoGalleryModal(childId, childName) {
+      activeGalleryChildId = childId;
+      const modal = document.getElementById("photoGalleryModal");
+      const title = document.getElementById("galleryChildSubtitle");
+      const grid = document.getElementById("galleryGrid");
+      if (title) title.innerText = childName ? `Perfil de ${childName}: escolha a foto oficial do rosto.` : "Escolha a foto oficial do perfil.";
+      if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-6 text-center animate-pulse'>Carregando amostras faciais...</p>";
+      if (modal) modal.classList.remove("hidden");
+
+      const res = await FaceKidsAPI.getChildPhotos(childId);
+      const cacheBust = Date.now();
+      if (res && res.photos && res.photos.length > 0) {
+        let html = "";
+        res.photos.forEach(p => {
+          const isSelected = p.selected;
+          const photoUrl = `${p.url}?t=${cacheBust}`;
+          html += `
+            <div onclick="selectActivePhoto(${childId}, ${p.index})" class="group cursor-pointer rounded-2xl p-2 bg-slate-900/90 border ${isSelected ? 'border-cyan-400 ring-2 ring-cyan-400/50' : 'border-slate-800 hover:border-slate-600'} transition-all relative flex flex-col items-center">
+              <img src="${photoUrl}" class="w-full h-24 object-cover rounded-xl mb-1.5 shadow-md">
+              <span class="text-[10px] font-semibold ${isSelected ? 'text-cyan-400' : 'text-slate-400'}">${p.label}</span>
+              ${isSelected ? '<span class="absolute top-3 right-3 bg-cyan-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">ATIVA</span>' : ''}
+            </div>
+          `;
+        });
+        if (grid) grid.innerHTML = html;
+      } else {
+        if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Clique no botão abaixo para capturar as 12 fotos com a webcam!</p></div>";
+      }
+    }
+
+    function closePhotoGalleryModal() {
+      const modal = document.getElementById("photoGalleryModal");
+      if (modal) modal.classList.add("hidden");
+      activeGalleryChildId = null;
+    }
+
+    async function selectActivePhoto(childId, photoIndex) {
+      showToast("Definindo nova foto oficial...");
+      const res = await FaceKidsAPI.selectChildPhoto(childId, photoIndex);
+      if (res && res.ok) {
+        showToast("Foto oficial atualizada!");
+        const now = Date.now();
+        if (!window.avatarTimestamps) window.avatarTimestamps = {};
+        window.avatarTimestamps[childId] = now;
+        
+        // Atualiza imediatamente na tela os elementos de imagem
+        document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
+          el.src = `/api/child/${childId}/avatar?t=${now}`;
+        });
+        
+        await openPhotoGalleryModal(childId, "");
+        if (typeof syncDashboardData === "function") syncDashboardData();
+      } else {
+        showToast((res && res.error) ? res.error : "Falha ao selecionar foto.");
+      }
+    }
+
+    async function startModalRecapture() {
+      const childId = activeGalleryChildId;
+      if (!childId) return;
+      const grid = document.getElementById("galleryGrid");
+      const subtitle = document.getElementById("galleryChildSubtitle");
+      if (subtitle) subtitle.innerText = "Capturando 12 novas fotos na webcam...";
+      if (grid) grid.innerHTML = "<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>Webcam ativada: Olhe para a câmera</p><p class='text-xs text-slate-400'>Mova levemente o rosto para registrar variações de ângulo...</p></div>";
+
+      const startRes = await FaceKidsAPI.startEnrollment(childId);
+      let t = setInterval(async () => {
+        const s = await FaceKidsAPI.getEnrollmentStatus();
+        if (!s) return;
+        if (s.active && grid) {
+          grid.innerHTML = `<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>${s.message || 'Capturando...'}</p><p class='text-xs text-cyan-400 font-mono font-bold'>${s.samples_count || 0} de 12 fotos capturadas</p></div>`;
+        }
+        if (s.completed) {
+          clearInterval(t);
+          showToast("12 novas amostras biométricas capturadas com sucesso!");
+          const now = Date.now();
+          if (!window.avatarTimestamps) window.avatarTimestamps = {};
+          window.avatarTimestamps[childId] = now;
+          document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
+            el.src = `/api/child/${childId}/avatar?t=${now}`;
+          });
+          await openPhotoGalleryModal(childId, "");
+          if (typeof syncDashboardData === "function") syncDashboardData();
+        }
+      }, 400);
+    }
+
+    async function deleteChildProfile(childId, childName) {
+      if (!confirm(`Deseja realmente excluir o perfil de '${childName}'?`)) return;
+      const res = await FaceKidsAPI.deleteChild(childId);
+      if (res && res.ok) {
+        showToast("Perfil removido com sucesso.");
+        syncDashboardData();
+      } else {
+        showToast(res.error || "Erro ao remover perfil.");
+      }
+    }
+
+    // Monitoramento Real dos Servicos
+    async function syncServicesHealth() {
+      const res = await FaceKidsAPI.getServiceStatus();
+      if (!res || !res.health) return;
+      const h = res.health;
+
+      // AuthService
+      const authRunning = h.auth_service && h.auth_service.running;
+      const pillAuth = document.getElementById("serviceAuthPill");
+      const badgeAuth = document.getElementById("badgeServiceAuth");
+      if (pillAuth) pillAuth.innerHTML = `<span class="w-2 h-2 rounded-full ${authRunning ? 'bg-emerald-400' : 'bg-red-500'}"></span><span class="${authRunning ? 'text-emerald-300' : 'text-red-300'}">AuthService</span>`;
+      if (badgeAuth) {
+        badgeAuth.innerText = authRunning ? "● Em Execução" : "● Parado";
+        badgeAuth.className = `text-[10px] px-2 py-0.5 rounded-full ${authRunning ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`;
+      }
+
+      // FilhosAgent
+      const agentReg = h.filhos_agent && h.filhos_agent.registered;
+      const pillAgent = document.getElementById("serviceAgentPill");
+      const badgeAgent = document.getElementById("badgeServiceAgent");
+      if (pillAgent) pillAgent.innerHTML = `<span class="w-2 h-2 rounded-full ${agentReg ? 'bg-emerald-400' : 'bg-amber-500'}"></span><span class="text-slate-300">FilhosAgent</span>`;
+      if (badgeAgent) {
+        badgeAgent.innerText = agentReg ? "● Registrado" : "● Não Registrado";
+        badgeAgent.className = `text-[10px] px-2 py-0.5 rounded-full ${agentReg ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`;
+      }
+
+      // DLL
+      const dllReg = h.credential_provider && h.credential_provider.registered;
+      const pillDll = document.getElementById("serviceDllPill");
+      const badgeDll = document.getElementById("badgeServiceDll");
+      if (pillDll) pillDll.innerHTML = `<span class="w-2 h-2 rounded-full ${dllReg ? 'bg-emerald-400' : 'bg-red-500'}"></span><span class="text-slate-300">CredentialProvider</span>`;
+      if (badgeDll) {
+        badgeDll.innerText = dllReg ? "● Registrado HKLM" : "● Ausente";
+        badgeDll.className = `text-[10px] px-2 py-0.5 rounded-full ${dllReg ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`;
+      }
+    }
+
+    async function restartServices() {
+      showToast("Reiniciando serviços do Windows...");
+      const res = await FaceKidsAPI.restartService();
+      if (res && res.ok) {
+        showToast("Serviço reiniciado com sucesso!");
+        setTimeout(syncServicesHealth, 1500);
+      } else {
+        showToast(res.error || "Aviso ao reiniciar serviço.");
+      }
+    }
+
+    async function updateWindowsAccount() {
+      const u = document.getElementById("inputWindowsUser").value.trim();
+      const p = document.getElementById("inputWindowsPass").value.trim();
+      if (!p) {
+        showToast("Digite a nova senha para a conta Windows.");
+        return;
+      }
+      showToast("Atualizando senha no Windows e no cofre DPAPI...");
+      const res = await FaceKidsAPI.updateWindowsAccount(u, p);
+      if (res && res.ok) {
+        showToast("Senha Windows & DPAPI sincronizadas com sucesso!");
+        document.getElementById("inputWindowsPass").value = "";
+      } else {
+        showToast((res && res.error) ? res.error : "Erro ao atualizar senha.");
+      }
+    }
+
+    async function updateMasterPin() {
+      const p1 = document.getElementById("inputNewPin").value.trim();
+      const p2 = document.getElementById("inputConfirmPin").value.trim();
+      if (p1.length < 4 || p1 !== p2) {
+        showToast("Os PINs precisam ser iguais e ter pelo menos 4 dígitos.");
+        return;
+      }
+      const resp = await fetch("/api/settings/pin", {
+        method: "POST",
+        headers: FaceKidsAPI.getHeaders(),
+        body: JSON.stringify({ pin: p1 })
+      });
+      const data = await resp.json().catch(() => null);
+      if (data && data.ok) {
+        showToast("PIN Mestre atualizado com sucesso!");
+        document.getElementById("inputNewPin").value = "";
+        document.getElementById("inputConfirmPin").value = "";
+      } else {
+        showToast((data && data.error) ? data.error : "Erro ao atualizar PIN.");
+      }
+    }
+
+    async function executeUninstall() {
+      const pin = document.getElementById("uninstPinConfirm").value.trim();
+      if (!pin) {
+        showToast("Digite seu PIN Mestre para confirmar.");
+        return;
+      }
+      const removeData = document.getElementById("uninstRemoveData").checked;
+      const removeUser = document.getElementById("uninstRemoveUser").checked;
+
+      if (!confirm("Tem certeza que deseja desinstalar o FaceKids? O Credential Provider será removido e os serviços serão encerrados.")) {
+        return;
+      }
+
+      showToast("Executando desinstalação segura...");
+      const res = await FaceKidsAPI.uninstall(pin, removeData, removeUser);
+      if (res && res.ok) {
+        alert("FaceKids desinstalado com sucesso! A janela será encerrada.");
+        try {
+          await fetch("/api/shutdown");
+        } catch(e) {}
+        window.close();
+      } else {
+        showToast(res.error || "Erro na desinstalação.");
+      }
+    }
+
+    function injectBonus(childId, minutes) {
+      FaceKidsAPI.addBonus(childId, minutes).then(res => {
+        if (res && res.ok) {
+          showToast(res.message || "Ajuste de tempo aplicado com sucesso!");
+          syncDashboardData();
+        } else {
+          showToast((res && res.error) ? res.error : "Erro ao ajustar tempo.");
+        }
+      }).catch(err => {
+        showToast("Erro de comunicação ao ajustar tempo.");
+      });
+    }
+
+    function injectAllBonus(minutes) {
+      FaceKidsAPI.getDashboard().then(data => {
+        if (data && data.children) {
+          data.children.forEach(c => FaceKidsAPI.addBonus(c.id, minutes));
+          setTimeout(syncDashboardData, 400);
+          showToast(`Bônus de ${minutes}m aplicado a todos.`);
+        }
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("toastNotification");
+      const m = document.getElementById("toastMessage");
+      if (!t || !m) return;
+      m.innerText = msg;
+      t.classList.remove("translate-y-24", "opacity-0");
+      setTimeout(() => {
+        t.classList.add("translate-y-24", "opacity-0");
+      }, 3500);
+    }
+
+    // Modal de Cadastro de Filho
+    function openAddChildModal() {
+      const m = document.getElementById("childModal");
+      if (m) m.classList.remove("hidden");
+    }
+    function closeChildModal() {
+      const m = document.getElementById("childModal");
+      if (m) m.classList.add("hidden");
+    }
+    function selectModalQuota(h) {
+      selectedQuotaHours = h;
+      document.querySelectorAll(".modal-quota-btn").forEach(b => {
+        b.className = "modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400";
+      });
+      if (event && event.target) {
+        event.target.className = "modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold";
+      }
+    }
+    async function saveChildModal() {
+      const name = document.getElementById("modalChildName").value.trim();
+      if (!name) {
+        showToast("Informe o nome da criança.");
+        return;
+      }
+      const res = await FaceKidsAPI.addChild(name, selectedQuotaHours);
+      if (res && res.ok) {
+        showToast(`Perfil de '${name}' criado com sucesso!`);
+        closeChildModal();
+        document.getElementById("modalChildName").value = "";
+        syncDashboardData();
+        if (res.id) {
+          setTimeout(() => {
+            openPhotoGalleryModal(res.id, name);
+          }, 350);
+        }
+      } else {
+        showToast((res && res.error) ? res.error : "Erro ao criar perfil.");
+      }
+    }
+    async function startModalEnrollment() {
+      const btn = document.getElementById("modalEnrollBtnText");
+      const badge = document.getElementById("modalEnrollProgressBadge");
+      const status = document.getElementById("modalEnrollStatus");
+      if (btn) btn.innerText = "Capturando 12 Fotos...";
+      if (badge) badge.classList.remove("hidden");
+      if (status) status.innerText = "Olhe para a câmera e mova levemente a cabeça...";
+
+      const startRes = await FaceKidsAPI.startEnrollment(1);
+      let t = setInterval(async () => {
+        const s = await FaceKidsAPI.getEnrollmentStatus();
+        if (!s) return;
+        if (s.active && status) {
+          status.innerText = s.message || `Capturando ${s.samples_count}/12...`;
+        }
+        if (s.completed) {
+          clearInterval(t);
+          if (btn) btn.innerText = "✓ 12 Fotos Capturadas";
+          if (badge) badge.classList.add("hidden");
+          if (status) status.innerText = "Fotos gravadas com sucesso!";
+          showToast("12 amostras biométricas salvas com sucesso!");
+        }
+      }, 350);
+    }
+
+    // Lockscreen
+    function openLockScreen() {
+      const m = document.getElementById("lockScreenModal");
+      if (m) m.classList.remove("hidden");
+    }
+    function closeLockScreen() {
+      const m = document.getElementById("lockScreenModal");
+      if (m) m.classList.add("hidden");
+    }
+    function pressLockKey(d) {
+      if (enteredLockPin.length < 6) {
+        enteredLockPin += d;
+        updateLockDots();
+        if (enteredLockPin.length >= 4) {
+          window.validateLockPin();
+        }
+      }
+    }
+    function clearLockKey() {
+      enteredLockPin = "";
+      updateLockDots();
+    }
+    function backspaceLockKey() {
+      enteredLockPin = enteredLockPin.slice(0, -1);
+      updateLockDots();
+    }
+    function updateLockDots() {
+      for (let i = 0; i < 6; i++) {
+        const dot = document.getElementById("lockDot" + i);
+        if (dot) {
+          dot.className = (i < enteredLockPin.length)
+            ? "w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
+            : "w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all";
+        }
+      }
+    }
+
+    // Suporte a Teclado Físico do PC (Dígitos 0-9, Numpad, Backspace, Esc, Enter) para PIN
+    window.addEventListener("keydown", (e) => {
+      // Ignora se o usuário estiver digitando em campos normais de texto ou senha
+      const activeTag = document.activeElement ? document.activeElement.tagName : "";
+      if (activeTag === "INPUT" || activeTag === "TEXTAREA") {
+        if (e.key === "Enter") {
+          const step3 = document.getElementById("wizardStep3");
+          const wizard = document.getElementById("wizardView");
+          if (wizard && wizard.style.display !== "none" && step3 && step3.style.display !== "none") {
+            if (enteredWizardPin.length >= 4) {
+              finishInstallation(e);
+            }
+          }
+        }
+        return;
+      }
+
+      // Extrai o dígito numérico (teclado padrão ou teclado numérico / numpad)
+      let digit = null;
+      if (e.key >= "0" && e.key <= "9") {
+        digit = e.key;
+      } else if (e.code && e.code.startsWith("Numpad") && e.code.length === 7) {
+        const d = e.code.slice(6);
+        if (d >= "0" && d <= "9") digit = d;
+      }
+
+      // 1. Prioridade: Modal de Bloqueio (Lock Screen)
+      const lockModal = document.getElementById("lockScreenModal");
+      const isLockOpen = lockModal && !lockModal.classList.contains("hidden");
+
+      if (isLockOpen) {
+        if (digit !== null) {
+          e.preventDefault();
+          pressLockKey(digit);
+          return;
+        }
+        if (e.key === "Backspace") {
+          e.preventDefault();
+          backspaceLockKey();
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          clearLockKey();
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (enteredLockPin.length >= 4 && typeof window.validateLockPin === "function") {
+            window.validateLockPin();
+          }
+          return;
+        }
+        return;
+      }
+
+      // 2. Prioridade: Passo 3 do Assistente de Instalação (Wizard)
+      const wizardView = document.getElementById("wizardView");
+      const step3 = document.getElementById("wizardStep3");
+      const isStep3Open = wizardView && wizardView.style.display !== "none" && step3 && step3.style.display !== "none";
+
+      if (isStep3Open) {
+        if (digit !== null) {
+          e.preventDefault();
+          pressPinKey(digit);
+          return;
+        }
+        if (e.key === "Backspace") {
+          e.preventDefault();
+          backspacePinKey();
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          clearPinKey();
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (enteredWizardPin.length >= 4) {
+            finishInstallation(e);
+          }
+          return;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
