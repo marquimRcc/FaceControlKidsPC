@@ -140,7 +140,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             try:
                 store = Storage(DEFAULT_DB_FILE)
                 has_pin = bool(store.get_setting(AUTH_SETTING))
-                children_count = len(store.list_people())
+                children_count = len(store.people())
                 store.close()
             except Exception:
                 pass
@@ -158,21 +158,25 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         self.send_json(diag)
 
     def handle_install(self, data: Dict[str, Any]) -> None:
-        master_pin = str(data.get("pin", "")).strip()
-        first_child = str(data.get("child_name", "")).strip()
-        limit_hours = float(data.get("daily_limit_hours", 2.0))
-        limit_minutes = int(limit_hours * 60)
+        try:
+            master_pin = str(data.get("pin", "")).strip()
+            first_child = str(data.get("child_name", "")).strip()
+            limit_hours = float(data.get("daily_limit_hours", 2.0))
+            limit_minutes = int(limit_hours * 60)
 
-        if not master_pin or len(master_pin) < 4:
-            self.send_json({"ok": False, "error": "O PIN mestre precisa ter pelo menos 4 digitos."}, 400)
-            return
+            if not master_pin or len(master_pin) < 4:
+                self.send_json({"ok": False, "error": "O PIN mestre precisa ter pelo menos 4 digitos."}, 400)
+                return
 
-        ok, msg = setup_system(
-            master_pin=master_pin,
-            first_child_name=first_child if first_child else None,
-            first_child_daily_limit_minutes=limit_minutes
-        )
-        self.send_json({"ok": ok, "message": msg})
+            ok, msg = setup_system(
+                master_pin=master_pin,
+                first_child_name=first_child if first_child else None,
+                first_child_daily_limit_minutes=limit_minutes
+            )
+            self.send_json({"ok": ok, "message": msg})
+        except Exception as e:
+            logger.exception("Erro ao processar instalacao")
+            self.send_json({"ok": False, "error": f"Erro durante a instalacao: {e}"}, 500)
 
     def handle_auth_verify(self, data: Dict[str, Any]) -> None:
         pin = str(data.get("pin", "")).strip()
@@ -213,18 +217,18 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
         store = Storage(DEFAULT_DB_FILE)
         try:
-            people = store.list_people()
+            people = store.people()
             children = []
             total_used_today = 0
             total_limit_today = 0
 
             for p in people:
-                cid = p["id"]
-                name = p["name"]
-                limit_sec = p.get("daily_limit_seconds", 7200)
-                used_sec = store.get_today_usage_seconds(cid)
-                bonus_sec = store.get_today_bonus_seconds(cid)
-                remaining_sec = max(0, limit_sec + bonus_sec - used_sec)
+                cid = p[0]
+                name = p[1]
+                limit_sec = p[2]
+                used_sec = int(store.used(cid))
+                bonus_sec = int(store.bonus(cid))
+                remaining_sec = int(store.remaining(cid))
 
                 total_used_today += used_sec
                 total_limit_today += limit_sec
@@ -260,7 +264,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
         store = Storage(DEFAULT_DB_FILE)
         try:
-            store.add_daily_bonus(cid, minutes)
+            store.add_bonus(cid, minutes)
             self.send_json({"ok": True, "message": f"Bonus de {minutes}m concedido."})
         finally:
             store.close()
@@ -335,10 +339,10 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             if DEFAULT_DB_FILE.exists():
                 try:
                     store = Storage(DEFAULT_DB_FILE)
-                    people = store.list_people()
+                    people = store.people()
                     store.close()
                     if people:
-                        cid = people[0]["id"]
+                        cid = people[0][0]
                 except Exception:
                     pass
         if cid <= 0:

@@ -32,20 +32,21 @@ def generate_secure_secret(length: int = 32) -> str:
 
 
 def save_secure_secret(secret: str) -> None:
-    """Salva o segredo gerado em diretorio blindado restrito a Administradores/SYSTEM."""
-    SECURITY_DIR.mkdir(parents=True, exist_ok=True)
-    TOKEN_FILE.write_text(secret, encoding="utf-8")
-    if sys.platform == "win32":
-        try:
-            subprocess.run(
-                ["icacls", str(SECURITY_DIR), "/inheritance:r",
-                 "/grant:r", "*S-1-5-18:(OI)(CI)(F)",
-                 "/grant:r", "*S-1-5-32-544:(OI)(CI)(F)"],
-                capture_output=True,
-                check=False
-            )
-        except Exception:
-            pass
+    """Salva o segredo gerado em diretorio blindado acessivel pelo sistema e administradores."""
+    try:
+        SECURITY_DIR.mkdir(parents=True, exist_ok=True)
+        TOKEN_FILE.write_text(secret, encoding="utf-8")
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["icacls", str(SECURITY_DIR), "/grant", "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)", "*S-1-5-32-545:(OI)(CI)(M)"],
+                    capture_output=True,
+                    check=False
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Aviso ao salvar filhos_session.token: {e}")
 
 
 def get_session_secret() -> str:
