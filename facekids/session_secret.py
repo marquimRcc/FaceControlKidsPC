@@ -5,17 +5,36 @@ geradas no momento da instalacao e armazenadas com isolamento de privilegios.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 import secrets
 import string
 import subprocess
 import sys
+from typing import List, Sequence, Union
 
+
+logger = logging.getLogger("facekids.session_secret")
 
 PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "FaceKids"
 SECURITY_DIR = PROGRAMDATA_DIR / "security"
 TOKEN_FILE = SECURITY_DIR / "filhos_session.token"
+
+
+def _run_win_cmd(cmd: Union[List[str], Sequence[str]], timeout: float = 15.0) -> subprocess.CompletedProcess:
+    """Executa comando do Windows com seguranca: sem heranca de handles e sem travar em stdin."""
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        stdin=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creation_flags,
+        check=False,
+    )
 
 
 def generate_secure_secret(length: int = 32) -> str:
@@ -38,15 +57,36 @@ def save_secure_secret(secret: str) -> None:
         TOKEN_FILE.write_text(secret, encoding="utf-8")
         if sys.platform == "win32":
             try:
-                subprocess.run(
-                    ["icacls", str(SECURITY_DIR), "/grant", "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)", "*S-1-5-32-545:(OI)(CI)(M)"],
-                    capture_output=True,
-                    check=False
-                )
-            except Exception:
-                pass
+                current_user = None
+                try:
+                    current_user = os.getlogin()
+                except Exception:
+                    current_user = os.environ.get("USERNAME")
+
+                # Concede controle total explicitamente para SYSTEM (*S-1-5-18) e Administradores (*S-1-5-32-544)
+                # e para o usuario atual da sessao para evitar perda de permissao de leitura
+                cmd_dir = [
+                    "icacls", str(SECURITY_DIR),
+                    "/grant", "*S-1-5-18:(OI)(CI)(F)",
+                    "*S-1-5-32-544:(OI)(CI)(F)",
+                ]
+                if current_user:
+                    cmd_dir.extend([f"{current_user}:(OI)(CI)(F)"])
+                _run_win_cmd(cmd_dir, timeout=10.0)
+
+                if TOKEN_FILE.exists():
+                    cmd_token = [
+                        "icacls", str(TOKEN_FILE),
+                        "/grant", "*S-1-5-18:F",
+                        "*S-1-5-32-544:F",
+                    ]
+                    if current_user:
+                        cmd_token.extend([f"{current_user}:F"])
+                    _run_win_cmd(cmd_token, timeout=10.0)
+            except Exception as e:
+                logger.warning(f"Aviso nao-critico ao ajustar permissoes ACL via icacls: {e}")
     except Exception as e:
-        logging.getLogger(__name__).warning(f"Aviso ao salvar filhos_session.token: {e}")
+        logger.warning(f"Aviso ao salvar filhos_session.token: {e}")
 
 
 def get_session_secret() -> str:

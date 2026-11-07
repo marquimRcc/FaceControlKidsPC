@@ -17,12 +17,14 @@ import socket
 import sys
 import threading
 import time
-from typing import Any, Dict, Optional
+import traceback
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
 from .installer_engine import get_system_diagnostics, setup_system, PROGRAMDATA_DIR, DEFAULT_DB_FILE
+from .session_secret import get_session_secret
 from .camera_service import CameraService
 
 
@@ -46,90 +48,117 @@ UI_DIR = get_ui_dir()
 
 
 class FaceKidsApiHandler(BaseHTTPRequestHandler):
-    last_activity_time = time.time()
-    shutdown_requested = False
+    last_activity_time: float = time.time()
+    shutdown_requested: bool = False
+    is_installing: bool = False
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
 
     def send_json(self, data: Any, status: int = 200) -> None:
         FaceKidsApiHandler.last_activity_time = time.time()
-        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FaceKids-Token")
-        self.end_headers()
-        self.wfile.write(body)
+        payload_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload_bytes)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Connection", "close")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FaceKids-Token, X-Session-Token")
+            self.end_headers()
+            self.wfile.write(payload_bytes)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError) as e:
+            logger.debug(f"Conexao fechada pelo cliente ao enviar JSON: {e}")
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FaceKids-Token")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FaceKids-Token, X-Session-Token")
         self.end_headers()
 
     def do_GET(self) -> None:
         FaceKidsApiHandler.last_activity_time = time.time()
-        parsed = urlparse(self.path)
-        path = parsed.path
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
 
-        if path == "/api/status":
-            self.handle_status()
-        elif path == "/api/diagnostics":
-            self.handle_diagnostics()
-        elif path == "/api/dashboard":
-            self.handle_dashboard()
-        elif path == "/api/heartbeat":
-            self.send_json({"ok": True, "time": time.time()})
-        elif path == "/api/shutdown":
-            FaceKidsApiHandler.shutdown_requested = True
-            self.send_json({"ok": True, "message": "Encerrando servidor..."})
-        elif path == "/api/camera/stream":
-            self.handle_camera_stream()
-        elif path == "/api/camera/preview":
-            self.handle_camera_preview()
-        elif path == "/api/camera/enroll/status":
-            self.handle_camera_enroll_status()
-        elif path.startswith("/api/child/") and path.endswith("/avatar"):
-            self.handle_child_avatar(path)
-        elif path.startswith("/ui/") or path == "/" or path == "/index.html":
-            self.serve_static(path)
-        else:
-            self.send_json({"error": "Endpoint nao encontrado"}, 404)
+            if path == "/api/status":
+                self.handle_status()
+            elif path == "/api/diagnostics":
+                self.handle_diagnostics()
+            elif path == "/api/dashboard":
+                self.handle_dashboard()
+            elif path == "/api/heartbeat":
+                self.send_json({"ok": True, "time": time.time()})
+            elif path == "/api/shutdown":
+                if not FaceKidsApiHandler.is_installing:
+                    FaceKidsApiHandler.shutdown_requested = True
+                self.send_json({"ok": True, "message": "Encerrando servidor..."})
+            elif path == "/api/camera/stream":
+                self.handle_camera_stream()
+            elif path == "/api/camera/preview":
+                self.handle_camera_preview()
+            elif path == "/api/camera/enroll/status":
+                self.handle_camera_enroll_status()
+            elif path.startswith("/api/child/") and path.endswith("/avatar"):
+                self.handle_child_avatar(path)
+            elif path.startswith("/ui/") or path == "/" or path == "/index.html":
+                self.serve_static(path)
+            else:
+                self.send_json({"error": "Endpoint nao encontrado"}, 404)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:
+            logger.error(f"Erro nao tratado em do_GET: {traceback.format_exc()}")
+            try:
+                self.send_json({"ok": False, "error": f"Erro interno: {exc}"}, 500)
+            except Exception:
+                pass
 
     def do_POST(self) -> None:
         FaceKidsApiHandler.last_activity_time = time.time()
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        length = int(self.headers.get("Content-Length", 0))
-        raw_body = self.rfile.read(length) if length > 0 else b"{}"
         try:
-            body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
-        except Exception:
-            body = {}
+            length = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(length) if length > 0 else b"{}"
+            try:
+                body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+            except Exception:
+                body = {}
 
-        if path == "/api/install":
-            self.handle_install(body)
-        elif path == "/api/auth/verify":
-            self.handle_auth_verify(body)
-        elif path == "/api/child/bonus":
-            self.handle_child_bonus(body)
-        elif path == "/api/child/limit":
-            self.handle_child_limit(body)
-        elif path == "/api/child/add":
-            self.handle_child_add(body)
-        elif path == "/api/camera/enroll/start":
-            self.handle_camera_enroll_start(body)
-        elif path == "/api/settings/pin":
-            self.handle_settings_pin(body)
-        elif path == "/api/shutdown":
-            FaceKidsApiHandler.shutdown_requested = True
-            self.send_json({"ok": True, "message": "Encerrando servidor..."})
-        else:
-            self.send_json({"error": "Endpoint POST desconhecido"}, 404)
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            if path == "/api/install":
+                self.handle_install(body)
+            elif path == "/api/auth/verify":
+                self.handle_auth_verify(body)
+            elif path == "/api/child/bonus":
+                self.handle_child_bonus(body)
+            elif path == "/api/child/limit":
+                self.handle_child_limit(body)
+            elif path == "/api/child/add":
+                self.handle_child_add(body)
+            elif path == "/api/camera/enroll/start":
+                self.handle_camera_enroll_start(body)
+            elif path == "/api/settings/pin":
+                self.handle_settings_pin(body)
+            elif path == "/api/shutdown":
+                if not FaceKidsApiHandler.is_installing:
+                    FaceKidsApiHandler.shutdown_requested = True
+                self.send_json({"ok": True, "message": "Encerrando servidor..."})
+            else:
+                self.send_json({"error": "Endpoint POST desconhecido"}, 404)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:
+            logger.error(f"Erro nao tratado em do_POST: {traceback.format_exc()}")
+            try:
+                self.send_json({"ok": False, "error": f"Erro interno do servidor: {exc}"}, 500)
+            except Exception:
+                pass
 
     def handle_status(self) -> None:
         has_db = DEFAULT_DB_FILE.exists()
@@ -158,6 +187,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         self.send_json(diag)
 
     def handle_install(self, data: Dict[str, Any]) -> None:
+        FaceKidsApiHandler.is_installing = True
+        FaceKidsApiHandler.last_activity_time = time.time()
         try:
             master_pin = str(data.get("pin", "")).strip()
             first_child = str(data.get("child_name", "")).strip()
@@ -173,10 +204,21 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 first_child_name=first_child if first_child else None,
                 first_child_daily_limit_minutes=limit_minutes
             )
-            self.send_json({"ok": ok, "message": msg})
-        except Exception as e:
-            logger.exception("Erro ao processar instalacao")
-            self.send_json({"ok": False, "error": f"Erro durante a instalacao: {e}"}, 500)
+            current_token = get_session_secret()
+            self.send_json({
+                "ok": ok,
+                "status": "success" if ok else "error",
+                "token": current_token,
+                "message": msg
+            })
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:
+            logger.error(f"Erro em handle_install: {traceback.format_exc()}")
+            self.send_json({"ok": False, "error": f"Erro durante a instalacao: {exc}"}, 500)
+        finally:
+            FaceKidsApiHandler.is_installing = False
+            FaceKidsApiHandler.last_activity_time = time.time()
 
     def handle_auth_verify(self, data: Dict[str, Any]) -> None:
         pin = str(data.get("pin", "")).strip()
@@ -248,6 +290,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
             summary = {
                 "active_children": len(children),
+                "total_used_seconds": total_used_today,
+                "total_limit_seconds": total_limit_today,
                 "total_used_formatted": f"{total_used_today // 3600}h {(total_used_today % 3600) // 60}m",
                 "total_limit_formatted": f"{total_limit_today // 3600}h {(total_limit_today % 3600) // 60}m"
             }
@@ -396,7 +440,6 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
         try:
             content = target.read_bytes()
-            print(f"[DEBUG SERVE_STATIC] path={path} target={target} len={len(content)}")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))
@@ -404,9 +447,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:
-            print(f"[DEBUG SERVE_STATIC ERROR] {e}")
+            logger.debug(f"Erro ao servir arquivo estatico: {e}")
             self.send_error(500, "Erro ao servir arquivo")
-
 
 
 def find_free_port(start: int = 14220) -> int:

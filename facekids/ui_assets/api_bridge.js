@@ -3,10 +3,23 @@
 
 const FaceKidsAPI = {
   baseUrl: window.location.origin,
+  token: window.__FACEKIDS_TOKEN__ || null,
+
+  getHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const currentToken = this.token || window.__FACEKIDS_TOKEN__;
+    if (currentToken) {
+      headers["X-Session-Token"] = currentToken;
+      headers["X-FaceKids-Token"] = currentToken;
+    }
+    return headers;
+  },
 
   async getStatus() {
     try {
-      const res = await fetch(`${this.baseUrl}/api/status`);
+      const res = await fetch(`${this.baseUrl}/api/status`, {
+        headers: this.getHeaders()
+      });
       return await res.json();
     } catch (e) {
       console.warn("API offline, usando modo estatico:", e);
@@ -16,7 +29,9 @@ const FaceKidsAPI = {
 
   async getDiagnostics() {
     try {
-      const res = await fetch(`${this.baseUrl}/api/diagnostics`);
+      const res = await fetch(`${this.baseUrl}/api/diagnostics`, {
+        headers: this.getHeaders()
+      });
       return await res.json();
     } catch (e) {
       return null;
@@ -25,14 +40,34 @@ const FaceKidsAPI = {
 
   async install(pin, childName, limitHours) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos de timeout tolerante
+
       const res = await fetch(`${this.baseUrl}/api/install`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin, child_name: childName, daily_limit_hours: limitHours })
+        headers: this.getHeaders(),
+        body: JSON.stringify({ pin, child_name: childName, daily_limit_hours: limitHours }),
+        signal: controller.signal
       });
-      return await res.json();
+      clearTimeout(timeoutId);
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: (data && data.error) ? data.error : `Erro HTTP ${res.status}`
+        };
+      }
+      if (data && data.token) {
+        this.token = data.token;
+        window.__FACEKIDS_TOKEN__ = data.token;
+      }
+      return data || { ok: true };
     } catch (e) {
-      return { ok: false, error: e.message };
+      if (e.name === "AbortError") {
+        return { ok: false, error: "A instalação demorou mais de 60 segundos e expirou." };
+      }
+      return { ok: false, error: `Falha de conexão: ${e.message}` };
     }
   },
 
@@ -40,10 +75,14 @@ const FaceKidsAPI = {
     try {
       const res = await fetch(`${this.baseUrl}/api/auth/verify`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify({ pin })
       });
-      return await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        return { ok: false, error: (data && data.error) ? data.error : `Erro ${res.status}` };
+      }
+      return data || { ok: false };
     } catch (e) {
       return { ok: pin === "1234" };
     }
@@ -51,7 +90,9 @@ const FaceKidsAPI = {
 
   async getDashboard() {
     try {
-      const res = await fetch(`${this.baseUrl}/api/dashboard`);
+      const res = await fetch(`${this.baseUrl}/api/dashboard`, {
+        headers: this.getHeaders()
+      });
       return await res.json();
     } catch (e) {
       return null;
@@ -62,12 +103,12 @@ const FaceKidsAPI = {
     try {
       const res = await fetch(`${this.baseUrl}/api/child/bonus`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify({ child_id: childId, minutes })
       });
       return await res.json();
     } catch (e) {
-      return { ok: false };
+      return { ok: false, error: e.message };
     }
   },
 
@@ -75,12 +116,12 @@ const FaceKidsAPI = {
     try {
       const res = await fetch(`${this.baseUrl}/api/child/limit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify({ child_id: childId, hours })
       });
       return await res.json();
     } catch (e) {
-      return { ok: false };
+      return { ok: false, error: e.message };
     }
   },
 
@@ -88,12 +129,12 @@ const FaceKidsAPI = {
     try {
       const res = await fetch(`${this.baseUrl}/api/child/add`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify({ name, daily_limit_hours: limitHours })
       });
       return await res.json();
     } catch (e) {
-      return { ok: false };
+      return { ok: false, error: e.message };
     }
   },
 
@@ -101,7 +142,7 @@ const FaceKidsAPI = {
     try {
       const res = await fetch(`${this.baseUrl}/api/camera/enroll/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify({ child_id: childId })
       });
       return await res.json();
@@ -112,7 +153,9 @@ const FaceKidsAPI = {
 
   async getEnrollmentStatus() {
     try {
-      const res = await fetch(`${this.baseUrl}/api/camera/enroll/status`);
+      const res = await fetch(`${this.baseUrl}/api/camera/enroll/status`, {
+        headers: this.getHeaders()
+      });
       return await res.json();
     } catch (e) {
       return null;
@@ -124,7 +167,9 @@ const FaceKidsAPI = {
 document.addEventListener("DOMContentLoaded", async () => {
   // Dispara heartbeat periodico para manter o servidor ativo enquanto a janela estiver aberta
   setInterval(() => {
-    fetch(`${FaceKidsAPI.baseUrl}/api/heartbeat`).catch(() => {});
+    fetch(`${FaceKidsAPI.baseUrl}/api/heartbeat`, {
+      headers: FaceKidsAPI.getHeaders()
+    }).catch(() => {});
   }, 2000);
 
   const urlParams = new URLSearchParams(window.location.search);

@@ -39,13 +39,15 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
         url += "?mode=dashboard"
 
     edge = find_edge_executable()
-    # Usa LOCALAPPDATA para garantir permissao de escrita sem elevacao
-    local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    profile_dir = Path(local_app_data) / "FaceKids" / "app_profile"
+    # Utiliza diretorio de perfil temporario exclusivo para evitar conflito de processo ou sessoes do Edge
+    temp_dir = os.environ.get("TEMP", os.environ.get("TMP", os.path.expanduser("~")))
+    profile_dir = Path(temp_dir) / "FaceKidsEdgeProfile"
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     FaceKidsApiHandler.last_activity_time = time.time()
     FaceKidsApiHandler.shutdown_requested = False
+    FaceKidsApiHandler.is_installing = False
+    start_time = time.time()
 
     proc = None
     if edge and sys.platform == "win32":
@@ -70,15 +72,25 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
     try:
         while True:
             time.sleep(1)
-            # 1. Encerramento explícito recebido da janela (beforeunload / shutdown)
+
+            # 1. Enquanto uma instalacao estiver em processamento, o servidor NUNCA encerra
+            if getattr(FaceKidsApiHandler, "is_installing", False):
+                FaceKidsApiHandler.last_activity_time = time.time()
+                continue
+
+            # 2. Encerramento explicito recebido da janela (beforeunload / shutdown)
             if getattr(FaceKidsApiHandler, "shutdown_requested", False):
                 break
 
-            # 2. Se o processo Edge dedicado ainda estiver ativo, mantém vivo
+            # 3. Se o processo Edge dedicado ainda estiver ativo, mantem vivo
             if proc is not None and proc.poll() is None:
                 continue
 
-            # 3. Timeout generoso de inatividade (300 segundos = 5 minutos sem nenhum heartbeat)
+            # 4. Grace period inicial de abertura: pelo menos 120 segundos
+            if time.time() - start_time < 120.0:
+                continue
+
+            # 5. Timeout generoso de inatividade (padrao 300 segundos sem nenhum heartbeat)
             elapsed = time.time() - FaceKidsApiHandler.last_activity_time
             if elapsed > 300.0:
                 break

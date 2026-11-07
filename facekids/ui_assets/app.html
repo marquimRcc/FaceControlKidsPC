@@ -248,7 +248,7 @@
             </div>
           </div>
 
-          <button id="finishInstallBtn" onclick="finishInstallation()" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+          <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
             Concluir Instalação e Abrir Painel 🚀
           </button>
         </div>
@@ -692,15 +692,22 @@
           const btn = document.getElementById("finishInstallBtn");
           if (btn && !btn.disabled) {
             e.preventDefault();
-            finishInstallation();
+            finishInstallation(e);
           }
         }
       }
     });
 
-    async function finishInstallation() {
+    async function finishInstallation(event) {
+      if (event && typeof event.preventDefault === "function") {
+        event.preventDefault();
+      }
       const finishBtn = document.getElementById("finishInstallBtn");
       if (finishBtn) {
+        if (finishBtn.dataset.busy === "true") {
+          return;
+        }
+        finishBtn.dataset.busy = "true";
         finishBtn.disabled = true;
         finishBtn.innerText = "Configurando sistema seguro...";
       }
@@ -711,15 +718,33 @@
         if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
           res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0);
         } else {
+          const headers = { "Content-Type": "application/json" };
+          const token = window.__FACEKIDS_TOKEN__;
+          if (token) {
+            headers["X-Session-Token"] = token;
+            headers["X-FaceKids-Token"] = token;
+          }
           const resp = await fetch("/api/install", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: headers,
             body: JSON.stringify({ pin: enteredWizardPin, child_name: null, daily_limit_hours: 2.0 })
           });
-          res = await resp.json();
+          const data = await resp.json().catch(() => null);
+          if (!resp.ok) {
+            res = { ok: false, error: (data && data.error) ? data.error : `Erro HTTP ${resp.status}` };
+          } else {
+            res = data || { ok: true };
+          }
         }
       } catch (err) {
         res = { ok: false, error: err.message };
+      }
+
+      if (res && res.token) {
+        window.__FACEKIDS_TOKEN__ = res.token;
+        if (window.FaceKidsAPI) {
+          window.FaceKidsAPI.token = res.token;
+        }
       }
 
       if (res && res.ok) {
@@ -729,10 +754,11 @@
           if (typeof syncDashboardData === "function") {
             syncDashboardData();
           }
-        }, 600);
+        }, 150);
       } else {
         showToast((res && res.error) ? res.error : "Erro na instalação. Tente novamente.");
         if (finishBtn) {
+          finishBtn.dataset.busy = "false";
           finishBtn.disabled = false;
           finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
         }

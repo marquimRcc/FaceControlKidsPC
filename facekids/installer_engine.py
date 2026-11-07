@@ -15,6 +15,7 @@ import ctypes
 from ctypes import wintypes
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import secrets
@@ -27,8 +28,15 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from .admin_auth import hash_pin
 from .storage import Storage
-from .session_secret import generate_secure_secret, save_secure_secret, get_session_secret
+from .session_secret import (
+    generate_secure_secret,
+    save_secure_secret,
+    get_session_secret,
+    _run_win_cmd,
+)
 
+
+logger = logging.getLogger("facekids.installer_engine")
 
 PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "FaceKids"
 SECURITY_DIR = PROGRAMDATA_DIR / "security"
@@ -71,17 +79,17 @@ def get_system_diagnostics() -> Dict[str, Any]:
     # Verifica usuario Windows 'Filhos'
     if sys.platform == "win32":
         try:
-            p = subprocess.run(
+            p = _run_win_cmd(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-LocalUser -Name 'Filhos' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty SID"],
-                capture_output=True, text=True, timeout=5
+                timeout=5.0
             )
             sid = p.stdout.strip()
             if sid and p.returncode == 0:
                 results["filhos_user_exists"] = True
                 results["filhos_user_sid"] = sid
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Falha ao consultar usuario Filhos: {e}")
 
     # Verifica DLL
     root = Path(__file__).resolve().parent.parent
@@ -99,26 +107,20 @@ def ensure_filhos_windows_user(secret: str) -> Tuple[bool, str]:
 
     try:
         # Verifica se o usuario ja existe
-        check = subprocess.run(
-            ["net", "user", "Filhos"],
-            capture_output=True, text=True
-        )
+        check = _run_win_cmd(["net", "user", "Filhos"], timeout=10.0)
         if check.returncode == 0:
             # Atualiza senha com o segredo dinamico
-            res = subprocess.run(
-                ["net", "user", "Filhos", secret],
-                capture_output=True, text=True
-            )
+            res = _run_win_cmd(["net", "user", "Filhos", secret], timeout=10.0)
             if res.returncode != 0:
                 return False, f"Falha ao redefinir credencial da conta Filhos: {res.stderr}"
             return True, "Conta 'Filhos' atualizada com segredo dinamico seguro."
         else:
             # Cria a conta restrita
-            res = subprocess.run(
+            res = _run_win_cmd(
                 ["net", "user", "Filhos", secret, "/add",
                  "/comment:Conta supervisionada pelo FaceControlKidsPC",
                  "/passwordchg:no"],
-                capture_output=True, text=True
+                timeout=15.0
             )
             if res.returncode != 0:
                 return False, f"Falha ao criar conta 'Filhos': {res.stderr}"
@@ -142,8 +144,8 @@ def setup_system(
     try:
         PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
         SECURITY_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Aviso ao criar diretorios: {e}")
 
     root = Path(__file__).resolve().parent.parent
     dll_source = root / "native" / "credential_provider_facekids" / "FaceKidsCredentialProvider.dll"
@@ -154,23 +156,25 @@ def setup_system(
     try:
         secret = generate_secure_secret(32)
         save_secure_secret(secret)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Aviso ao gerar segredo de sessao: {e}")
 
     notify("Configurando conta local restrita do Windows...", 40)
     try:
         ok_user, msg_user = ensure_filhos_windows_user(secret)
-    except Exception:
-        pass
+        if not ok_user:
+            logger.warning(f"Aviso na configuracao do usuario Filhos: {msg_user}")
+    except Exception as e:
+        logger.warning(f"Erro ao configurar usuario: {e}")
 
     notify("Registrando driver de desbloqueio facial (DLL)...", 55)
     try:
         if dll_source.exists():
             shutil.copy2(dll_source, dll_target)
         if sys.platform == "win32" and dll_target.exists():
-            subprocess.run(["regsvr32.exe", "/s", str(dll_target)], check=False)
-    except Exception:
-        pass
+            _run_win_cmd(["regsvr32.exe", "/s", str(dll_target)], timeout=10.0)
+    except Exception as e:
+        logger.warning(f"Aviso ao registrar DLL: {e}")
 
     notify("Configurando PIN mestre dos pais e banco de dados...", 70)
     try:
@@ -184,8 +188,8 @@ def setup_system(
             if not any(p[1].lower() == first_child_name.strip().lower() for p in existing_people):
                 store.add_person(first_child_name.strip(), first_child_daily_limit_minutes)
         store.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Aviso ao inicializar banco de dados: {e}")
 
     notify("Configurando politicas de inatividade e servicos...", 85)
     try:
@@ -197,8 +201,8 @@ def setup_system(
                 "description": "FaceControlKidsPC - Bloqueio por inatividade e checagem periodica"
             }
             CONFIG_FILE.write_text(json.dumps(default_settings, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Aviso ao salvar configuracoes: {e}")
 
     notify("Instalacao concluida com sucesso!", 100)
     return True, "FaceKids instalado e pronto para uso."
