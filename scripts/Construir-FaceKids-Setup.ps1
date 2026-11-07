@@ -24,10 +24,14 @@ if (-not (Test-Path -LiteralPath $dllPath)) {
     & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'native\credential_provider_facekids\build.ps1')
 }
 
-# 2. Configura os diretórios de dados a serem embutidos
+# 2. Limpa qualquer executável anterior na pasta dist
 $entryScript = Join-Path $root 'installer_runner.py'
 $distDir = Join-Path $root 'dist'
 $buildDir = Join-Path $root 'build'
+
+if (Test-Path -LiteralPath $distDir) {
+    Get-ChildItem -Path $distDir -Filter "*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+}
 
 $facekidsPkg = Join-Path $root 'facekids'
 $uiAssets = Join-Path $root 'facekids\ui_assets'
@@ -40,7 +44,7 @@ $pyinstallerArgs = @(
     '--onefile',
     '--windowed',
     '--uac-admin',
-    '--name', 'FaceKids-Instalador-v3',
+    '--name', 'FaceKids-Instalador',
     '--paths', $root,
     '--hidden-import', 'facekids.app_window',
     '--hidden-import', 'facekids.app_server',
@@ -64,7 +68,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "Falha ao compilar FaceKids-Instalador.exe com PyInstaller."
 }
 
-$outputExe = Join-Path $distDir 'FaceKids-Instalador-v3.exe'
+# Remove quaisquer outros executáveis mantendo apenas FaceKids-Instalador.exe
+Get-ChildItem -Path $distDir -Filter "*.exe" | Where-Object { $_.Name -ne 'FaceKids-Instalador.exe' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+$outputExe = Join-Path $distDir 'FaceKids-Instalador.exe'
 if (Test-Path -LiteralPath $outputExe) {
     $sizeMb = [math]::Round(((Get-Item $outputExe).Length / 1MB), 2)
     Write-Host ""

@@ -158,7 +158,7 @@
             </div>
           </div>
 
-          <button type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
+          <button id="btnStartWizard" type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
             <span>Iniciar Instalação em 1 Clique</span>
             <span>⚡</span>
           </button>
@@ -537,7 +537,7 @@
     </div>
   </div>
 
-  <script src="/ui/api_bridge.js"></script>
+  <!-- INLINE LOGIC CORE (Disponível imediatamente sem bloqueio de rede) -->
   <script>
     // Estado do Wizard
     let enteredWizardPin = "";
@@ -553,30 +553,53 @@
     }, 1000);
 
     // Navegação do Wizard
-    function goToStep2() {
+    window.goToStep1 = function() {
+      const s1 = document.getElementById("wizardStep1");
+      const s2 = document.getElementById("wizardStep2");
+      const s3 = document.getElementById("wizardStep3");
+      if (s1) s1.style.display = "flex";
+      if (s2) s2.style.display = "none";
+      if (s3) s3.style.display = "none";
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "1";
+    };
+
+    window.goToStep2 = function() {
       const s1 = document.getElementById("wizardStep1");
       const s2 = document.getElementById("wizardStep2");
       const s3 = document.getElementById("wizardStep3");
       if (s1) s1.style.display = "none";
       if (s2) s2.style.display = "flex";
       if (s3) s3.style.display = "none";
-      document.getElementById("currentStepNumber").innerText = "2";
-      document.getElementById("dotStep2").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "2";
+      const dotEl = document.getElementById("dotStep2");
+      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
       if (typeof runLiveDiagnostics === "function") {
         runLiveDiagnostics();
       }
-    }
+    };
 
-    function goToStep3() {
+    window.goToStep3 = function() {
       const s1 = document.getElementById("wizardStep1");
       const s2 = document.getElementById("wizardStep2");
       const s3 = document.getElementById("wizardStep3");
       if (s1) s1.style.display = "none";
       if (s2) s2.style.display = "none";
       if (s3) s3.style.display = "flex";
-      document.getElementById("currentStepNumber").innerText = "3";
-      document.getElementById("dotStep3").className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
-    }
+      const stepEl = document.getElementById("currentStepNumber");
+      if (stepEl) stepEl.innerText = "3";
+      const dotEl = document.getElementById("dotStep3");
+      if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 transition-all";
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const btn = document.getElementById("btnStartWizard");
+      if (btn) {
+        btn.addEventListener("click", window.goToStep2);
+      }
+    });
+
 
     // Teclado PIN do Wizard
     function pressPinKey(digit) {
@@ -935,5 +958,6 @@
       }, 3000);
     }
   </script>
+  <script src="/ui/api_bridge.js" defer></script>
 </body>
 </html>

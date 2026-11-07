@@ -1,20 +1,24 @@
 """FaceControlKidsPC - Ponto de Entrada do Executavel de Instalacao Unificado.
 
-Quando empacotado pelo PyInstaller, este script descompacta os recursos necessarios,
-garante a execucao com privilegios de Administrador e abre a interface moderna (Conceito A).
+Garante a resolucao de caminhos tanto no ambiente de desenvolvimento
+quanto quando extraido em sys._MEIPASS pelo PyInstaller.
 """
 import os
 import sys
 from pathlib import Path
 
-# Adiciona o diretorio base ao path para importacao dos modulos facekids
-current_dir = Path(__file__).resolve().parent
-root_dir = current_dir.parent if current_dir.name == "scripts" else current_dir
-sys.path.insert(0, str(root_dir))
+# Suporte ao diretorio temporario do PyInstaller (_MEIPASS)
+if hasattr(sys, "_MEIPASS"):
+    base_dir = Path(sys._MEIPASS)
+else:
+    current_dir = Path(__file__).resolve().parent
+    base_dir = current_dir.parent if current_dir.name == "scripts" else current_dir
+
+if str(base_dir) not in sys.path:
+    sys.path.insert(0, str(base_dir))
 
 from facekids.app_window import open_app_window
 
 
 if __name__ == "__main__":
-    # Inicia diretamente no modo wizard de instalacao
     sys.exit(open_app_window(mode="wizard"))

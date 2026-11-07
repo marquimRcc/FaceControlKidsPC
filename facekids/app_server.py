@@ -6,7 +6,7 @@ e os endpoints REST locais para comunicacao em tempo real entre o frontend e o s
 from __future__ import annotations
 
 import base64
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json
 import logging
 import mimetypes
@@ -385,13 +385,17 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
         try:
             content = target.read_bytes()
+            print(f"[DEBUG SERVE_STATIC] path={path} target={target} len={len(content)}")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.end_headers()
             self.wfile.write(content)
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG SERVE_STATIC ERROR] {e}")
             self.send_error(500, "Erro ao servir arquivo")
+
 
 
 def find_free_port(start: int = 14220) -> int:
@@ -405,9 +409,9 @@ def find_free_port(start: int = 14220) -> int:
     return start
 
 
-def run_app_server(port: Optional[int] = None) -> Tuple[HTTPServer, int]:
+def run_app_server(port: Optional[int] = None) -> Tuple[ThreadingHTTPServer, int]:
     port = port or find_free_port()
-    server = HTTPServer(("127.0.0.1", port), FaceKidsApiHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), FaceKidsApiHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     logger.info(f"Servidor FaceKids ativo em http://127.0.0.1:{port}")
