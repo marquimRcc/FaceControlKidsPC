@@ -227,6 +227,8 @@
               <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
               <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
               <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot4" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot5" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
             </div>
 
             <!-- Teclado Numérico -->
@@ -508,6 +510,8 @@
           <div id="lockDot1" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
           <div id="lockDot2" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
           <div id="lockDot3" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot4" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
+          <div id="lockDot5" class="w-3.5 h-3.5 rounded-full border-2 border-slate-600 transition-all"></div>
         </div>
 
         <div class="grid grid-cols-3 gap-2.5 w-full max-w-[210px]">
@@ -620,7 +624,7 @@
     }
 
     function updatePinDots() {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 6; i++) {
         const dot = document.getElementById("pinDot" + i);
         if (dot) {
           dot.className = (i < enteredWizardPin.length)
@@ -629,26 +633,109 @@
         }
       }
       const finishBtn = document.getElementById("finishInstallBtn");
-      finishBtn.disabled = enteredWizardPin.length < 4;
+      if (finishBtn) finishBtn.disabled = enteredWizardPin.length < 4;
     }
+
+    // Heartbeat contínuo para manter o servidor ativo enquanto a janela estiver aberta
+    setInterval(() => {
+      fetch("/api/heartbeat").catch(() => {});
+    }, 1500);
+
+    window.addEventListener("beforeunload", () => {
+      try {
+        navigator.sendBeacon("/api/shutdown");
+      } catch (e) {}
+    });
+
+    // Captura Teclado Físico (Teclado Numérico Numpad e Linha Superior)
+    window.addEventListener("keydown", (e) => {
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      const lockModal = document.getElementById("lockScreenModal");
+      const isLockOpen = lockModal && !lockModal.classList.contains("hidden");
+
+      const s3 = document.getElementById("wizardStep3");
+      const isStep3Open = s3 && s3.style.display === "flex";
+
+      let digit = null;
+      if (e.key >= "0" && e.key <= "9") {
+        digit = e.key;
+      }
+
+      if (isLockOpen) {
+        if (digit !== null) {
+          e.preventDefault();
+          pressLockKey(digit);
+        } else if (e.key === "Backspace") {
+          e.preventDefault();
+          backspaceLockKey();
+        } else if (e.key === "Escape" || e.key === "Delete") {
+          e.preventDefault();
+          clearLockKey();
+        }
+        return;
+      }
+
+      if (isStep3Open) {
+        if (digit !== null) {
+          e.preventDefault();
+          pressPinKey(digit);
+        } else if (e.key === "Backspace") {
+          e.preventDefault();
+          backspacePinKey();
+        } else if (e.key === "Escape" || e.key === "Delete") {
+          e.preventDefault();
+          clearPinKey();
+        } else if (e.key === "Enter") {
+          const btn = document.getElementById("finishInstallBtn");
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            finishInstallation();
+          }
+        }
+      }
+    });
 
     async function finishInstallation() {
       const finishBtn = document.getElementById("finishInstallBtn");
-      finishBtn.disabled = true;
-      finishBtn.innerText = "Configurando sistema seguro...";
+      if (finishBtn) {
+        finishBtn.disabled = true;
+        finishBtn.innerText = "Configurando sistema seguro...";
+      }
       showToast("Configurando o FaceKids sem senha fixa...");
 
-      const res = await FaceKidsAPI.install(enteredWizardPin, null, 2.0);
-      if (res.ok) {
+      let res;
+      try {
+        if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
+          res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0);
+        } else {
+          const resp = await fetch("/api/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pin: enteredWizardPin, child_name: null, daily_limit_hours: 2.0 })
+          });
+          res = await resp.json();
+        }
+      } catch (err) {
+        res = { ok: false, error: err.message };
+      }
+
+      if (res && res.ok) {
         showToast("Instalação concluída com sucesso!");
         setTimeout(() => {
           showDashboard();
-          syncDashboardData();
+          if (typeof syncDashboardData === "function") {
+            syncDashboardData();
+          }
         }, 600);
       } else {
-        showToast(res.error || "Erro na instalação. Tente novamente.");
-        finishBtn.disabled = false;
-        finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
+        showToast((res && res.error) ? res.error : "Erro na instalação. Tente novamente.");
+        if (finishBtn) {
+          finishBtn.disabled = false;
+          finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
+        }
       }
     }
 
@@ -912,7 +999,7 @@
     }
 
     function updateLockDots() {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 6; i++) {
         const dot = document.getElementById("lockDot" + i);
         if (dot) {
           dot.className = (i < enteredLockPin.length)

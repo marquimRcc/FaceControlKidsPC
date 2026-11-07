@@ -45,7 +45,9 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     FaceKidsApiHandler.last_activity_time = time.time()
+    FaceKidsApiHandler.shutdown_requested = False
 
+    proc = None
     if edge and sys.platform == "win32":
         cmd = [
             edge,
@@ -56,27 +58,30 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
             "--no-default-browser-check"
         ]
         try:
-            subprocess.Popen(cmd)
+            proc = subprocess.Popen(cmd)
         except Exception:
             pass
     else:
         import webbrowser
         webbrowser.open(url)
 
-    # Mantem o servidor ativo enquanto houver comunicacao com a janela (heartbeat / requisicoes)
-    # Periodo de graca inicial de 15 segundos para a janela carregar
-    time.sleep(3)
+    # Mantem o servidor ativo enquanto a janela estiver aberta
+    time.sleep(2)
     try:
-        idle_count = 0
         while True:
             time.sleep(1)
+            # 1. Encerramento explícito recebido da janela (beforeunload / shutdown)
+            if getattr(FaceKidsApiHandler, "shutdown_requested", False):
+                break
+
+            # 2. Se o processo Edge dedicado ainda estiver ativo, mantém vivo
+            if proc is not None and proc.poll() is None:
+                continue
+
+            # 3. Timeout generoso de inatividade (300 segundos = 5 minutos sem nenhum heartbeat)
             elapsed = time.time() - FaceKidsApiHandler.last_activity_time
-            if elapsed > 12.0:
-                idle_count += 1
-                if idle_count >= 5:  # 5 segundos sem requisicao apos o timeout
-                    break
-            else:
-                idle_count = 0
+            if elapsed > 300.0:
+                break
     except KeyboardInterrupt:
         pass
     finally:

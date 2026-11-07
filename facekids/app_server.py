@@ -47,6 +47,7 @@ UI_DIR = get_ui_dir()
 
 class FaceKidsApiHandler(BaseHTTPRequestHandler):
     last_activity_time = time.time()
+    shutdown_requested = False
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
@@ -82,6 +83,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_dashboard()
         elif path == "/api/heartbeat":
             self.send_json({"ok": True, "time": time.time()})
+        elif path == "/api/shutdown":
+            FaceKidsApiHandler.shutdown_requested = True
+            self.send_json({"ok": True, "message": "Encerrando servidor..."})
         elif path == "/api/camera/stream":
             self.handle_camera_stream()
         elif path == "/api/camera/preview":
@@ -121,6 +125,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             self.handle_camera_enroll_start(body)
         elif path == "/api/settings/pin":
             self.handle_settings_pin(body)
+        elif path == "/api/shutdown":
+            FaceKidsApiHandler.shutdown_requested = True
+            self.send_json({"ok": True, "message": "Encerrando servidor..."})
         else:
             self.send_json({"error": "Endpoint POST desconhecido"}, 404)
 
