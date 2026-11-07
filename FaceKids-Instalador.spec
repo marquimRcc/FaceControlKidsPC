@@ -21,7 +21,9 @@ a = Analysis(
         'facekids.credential_store',
         'facekids.avatar_utils',
         'facekids.admin_auth',
-        'facekids.storage'
+        'facekids.storage',
+        'facekids.auth_service',
+        'facekids.filhos_agent'
     ],
     hookspath=[],
     hooksconfig={},

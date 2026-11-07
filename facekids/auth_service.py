@@ -188,10 +188,27 @@ class FaceAuthenticator:
             # Mapeamento ID -> Nome
             names = {pid: name for pid, name, _ in store.people()}
 
-            backend = camera_backend_id(camera_backend)
-            cap = cv2.VideoCapture(camera_index, backend)
-            if not cap.isOpened():
-                cap.release()
+            backends = [camera_backend]
+            alt = "msmf" if camera_backend == "dshow" else "dshow"
+            if alt not in backends:
+                backends.append(alt)
+
+            cap = None
+            for b_name in backends:
+                try:
+                    b_id = camera_backend_id(b_name)
+                    c = cv2.VideoCapture(camera_index, b_id)
+                    if c.isOpened():
+                        cap = c
+                        break
+                    c.release()
+                except Exception as e:
+                    logger.debug("Falha ao abrir webcam via backend %s: %s", b_name, e)
+
+            if cap is None or not cap.isOpened():
+                if cap is not None:
+                    cap.release()
+                logger.warning("Nao foi possivel abrir a webcam em nenhum backend (%s)", backends)
                 return "ERROR_CAMERA", {"message": "Nao foi possivel abrir a webcam"}
 
             deadline = time.monotonic() + timeout_seconds
@@ -376,7 +393,7 @@ def probe_camera_access(camera_index: int = 0, camera_backend: str = "dshow") ->
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline:
             ret, frame = cap.read()
-            if ret and frame is not None:
+            if ret and frame is not None and getattr(frame, "size", 1) > 0:
                 return True
             time.sleep(0.05)
         return False
@@ -393,8 +410,14 @@ def is_session_zero_or_system() -> bool:
     if sys.platform != "win32":
         return False
     user = os.environ.get("USERNAME", "").upper()
-    if user in ("SYSTEM", ""):
+    if user in ("SYSTEM", "SISTEMA", ""):
         return True
+    try:
+        import getpass
+        if getpass.getuser().upper() in ("SYSTEM", "SISTEMA"):
+            return True
+    except Exception:
+        pass
     try:
         kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
         if kernel32 and hasattr(kernel32, "ProcessIdToSessionId"):

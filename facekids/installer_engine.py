@@ -187,18 +187,55 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
         )
         agent_bat.write_text(agent_content, encoding="ascii", errors="ignore")
 
-        # 3. Tarefa Agendada 1: FaceKidsAuthService (SYSTEM / ONSTART)
+        # 3. Configura script do servico de autenticacao na pasta de dados
+        auth_bat = PROGRAMDATA_DIR / "iniciar-auth-service.bat"
+        auth_content = (
+            "@echo off\r\n"
+            f'cd /d "{PROGRAMDATA_DIR}"\r\n'
+            f'set PYTHONPATH={root}\r\n'
+            f'start "" "{pythonw}" -m facekids.auth_service\r\n'
+        )
+        auth_bat.write_text(auth_content, encoding="ascii", errors="ignore")
+
+        # 4. Limpeza de processos residuais e tarefas anteriores
+        ps_cleanup = (
+            "schtasks.exe /end /tn FaceKidsBootAuth /f 2>$null; "
+            "schtasks.exe /delete /tn FaceKidsBootAuth /f 2>$null; "
+            "schtasks.exe /end /tn FaceKidsAuthService /f 2>$null; "
+            "schtasks.exe /delete /tn FaceKidsAuthService /f 2>$null; "
+            "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { "
+            "$_.CommandLine -like '*auth_service*' -or $_.CommandLine -like '*boot_auth*' "
+            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_cleanup], timeout=10.0)
+
+        # 5. Tarefa Agendada 1: FaceKidsAuthService (Interativa com privilegios elevados)
+        # O Windows 10/11 bloqueia acesso a webcam na Sessao 0 (SYSTEM). Para autenticar
+        # na tela de bloqueio (Win+L), o servico deve rodar na sessao interativa do usuario.
         ps_auth = (
-            f"$action = New-ScheduledTaskAction -Execute '{pythonw}' -WorkingDirectory '{root}' -Argument '-m facekids.auth_service'; "
-            f"$trigger = New-ScheduledTaskTrigger -AtStartup; "
-            f"$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest; "
+            f"$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name; "
+            f"$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/d /c \"{auth_bat}\"'; "
+            f"$trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser; "
+            f"$principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Highest; "
             f"$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 4; "
             f"Register-ScheduledTask -TaskName 'FaceKidsAuthService' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null; "
             f"Start-ScheduledTask -TaskName 'FaceKidsAuthService' -ErrorAction SilentlyContinue"
         )
         _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_auth], timeout=15.0)
 
-        # 4. Tarefa Agendada 2: FaceKidsFilhosAgent (Interativo no Logon de Filhos)
+        # 6. Atalho no Startup do usuario como contingencia garantida e inicializacao imediata
+        ps_startup = (
+            f"$userStartup = \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\"; "
+            f"$vbsPath = Join-Path $userStartup 'FaceKidsAuthService.vbs'; "
+            f"$vbsCode = 'Set WshShell = CreateObject(\"WScript.Shell\")' + [Environment]::NewLine + "
+            f"'WshShell.CurrentDirectory = \"{PROGRAMDATA_DIR}\"' + [Environment]::NewLine + "
+            f"'WshShell.Run \"\"\"{pythonw}\"\" -m facekids.auth_service\", 0, False'; "
+            f"Set-Content -Path $vbsPath -Value $vbsCode -Encoding ASCII -Force; "
+            f"Start-Process -FilePath 'wscript.exe' -ArgumentList \"`\"$vbsPath`\"\" -WindowStyle Hidden"
+        )
+        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_startup], timeout=10.0)
+
+        # 7. Tarefa Agendada 2: FaceKidsFilhosAgent (Interativo no Logon de Filhos)
         ps_agent = (
             f"$filhosAccount = \"$env:COMPUTERNAME\\Filhos\"; "
             f"$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/d /c \"{agent_bat}\"'; "
@@ -370,7 +407,9 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
             f"Remove-Item -Path \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\$clsid\" -Recurse -Force -ErrorAction SilentlyContinue; "
             f"Remove-Item -Path \"HKLM:\\SOFTWARE\\Classes\\CLSID\\$clsid\" -Recurse -Force -ErrorAction SilentlyContinue; "
             f"Remove-Item -Path \"HKLM:\\SOFTWARE\\FaceControlKidsPC\" -Recurse -Force -ErrorAction SilentlyContinue; "
-            f"Remove-ItemProperty -Path \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"FaceKidsAuthService\" -Force -ErrorAction SilentlyContinue"
+            f"Remove-ItemProperty -Path \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"FaceKidsAuthService\" -Force -ErrorAction SilentlyContinue; "
+            f"$userStartup = \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\FaceKidsAuthService.vbs\"; "
+            f"Remove-Item -Path $userStartup -Force -ErrorAction SilentlyContinue"
         )
         _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_unreg], timeout=10.0)
 
