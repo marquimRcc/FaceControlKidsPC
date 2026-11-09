@@ -25,6 +25,33 @@ import facekids.storage
 import facekids.auth_service
 import facekids.filhos_agent
 
+def is_admin() -> bool:
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
+
+def ensure_admin_if_needed():
+    """Garante privilegios de Administrador para instalacao ou painel sem elevar o agente."""
+    if sys.platform != "win32":
+        return
+    args_lower = " ".join(sys.argv[1:]).lower()
+    # O agente da sessao de Filhos DEVE rodar com privilegios limitados (sem UAC)
+    if "filhos_agent" in args_lower or "--filhos-agent" in args_lower:
+        return
+
+    if not is_admin():
+        import ctypes
+        params = " ".join([f'"{a}"' for a in sys.argv[1:]])
+        ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+        if ret > 32:
+            sys.exit(0)
+
+
 if __name__ == "__main__":
     # Despacho direto de servicos de segundo plano se acionado via Task Scheduler ou scripts
     args_lower = " ".join(sys.argv[1:]).lower()
@@ -34,6 +61,9 @@ if __name__ == "__main__":
     elif "filhos_agent" in args_lower or "--filhos-agent" in args_lower:
         from facekids.filhos_agent import run_agent
         sys.exit(run_agent())
+
+    # Se for instalador ou dashboard, garante elevacao uma unica vez para o administrador
+    ensure_admin_if_needed()
 
     # Como este binario e o Instalador oficial (FaceKids-Instalador.exe),
     # o comportamento padrao e sempre abrir o Assistente de Instalacao (wizard).

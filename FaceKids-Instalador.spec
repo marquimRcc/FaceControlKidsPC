@@ -53,6 +53,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    uac_admin=True,
+    uac_admin=False,
     icon='C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/assets/facekids.ico',
 )
