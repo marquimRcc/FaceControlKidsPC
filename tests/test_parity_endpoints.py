@@ -158,13 +158,33 @@ class TestParityEndpoints(unittest.TestCase):
     def test_child_delete_endpoint(self):
         """Valida POST /api/child/delete removendo cadastro."""
         with patch("facekids.app_server.Storage") as mock_storage_cls, \
-             patch("facekids.app_server.remove_child_avatar_files"):
+             patch("facekids.app_server.remove_child_avatar_files") as mock_remove_files:
             mock_store = MagicMock()
             mock_storage_cls.return_value = mock_store
             status, data = self._post_json("/api/child/delete", {"child_id": 5})
             self.assertEqual(status, 200)
             self.assertTrue(data.get("ok"))
-            mock_store.remove_person.assert_called_once_with(5)
+            mock_store.delete_person.assert_called_once_with(5)
+            mock_remove_files.assert_called_once_with(5)
+
+    def test_child_delete_endpoint_real_db(self):
+        """Valida POST /api/child/delete com banco de dados real SQLite."""
+        from facekids.storage import Storage
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test_delete.sqlite3"
+            store = Storage(db_path)
+            cid = store.add_person("Teste Exclusao", 60)
+            store.close()
+            with patch("facekids.app_server.DEFAULT_DB_FILE", db_path), \
+                 patch("facekids.app_server.remove_child_avatar_files"):
+                status, data = self._post_json("/api/child/delete", {"child_id": cid})
+                self.assertEqual(status, 200)
+                self.assertTrue(data.get("ok"))
+
+            store2 = Storage(db_path)
+            people = store2.people()
+            store2.close()
+            self.assertFalse(any(p[0] == cid for p in people))
 
     def test_child_rename_endpoint(self):
         """Valida POST /api/child/rename atualizando nome da crianca no banco de dados."""

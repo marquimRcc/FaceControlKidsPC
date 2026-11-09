@@ -589,9 +589,14 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
         store = Storage(DEFAULT_DB_FILE)
         try:
-            store.remove_person(cid)
+            store.delete_person(cid)
             remove_child_avatar_files(cid)
             self.send_json({"ok": True, "message": "Perfil infantil removido com sucesso."})
+        except KeyError:
+            self.send_json({"ok": False, "error": f"Perfil #{cid} nao encontrado."}, 404)
+        except Exception as e:
+            logger.error(f"Erro ao remover perfil #{cid}: {e}")
+            self.send_json({"ok": False, "error": f"Erro ao remover perfil: {e}"}, 500)
         finally:
             store.close()
 

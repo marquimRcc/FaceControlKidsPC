@@ -125,6 +125,10 @@ class Storage:
             if removed != 1:
                 raise KeyError(person_id)
 
+    def remove_person(self, person_id: int) -> None:
+        """Alias para delete_person garantindo compatibilidade retroativa."""
+        return self.delete_person(person_id)
+
     def set_daily_limit(self, person_id: int, minutes: int):
         if not 1 <= minutes <= 1440:
             raise ValueError("Limite permitido: 1 a 1440 minutos.")

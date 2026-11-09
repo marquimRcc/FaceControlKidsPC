@@ -179,6 +179,10 @@ class StorageTest(unittest.TestCase):
                 db.delete_person(child)
             with self.assertRaises(ValueError):
                 db.delete_person(True)
+
+            # Testa o alias remove_person
+            db.remove_person(other)
+            self.assertEqual(db.people(), [])
             db.close()
 
     def test_get_history(self):

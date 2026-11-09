@@ -150,7 +150,7 @@ def set_child_photo_from_file(
 
 
 def remove_child_avatar_files(child_id: int) -> bool:
-    """Remove os arquivos de foto e avatar da crianca do disco."""
+    """Remove os arquivos de foto, avatar e pasta de amostras da crianca do disco."""
     removed = False
     for fname in [f"crianca_{child_id}_avatar.png", f"crianca_{child_id}.jpg"]:
         p = AVATAR_DIR / fname
@@ -160,6 +160,14 @@ def remove_child_avatar_files(child_id: int) -> bool:
                 removed = True
             except Exception as e:
                 logger.warning("Falha ao remover arquivo %s: %s", p, e)
+    s_dir = AVATAR_DIR / f"amostras_{child_id}"
+    if s_dir.exists():
+        import shutil
+        try:
+            shutil.rmtree(s_dir, ignore_errors=True)
+            removed = True
+        except Exception as e:
+            logger.warning("Falha ao remover pasta de amostras %s: %s", s_dir, e)
     return removed
 
 
