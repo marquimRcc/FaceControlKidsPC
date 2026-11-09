@@ -421,12 +421,13 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
     pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
     target_exe = None
     args = ""
-    if getattr(sys, "frozen", False):
-        target_exe = Path(sys.executable)
-        args = "--mode=dashboard"
-    elif pythonw.exists():
+    # Prioriza sempre o pythonw.exe assinado para evitar bloqueio do Smart App Control do Windows 11
+    if pythonw.exists():
         target_exe = pythonw
         args = "-m facekids.app_window --mode=dashboard"
+    elif getattr(sys, "frozen", False):
+        target_exe = Path(sys.executable)
+        args = "--mode=dashboard"
     else:
         target_exe = Path(sys.executable)
         args = "-m facekids.app_window --mode=dashboard"
