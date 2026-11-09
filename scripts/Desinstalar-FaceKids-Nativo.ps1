@@ -6,7 +6,10 @@
   Preserva intactos os bancos de dados biometricos e cadastros dos filhos.
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$RemoveData,
+    [switch]$RemoveWindowsUser
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
 $dllTarget = 'C:\ProgramData\FaceKids\FaceKidsCredentialProvider.dll'
@@ -24,6 +27,8 @@ Stop-ScheduledTask -TaskName 'FaceKidsBootAuth' -ErrorAction SilentlyContinue
 
 # 1. Parar processos do FaceKids (auth_service e filhos_agent)
 Write-Host "1. Parando processos em segundo plano..." -ForegroundColor Cyan
+& taskkill.exe /F /IM FaceKids-Instalador.exe /T 2>&1 | Out-Null
+& taskkill.exe /F /IM pythonw.exe /T 2>&1 | Out-Null
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { 
     $_.CommandLine -like "*auth_service*" -or $_.CommandLine -like "*filhos_agent*" -or $_.CommandLine -like "*-m facekids.boot_auth*"
 } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -110,8 +115,21 @@ foreach ($item in $checklist.Keys) {
     }
 }
 Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
-Write-Host " [PRESERVADO] Banco de dados e fotos em C:\ProgramData\FaceKids" -ForegroundColor Cyan
-Write-Host " [PRESERVADO] Contas Windows (MarcosMiniPC e Filhos) intactas" -ForegroundColor Cyan
+if ($RemoveData) {
+    Write-Host "Removendo todos os dados em C:\ProgramData\FaceKids..." -ForegroundColor Cyan
+    cmd.exe /c "rd /s /q C:\ProgramData\FaceKids" 2>&1 | Out-Null
+    Remove-Item -LiteralPath "C:\ProgramData\FaceKids" -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host " [REMOVIDO] Banco de dados e fotos em C:\ProgramData\FaceKids" -ForegroundColor Yellow
+} else {
+    Write-Host " [PRESERVADO] Banco de dados e fotos em C:\ProgramData\FaceKids" -ForegroundColor Cyan
+}
+if ($RemoveWindowsUser) {
+    Write-Host "Removendo conta Windows 'Filhos'..." -ForegroundColor Cyan
+    & net user Filhos /delete 2>&1 | Out-Null
+    Write-Host " [REMOVIDO] Conta Windows Filhos excluida" -ForegroundColor Yellow
+} else {
+    Write-Host " [PRESERVADO] Contas Windows (MarcosMiniPC e Filhos) intactas" -ForegroundColor Cyan
+}
 Write-Host "============================================================" -ForegroundColor Yellow
 
 if ($allPassed) {
