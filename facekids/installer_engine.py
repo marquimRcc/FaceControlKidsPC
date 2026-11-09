@@ -424,13 +424,13 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
     # Prioriza sempre o pythonw.exe assinado para evitar bloqueio do Smart App Control do Windows 11
     if pythonw.exists():
         target_exe = pythonw
-        args = "-m facekids.app_window --mode=dashboard"
+        args = "-m facekids.launcher --admin"
     elif getattr(sys, "frozen", False):
         target_exe = Path(sys.executable)
-        args = "--mode=dashboard"
+        args = "--admin"
     else:
         target_exe = Path(sys.executable)
-        args = "-m facekids.app_window --mode=dashboard"
+        args = "-m facekids.launcher --admin"
 
     destinations = [desktop]
     if start_menu.exists():

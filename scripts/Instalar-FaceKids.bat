@@ -10,13 +10,13 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 echo ========================================================
 echo       Iniciando Instalador Moderno FaceKids...
 echo ========================================================
 
 if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -m facekids.app_window --mode=wizard
+    ".venv\Scripts\python.exe" -m facekids.launcher --setup
 ) else (
-    python -m facekids.app_window --mode=wizard
+    python -m facekids.launcher --setup
 )

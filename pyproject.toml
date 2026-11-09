@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "facecontrolkidspc"
+version = "2.0.0"
+description = "Controle Parental Inteligente com Reconhecimento Facial para Windows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "FaceKids Team" }
+]
+dependencies = [
+    "opencv-python>=4.10,<5",
+    "numpy>=1.26,<3",
+]
+
+[project.scripts]
+facekids = "facekids.launcher:main"
+facekids-admin = "facekids.launcher:admin_main"
+facekids-installer = "facekids.launcher:installer_main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["facekids*"]
+
+[tool.setuptools.package-data]
+facekids = [
+    "ui_assets/*",
+    "ui_assets/**/*",
+]

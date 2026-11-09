@@ -16,3 +16,5 @@ dist/
 build/
 *.spec
 *.lnk
+
+*.egg-info/
