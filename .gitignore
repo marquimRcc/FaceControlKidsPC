@@ -15,3 +15,4 @@ auditoria_*.txt
 dist/
 build/
 *.spec
+*.lnk
