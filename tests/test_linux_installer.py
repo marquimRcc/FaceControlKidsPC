@@ -77,14 +77,19 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn('chown "${CHILD_USER}:${CHILD_GROUP}"', setup)
 
     def test_electron_uses_sandbox_compatible_commonjs_preload(self):
-        desktop = ROOT / "apps" / "desktop"
+        desktop = ROOT / "legacy" / "electron-prototype" / "apps" / "desktop"
+        if not desktop.exists():
+            desktop = ROOT / "apps" / "desktop"
         main = (desktop / "electron" / "main.ts").read_text(encoding="utf-8")
         self.assertIn('preload: path.join(here, "preload.cjs")', main)
         self.assertTrue((desktop / "electron" / "preload.cts").is_file())
         self.assertFalse((desktop / "electron" / "preload.ts").exists())
 
     def test_electron_window_uses_packaged_facekids_icon(self):
-        main = (ROOT / "apps" / "desktop" / "electron" / "main.ts").read_text(
+        main_file = ROOT / "legacy" / "electron-prototype" / "apps" / "desktop" / "electron" / "main.ts"
+        if not main_file.exists():
+            main_file = ROOT / "apps" / "desktop" / "electron" / "main.ts"
+        main = main_file.read_text(
             encoding="utf-8"
         )
         self.assertIn(

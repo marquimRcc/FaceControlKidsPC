@@ -10,7 +10,10 @@ from facekids.parent_ui_state import filter_children, load_overview, validate_sc
 class ParentDashboardEntrypointTests(unittest.TestCase):
     def test_bat_launches_the_modernized_parent_dashboard(self):
         root = Path(__file__).resolve().parents[1]
-        launcher = (root / "abrir-facekids.bat").read_text(encoding="utf-8")
+        launcher_file = root / "scripts" / "legacy" / "abrir-facekids.bat"
+        if not launcher_file.exists():
+            launcher_file = root / "abrir-facekids.bat"
+        launcher = launcher_file.read_text(encoding="utf-8")
         self.assertIn("-m facekids.admin_dashboard", launcher)
         self.assertTrue(callable(admin_dashboard.main))
         self.assertTrue(issubclass(admin_dashboard.AdminDashboard, admin_dashboard.tk.Tk))

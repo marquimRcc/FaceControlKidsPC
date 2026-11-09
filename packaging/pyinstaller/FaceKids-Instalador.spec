@@ -1,16 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
+# Raiz do projeto relativa ao local do .spec (packaging/pyinstaller/)
+ROOT = Path(SPECPATH).resolve().parent.parent
 
 a = Analysis(
-    ['C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/installer_runner.py'],
-    pathex=['C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC'],
+    [str(ROOT / 'packaging' / 'installer_runner.py')],
+    pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        ('C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/facekids', 'facekids'),
-        ('C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/facekids/ui_assets', 'facekids/ui_assets'),
-        ('C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/assets', 'assets'),
-        ('C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/models', 'models'),
-        ('C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/native/credential_provider_facekids/FaceKidsCredentialProvider.dll', 'native/credential_provider_facekids')
+        (str(ROOT / 'facekids'), 'facekids'),
+        (str(ROOT / 'facekids' / 'ui_assets'), 'facekids/ui_assets'),
+        (str(ROOT / 'assets'), 'assets'),
+        (str(ROOT / 'models'), 'models'),
+        (str(ROOT / 'native' / 'credential_provider_facekids' / 'FaceKidsCredentialProvider.dll'), 'native/credential_provider_facekids')
     ],
     hiddenimports=[
         'facekids.app_window',
@@ -54,5 +57,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     uac_admin=False,
-    icon='C:/Users/MarcosMiniPC/Documents/git/FaceControlKidsPC/assets/facekids.ico',
+    icon=str(ROOT / 'assets' / 'facekids.ico'),
 )

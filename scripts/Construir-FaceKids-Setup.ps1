@@ -25,7 +25,10 @@ if (-not (Test-Path -LiteralPath $dllPath)) {
 }
 
 # 2. Limpa qualquer executável anterior na pasta dist
-$entryScript = Join-Path $root 'installer_runner.py'
+$entryScript = Join-Path $root 'packaging\installer_runner.py'
+if (-not (Test-Path -LiteralPath $entryScript)) {
+    $entryScript = Join-Path $root 'installer_runner.py'
+}
 $distDir = Join-Path $root 'dist'
 $buildDir = Join-Path $root 'build'
 

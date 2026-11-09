@@ -82,7 +82,10 @@ class TestInstallerScripts(unittest.TestCase):
         self.assertIn("Startup solicitado para %USERNAME%", inst)
         # Ativacao automatica da tarefa de boot (SYSTEM)
         self.assertIn("Ativar-Desbloqueio-No-Boot.ps1", inst)
-        self.assertTrue((self.root / "Ativar-Desbloqueio-No-Boot.bat").exists())
+        bat_boot = self.root / "scripts" / "Ativar-Desbloqueio-No-Boot.bat"
+        if not bat_boot.exists():
+            bat_boot = self.root / "Ativar-Desbloqueio-No-Boot.bat"
+        self.assertTrue(bat_boot.exists())
 
     def test_simulated_runtime_cleanup_preserves_database(self):
         with tempfile.TemporaryDirectory() as td:

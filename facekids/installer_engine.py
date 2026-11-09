@@ -453,7 +453,9 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
             _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_shortcut], timeout=5.0, capture=False)
 
             # 2. Atalho do Desinstalador
-            uninst_bat = root / "Desinstalar-FaceKids.bat"
+            uninst_bat = root / "scripts" / "Desinstalar-FaceKids.bat"
+            if not uninst_bat.exists():
+                uninst_bat = root / "Desinstalar-FaceKids.bat"
             if uninst_bat.exists():
                 lnk_uninst = dest / "Desinstalar FaceKids.lnk"
                 ps_uninst = (

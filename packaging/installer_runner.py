@@ -7,7 +7,8 @@ from pathlib import Path
 if hasattr(sys, "_MEIPASS"):
     root_dir = Path(sys._MEIPASS)
 else:
-    root_dir = Path(__file__).resolve().parent
+    current_dir = Path(__file__).resolve().parent
+    root_dir = current_dir.parent if current_dir.name in ("packaging", "scripts") else current_dir
 
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
