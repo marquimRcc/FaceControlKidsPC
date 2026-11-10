@@ -1,6 +1,10 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param()
+param(
+    [string]$CertificatePath = $env:FACEKIDS_SIGNING_CERT,
+    [string]$CertificatePassword = $env:FACEKIDS_SIGNING_PASSWORD,
+    [string]$TimestampServer = "http://timestamp.digicert.com"
+)
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -10,6 +14,36 @@ if (-not (Test-Path -LiteralPath $python)) { throw 'Ambiente de compilacao .venv
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Compilador .NET Framework x64 ausente.' }
 $base = & $python -c 'import sys; assert sys.maxsize > 2**32; print(sys.base_prefix)'
 if ($LASTEXITCODE -ne 0 -or -not $base) { throw 'Python x64 necessario para gerar o EXE.' }
+
+function Invoke-FaceKidsCodeSign([string]$FilePath) {
+    if (-not $CertificatePath -or -not (Test-Path -LiteralPath $CertificatePath)) {
+        return
+    }
+    Write-Host "[FaceKids] Assinando digitalmente: $FilePath" -ForegroundColor Cyan
+    try {
+        $cert = $null
+        if ($CertificatePassword) {
+            $securePass = ConvertTo-SecureString $CertificatePassword -AsPlainText -Force
+            $cert = Get-PfxCertificate -FilePath $CertificatePath -Password $securePass
+        } else {
+            $cert = Get-PfxCertificate -FilePath $CertificatePath
+        }
+        $sig = Set-AuthenticodeSignature -FilePath $FilePath -Certificate $cert -TimestampServer $TimestampServer -HashAlgorithm SHA256
+        if ($sig.Status -notin @('Valid', 'UnknownError')) {
+            Write-Warning "Assinatura de $FilePath retornou status: $($sig.Status) ($($sig.StatusMessage))"
+        } else {
+            Write-Host "[FaceKids] Arquivo assinado com sucesso ($($sig.Status))." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "Falha ao assinar $FilePath : $_"
+    }
+}
+
+if ($CertificatePath -and (Test-Path -LiteralPath $CertificatePath)) {
+    Write-Host "[FaceKids] Certificado de assinatura configurado: $CertificatePath" -ForegroundColor Green
+} else {
+    Write-Host "[FaceKids] Aviso: Nenhum certificado de assinatura fornecido. O instalador sera gerado sem assinatura digital." -ForegroundColor Yellow
+}
 
 $dist = Join-Path $root 'dist'
 $null = New-Item -ItemType Directory -Path $dist -Force
@@ -40,7 +74,9 @@ try {
     $dllDir = Join-Path $payload 'native\credential_provider_facekids'
     $scriptsDir = Join-Path $payload 'scripts'
     $null = New-Item -ItemType Directory -Path $dllDir, $scriptsDir -Force
-    Copy-Item -LiteralPath (Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll') -Destination $dllDir
+    $targetDll = Join-Path $dllDir 'FaceKidsCredentialProvider.dll'
+    Copy-Item -LiteralPath (Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll') -Destination $targetDll
+    Invoke-FaceKidsCodeSign -FilePath $targetDll
     foreach ($name in @('Ativar-Desbloqueio-No-Boot.ps1', 'Preparar-Perfil-Filhos.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsDir
     }
@@ -72,6 +108,7 @@ try {
 
     Copy-Item -LiteralPath $candidate -Destination $dist -Force
     $outputExe = Join-Path $dist 'FaceKids-Instalador-Windows-x64.exe'
+    Invoke-FaceKidsCodeSign -FilePath $outputExe
     Get-FileHash -LiteralPath $outputExe -Algorithm SHA256
     $test = Start-Process -FilePath $outputExe -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru
     if ($test.ExitCode -ne 0) { throw "O EXE nao passou no autoteste (codigo $($test.ExitCode))." }

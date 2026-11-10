@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag de versão para publicação (ex: v2.0.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Single-EXE Installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run unit test suite
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Prepare code signing certificate (if secrets available)
+        id: prepare-cert
+        shell: pwsh
+        run: |
+          $certBase64 = "${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}"
+          if ($certBase64) {
+              $certBytes = [Convert]::FromBase64String($certBase64)
+              $certPath = Join-Path $env:RUNNER_TEMP "facekids_signing_cert.pfx"
+              [IO.File]::WriteAllBytes($certPath, $certBytes)
+              Add-Content -Path $env:GITHUB_ENV -Value "FACEKIDS_SIGNING_CERT=$certPath"
+              if ("${{ secrets.WINDOWS_SIGNING_PASSWORD }}") {
+                  Add-Content -Path $env:GITHUB_ENV -Value "FACEKIDS_SIGNING_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
+              }
+              Write-Host "Certificado de assinatura preparado com sucesso."
+          } else {
+              Write-Host "Segredo de assinatura ausente. O executavel sera gerado sem assinatura digital."
+          }
+
+      - name: Build FaceKids-Instalador-Windows-x64.exe
+        shell: pwsh
+        run: |
+          & scripts/Construir-FaceKids-Setup.ps1
+
+      - name: Clean up signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "facekids_signing_cert.pfx"
+          if (Test-Path -LiteralPath $certPath) {
+              Remove-Item -LiteralPath $certPath -Force
+          }
+
+      - name: Upload Windows Installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/FaceKids-Instalador-Windows-x64.exe
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release_assets
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd release_assets
+          sha256sum FaceKids-Instalador-Windows-x64.exe > SHA256SUMS.txt
+          echo "Hashes de integridade:"
+          cat SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+        run: |
+          FINAL_TAG="${INPUT_TAG:-$TAG_NAME}"
+          if [ -z "$FINAL_TAG" ] || [ "$FINAL_TAG" = "main" ]; then
+            FINAL_TAG="v2.0.0-snapshot"
+          fi
+          echo "Publicando release para tag: $FINAL_TAG"
+          gh release create "$FINAL_TAG" \
+            release_assets/FaceKids-Instalador-Windows-x64.exe \
+            release_assets/SHA256SUMS.txt \
+            --title "FaceKids $FINAL_TAG" \
+            --generate-notes
