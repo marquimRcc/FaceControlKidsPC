@@ -1,88 +1,85 @@
-<#
-.SYNOPSIS
-  Compila o instalador unificado autônomo 'FaceKids-Instalador.exe' usando PyInstaller.
-.DESCRIPTION
-  Empacota o pacote facekids completo, o frontend moderno (Conceito A), os modelos faciais ONNX,
-  a DLL Credential Provider e o motor de instalação em um único executável .exe.
-#>
+#Requires -Version 5.1
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $python = Join-Path $root '.venv\Scripts\python.exe'
-$pyinstaller = Join-Path $root '.venv\Scripts\pyinstaller.exe'
+$compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+if (-not (Test-Path -LiteralPath $python)) { throw 'Ambiente de compilacao .venv ausente.' }
+if (-not (Test-Path -LiteralPath $compiler)) { throw 'Compilador .NET Framework x64 ausente.' }
+$base = & $python -c 'import sys; assert sys.maxsize > 2**32; print(sys.base_prefix)'
+if ($LASTEXITCODE -ne 0 -or -not $base) { throw 'Python x64 necessario para gerar o EXE.' }
 
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "     Construindo FaceKids-Instalador.exe" -ForegroundColor Cyan
-Write-Host "============================================================" -ForegroundColor Cyan
+$dist = Join-Path $root 'dist'
+$null = New-Item -ItemType Directory -Path $dist -Force
+$scratch = Join-Path $root ('build\windows-' + [Guid]::NewGuid().ToString('N'))
+$payload = Join-Path $scratch 'payload'
+$runtime = Join-Path $payload 'runtime'
+$null = New-Item -ItemType Directory -Path $runtime -Force
+try {
+    foreach ($name in @('python.exe', 'pythonw.exe', 'LICENSE.txt', 'DLLs', 'tcl')) {
+        Copy-Item -LiteralPath (Join-Path $base $name) -Destination $runtime -Recurse
+    }
+    Get-ChildItem -LiteralPath $base -Filter '*.dll' -File | Copy-Item -Destination $runtime
+    $lib = Join-Path $runtime 'Lib'
+    $sitePackages = Join-Path $lib 'site-packages'
+    $null = New-Item -ItemType Directory -Path $sitePackages -Force
+    Get-ChildItem -LiteralPath (Join-Path $base 'Lib') |
+        Where-Object { $_.Name -notin @('site-packages', '__pycache__', 'test', 'ensurepip') } |
+        Copy-Item -Destination $lib -Recurse
+    $venvSite = Join-Path $root '.venv\Lib\site-packages'
+    foreach ($pattern in @('numpy', 'numpy.libs', 'numpy-*.dist-info', 'cv2', 'opencv_python-*.dist-info')) {
+        $items = @(Get-ChildItem -LiteralPath $venvSite -Filter $pattern)
+        if (-not $items) { throw "Dependencia ausente no ambiente de compilacao: $pattern" }
+        $items | Copy-Item -Destination $sitePackages -Recurse
+    }
+    foreach ($name in @('facekids', 'assets', 'models')) {
+        Copy-Item -LiteralPath (Join-Path $root $name) -Destination $payload -Recurse
+    }
+    $dllDir = Join-Path $payload 'native\credential_provider_facekids'
+    $scriptsDir = Join-Path $payload 'scripts'
+    $null = New-Item -ItemType Directory -Path $dllDir, $scriptsDir -Force
+    Copy-Item -LiteralPath (Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll') -Destination $dllDir
+    foreach ($name in @('Ativar-Desbloqueio-No-Boot.ps1', 'Preparar-Perfil-Filhos.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsDir
+    }
+    if (Test-Path -LiteralPath (Join-Path $root 'LICENSE')) {
+        Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $payload
+    }
+    Push-Location $payload
+    try {
+        & (Join-Path $runtime 'python.exe') -E -s -m facekids.package_check
+        if ($LASTEXITCODE -ne 0) { throw "Runtime do pacote invalido (codigo $LASTEXITCODE)." }
+    } finally {
+        Pop-Location
+    }
 
-# 1. Garante que a DLL nativa está compilada
-$dllPath = Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll'
-if (-not (Test-Path -LiteralPath $dllPath)) {
-    Write-Host "Compilando DLL Credential Provider..." -ForegroundColor Yellow
-    & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'native\credential_provider_facekids\build.ps1')
-}
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = Join-Path $scratch 'FaceKidsPayload.zip'
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($payload, $zip)
+    $candidate = Join-Path $scratch 'FaceKids-Instalador-Windows-x64.exe'
+    $manifest = Join-Path $root 'packaging\windows-installer.manifest'
+    $icon = Join-Path $root 'assets\facekids.ico'
+    $compilerArgs = @(
+        '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
+        '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
+        '/reference:System.Windows.Forms.dll', "/resource:$zip,FaceKidsPayload", "/out:$candidate",
+        "/win32manifest:$manifest", "/win32icon:$icon", (Join-Path $root 'packaging\WindowsInstaller.cs')
+    )
+    & $compiler @compilerArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Falha ao compilar o instalador.' }
 
-# 2. Limpa qualquer executável anterior na pasta dist
-$entryScript = Join-Path $root 'packaging\installer_runner.py'
-if (-not (Test-Path -LiteralPath $entryScript)) {
-    $entryScript = Join-Path $root 'installer_runner.py'
-}
-$distDir = Join-Path $root 'dist'
-$buildDir = Join-Path $root 'build'
-
-if (Test-Path -LiteralPath $distDir) {
-    Get-ChildItem -Path $distDir -Filter "*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-}
-
-$facekidsPkg = Join-Path $root 'facekids'
-$uiAssets = Join-Path $root 'facekids\ui_assets'
-$modelsDir = Join-Path $root 'models'
-
-Write-Host "Empacotando com PyInstaller em arquivo executável único..." -ForegroundColor Yellow
-
-$pyinstallerArgs = @(
-    '--noconfirm',
-    '--onefile',
-    '--windowed',
-    '--uac-admin',
-    '--name', 'FaceKids-Instalador',
-    '--paths', $root,
-    '--hidden-import', 'facekids.app_window',
-    '--hidden-import', 'facekids.app_server',
-    '--hidden-import', 'facekids.camera_service',
-    '--hidden-import', 'facekids.installer_engine',
-    '--hidden-import', 'facekids.session_secret',
-    '--hidden-import', 'facekids.admin_auth',
-    '--hidden-import', 'facekids.storage',
-    "--add-data", "$facekidsPkg;facekids",
-    "--add-data", "$uiAssets;facekids/ui_assets",
-    "--add-data", "$modelsDir;models",
-    "--add-data", "$dllPath;native/credential_provider_facekids",
-    "--distpath", $distDir,
-    "--workpath", $buildDir,
-    $entryScript
-)
-
-& $pyinstaller @pyinstallerArgs
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Falha ao compilar FaceKids-Instalador.exe com PyInstaller."
-}
-
-# Remove quaisquer outros executáveis mantendo apenas FaceKids-Instalador.exe
-Get-ChildItem -Path $distDir -Filter "*.exe" | Where-Object { $_.Name -ne 'FaceKids-Instalador.exe' } | Remove-Item -Force -ErrorAction SilentlyContinue
-
-$outputExe = Join-Path $distDir 'FaceKids-Instalador.exe'
-if (Test-Path -LiteralPath $outputExe) {
-    $sizeMb = [math]::Round(((Get-Item $outputExe).Length / 1MB), 2)
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  FaceKids-Instalador.exe GERADO COM SUCESSO!" -ForegroundColor Green
-    Write-Host "  Caminho: $outputExe" -ForegroundColor Green
-    Write-Host "  Tamanho: $sizeMb MB" -ForegroundColor Green
-    Write-Host "============================================================" -ForegroundColor Green
-} else {
-    throw "O arquivo FaceKids-Instalador.exe não foi encontrado na pasta dist."
+    Copy-Item -LiteralPath $candidate -Destination $dist -Force
+    $outputExe = Join-Path $dist 'FaceKids-Instalador-Windows-x64.exe'
+    Get-FileHash -LiteralPath $outputExe -Algorithm SHA256
+    $test = Start-Process -FilePath $outputExe -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru
+    if ($test.ExitCode -ne 0) { throw "O EXE nao passou no autoteste (codigo $($test.ExitCode))." }
+} finally {
+    $resolved = (Resolve-Path -LiteralPath $scratch).Path
+    $buildRoot = (Resolve-Path -LiteralPath (Join-Path $root 'build')).Path
+    if ([IO.Path]::GetDirectoryName($resolved) -eq $buildRoot -and
+        [IO.Path]::GetFileName($resolved) -match '^windows-[a-f0-9]{32}$') {
+        Remove-Item -LiteralPath $resolved -Recurse -Force
+    }
 }

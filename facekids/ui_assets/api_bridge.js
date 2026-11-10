@@ -64,7 +64,7 @@ const FaceKidsAPI = {
   async install(pin, childName, limitHours, filhosPassword = "", filhosUsername = "Filhos") {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout seguro
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
 
       const res = await fetch(`${this.baseUrl}/api/install`, {
         method: "POST",
@@ -260,12 +260,12 @@ const FaceKidsAPI = {
     }
   },
 
-  async startEnrollment(childId = 1) {
+  async startEnrollment(childId = 1, childName = null) {
     try {
       const res = await fetch(`${this.baseUrl}/api/camera/enroll/start`, {
         method: "POST",
         headers: this.getHeaders(),
-        body: JSON.stringify({ child_id: childId })
+        body: JSON.stringify({ child_id: childId, child_name: childName })
       });
       return await res.json();
     } catch (e) {
@@ -358,6 +358,11 @@ async function runLiveDiagnostics() {
   const userBadge = document.getElementById("diagUserBadge");
   if (userBadge) {
     userBadge.innerText = diag.filhos_user_exists ? "Pronta" : "Sera criada auto";
+  }
+  const password = document.getElementById("wizardFilhosPass");
+  if (password && diag.filhos_user_exists && password.value === "1") {
+    password.value = "";
+    password.placeholder = "Senha atual, se ainda não vinculada";
   }
 }
 

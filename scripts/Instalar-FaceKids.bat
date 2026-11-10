@@ -11,12 +11,16 @@ if %errorlevel% neq 0 (
 )
 
 cd /d "%~dp0.."
+echo Preparando Python e bibliotecas necessarias...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Preparar-Ambiente-FaceKids.ps1"
+if %errorlevel% neq 0 (
+    echo Nao foi possivel preparar os componentes do FaceKids.
+    pause
+    exit /b 1
+)
 echo ========================================================
 echo       Iniciando Instalador Moderno FaceKids...
 echo ========================================================
 
-if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -m facekids.launcher --setup
-) else (
-    python -m facekids.launcher --setup
-)
+cd /d "%ProgramFiles%\FaceKids"
+".venv\Scripts\python.exe" -m facekids.launcher --setup

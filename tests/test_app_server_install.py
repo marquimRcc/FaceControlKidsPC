@@ -74,6 +74,53 @@ class TestAppServerInstall(unittest.TestCase):
                     self.assertEqual(data.get("token"), mock_token)
                     self.assertEqual(data.get("message"), "Instalado com sucesso")
 
+    def test_completion_requires_facial_enrollment(self):
+        with patch("facekids.app_server.DEFAULT_DB_FILE") as db, \
+             patch("facekids.app_server.Storage") as storage, \
+             patch("facekids.app_server.setup_system") as setup:
+            db.exists.return_value = True
+            storage.return_value.get_setting.return_value = "hashed-pin"
+            storage.return_value.embeddings.return_value = []
+            req = urllib.request.Request(
+                f"{self.base_url}/api/install/complete",
+                data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req, timeout=10.0)
+            self.assertEqual(error.exception.code, 400)
+            setup.assert_not_called()
+
+    def test_completion_starts_services_after_enrollment(self):
+        with patch("facekids.app_server.DEFAULT_DB_FILE") as db, \
+             patch("facekids.app_server.Storage") as storage, \
+             patch("facekids.app_server.setup_system", return_value=(True, "pronto")) as setup:
+            db.exists.return_value = True
+            storage.return_value.get_setting.return_value = "hashed-pin"
+            storage.return_value.embeddings.return_value = [(1, "vector")]
+            req = urllib.request.Request(
+                f"{self.base_url}/api/install/complete",
+                data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10.0) as response:
+                self.assertTrue(json.loads(response.read())["ok"])
+            setup.assert_called_once_with(master_pin="")
+
+    def test_wizard_enrolls_the_named_child(self):
+        with patch("facekids.app_server.DEFAULT_DB_FILE") as db, \
+             patch("facekids.app_server.Storage") as storage, \
+             patch("facekids.app_server.CameraService.get_instance") as camera:
+            db.exists.return_value = True
+            storage.return_value.people.return_value = [(1, "Lucas"), (2, "Ana")]
+            camera.return_value.start_enrollment.return_value = {"ok": True}
+            payload = json.dumps({"child_id": 0, "child_name": "Ana"}).encode("utf-8")
+            req = urllib.request.Request(
+                f"{self.base_url}/api/camera/enroll/start", data=payload,
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10.0) as response:
+                self.assertTrue(json.loads(response.read())["ok"])
+            camera.return_value.start_enrollment.assert_called_once_with(2, db)
+
     def test_post_install_invalid_pin_returns_400(self):
         """Verifica se PIN menor que 4 digitos retorna HTTP 400 sem derrubar o socket."""
         payload = json.dumps({"pin": "12"}).encode("utf-8")

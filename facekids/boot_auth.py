@@ -99,7 +99,9 @@ def supervise(*, state_path: Path, popen=subprocess.Popen,
                          timed_out=timed_out, exit_code=process.returncode,
                          supervisor_pid=os.getpid())
             if max_attempts is None or attempt < max_attempts:
-                sleep(RETRY_DELAY)
+                # A sessao interativa ja atende o pipe; mantenha o supervisor em
+                # espera para reassumir caso ela seja encerrada.
+                sleep(30.0 if process.returncode == 20 else RETRY_DELAY)
 
 
 def main() -> int:

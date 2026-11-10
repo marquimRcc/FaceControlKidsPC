@@ -31,6 +31,7 @@ from .installer_engine import (
     ensure_filhos_windows_user,
     PROGRAMDATA_DIR,
     DEFAULT_DB_FILE,
+    INSTALL_MARKER,
     _run_win_cmd,
 )
 from .session_secret import get_session_secret
@@ -75,6 +76,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
     last_activity_time: float = time.time()
     shutdown_requested: bool = False
     is_installing: bool = False
+    install_lock = threading.Lock()
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
@@ -166,6 +168,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
 
             if path == "/api/install":
                 self.handle_install(body)
+            elif path == "/api/install/complete":
+                self.handle_install_complete()
             elif path == "/api/auth/verify":
                 self.handle_auth_verify(body)
             elif path == "/api/settings/windows-account":
@@ -211,22 +215,38 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         has_db = DEFAULT_DB_FILE.exists()
         has_pin = False
         children_count = 0
+        has_enrollment = False
+        enrolled_names = []
 
         if has_db:
             try:
                 store = Storage(DEFAULT_DB_FILE)
                 has_pin = bool(store.get_setting(AUTH_SETTING))
                 children_count = len(store.people())
+                enrolled_ids = {person_id for person_id, _ in store.embeddings()}
+                enrolled_names = [person[1] for person in store.people() if person[0] in enrolled_ids]
+                has_enrollment = bool(enrolled_names)
                 store.close()
             except Exception:
                 pass
 
-        is_installed = has_db and has_pin
+        health = verify_runtime_health() if sys.platform == "win32" else None
+        runtime_ready = health is None or all((
+            health["auth_service"]["registered"],
+            health["filhos_agent"]["registered"],
+            health["boot_auth"]["registered"],
+            health["credential_provider"]["registered"],
+            health["filhos_user"]["exists"],
+        ))
+        is_installed = has_db and has_pin and has_enrollment and INSTALL_MARKER.exists() and runtime_ready
         u, _ = get_filhos_credentials()
         self.send_json({
             "installed": is_installed,
             "has_pin": has_pin,
             "children_count": children_count,
+            "system_ready": INSTALL_MARKER.exists(),
+            "face_enrolled": has_enrollment,
+            "enrolled_names": enrolled_names,
             "windows_user": u,
             "default_mode": "dashboard" if is_installed else "wizard"
         })
@@ -265,6 +285,9 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         self.send_json({"ok": ok, "message": msg})
 
     def handle_install(self, data: Dict[str, Any]) -> None:
+        if not FaceKidsApiHandler.install_lock.acquire(blocking=False):
+            self.send_json({"ok": False, "error": "Uma instalacao ja esta em andamento."}, 409)
+            return
         FaceKidsApiHandler.is_installing = True
         FaceKidsApiHandler.last_activity_time = time.time()
         try:
@@ -272,7 +295,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             raw_child = data.get("child_name")
             first_child = str(raw_child).strip() if raw_child is not None else ""
             if not first_child or first_child.lower() in ("none", "null"):
-                first_child = "Filho" 
+                first_child = "Filho"
             limit_hours = float(data.get("daily_limit_hours", 2.0))
             limit_minutes = int(limit_hours * 60)
             filhos_pass = str(data.get("filhos_password", "")).strip()
@@ -287,7 +310,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 first_child_name=first_child if first_child else None,
                 first_child_daily_limit_minutes=limit_minutes,
                 filhos_password=filhos_pass if filhos_pass else None,
-                filhos_username=filhos_user
+                filhos_username=filhos_user,
+                defer_services=True,
             )
             current_token = get_session_secret()
             self.send_json({
@@ -304,6 +328,34 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
         finally:
             FaceKidsApiHandler.is_installing = False
             FaceKidsApiHandler.last_activity_time = time.time()
+            FaceKidsApiHandler.install_lock.release()
+
+    def handle_install_complete(self) -> None:
+        if not FaceKidsApiHandler.install_lock.acquire(blocking=False):
+            self.send_json({"ok": False, "error": "Uma instalacao ja esta em andamento."}, 409)
+            return
+        FaceKidsApiHandler.is_installing = True
+        try:
+            if not DEFAULT_DB_FILE.exists():
+                self.send_json({"ok": False, "error": "Cadastre a crianca antes de concluir."}, 400)
+                return
+            store = Storage(DEFAULT_DB_FILE)
+            try:
+                if not store.get_setting(AUTH_SETTING) or not store.embeddings():
+                    self.send_json({"ok": False, "error": "Conclua as 12 fotos do cadastro facial antes de ativar os servicos."}, 400)
+                    return
+            finally:
+                store.close()
+            ok, message = setup_system(master_pin="")
+            self.send_json({"ok": ok, "status": "success" if ok else "error", "message": message,
+                            "error": None if ok else message})
+        except Exception as exc:
+            logger.error("Erro ao concluir instalacao: %s", exc)
+            self.send_json({"ok": False, "error": str(exc)}, 500)
+        finally:
+            FaceKidsApiHandler.is_installing = False
+            FaceKidsApiHandler.last_activity_time = time.time()
+            FaceKidsApiHandler.install_lock.release()
 
     def handle_auth_verify(self, data: Dict[str, Any]) -> None:
         pin = str(data.get("pin", "")).strip()
@@ -661,8 +713,10 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                     store = Storage(DEFAULT_DB_FILE)
                     people = store.people()
                     store.close()
-                    if people:
-                        cid = people[0][0]
+                    target_name = str(body.get("child_name", "")).strip().casefold()
+                    matches = [person for person in people if person[1].casefold() == target_name] if target_name else people
+                    if matches:
+                        cid = matches[0][0]
                 except Exception:
                     pass
         if cid <= 0:

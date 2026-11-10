@@ -108,11 +108,11 @@
     <!-- ======================================================== -->
     <!-- VIEW 1: ASSISTENTE DE INSTALAÇÃO (1-CLICK SETUP WIZARD)  -->
     <!-- ======================================================== -->
-    <section id="wizardView" class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500">
+    <section id="wizardView" class="flex-1 flex flex-col items-center justify-start overflow-y-auto p-4 sm:p-6 transition-all duration-500">
       <div class="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 space-y-6 text-center glow-cyan border border-slate-700/60">
         
         <!-- Banner se ja instalado -->
-        <div id="wizardAlreadyInstalledBanner" class="p-3 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-xs text-cyan-200 flex items-center justify-between shadow-lg">
+        <div id="wizardAlreadyInstalledBanner" class="hidden p-3 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 text-xs text-cyan-200 items-center justify-between shadow-lg">
           <div class="flex items-center space-x-2 text-left">
             <span>🛡️</span>
             <span>FaceKids já configurado neste computador.</span>
@@ -220,6 +220,16 @@
             <h2 class="text-xl font-bold text-white">Defina o PIN e a Senha da Conta</h2>
             <p class="text-xs text-slate-400">Crie o PIN de administrador e informe a senha da conta supervisionada.</p>
           </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+            <div>
+              <label for="wizardChildName" class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da criança</label>
+              <input id="wizardChildName" type="text" value="Filho" maxlength="60" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs">
+            </div>
+            <div>
+              <label for="wizardDailyHours" class="block text-[11px] font-semibold text-slate-300 mb-1">Limite diário (horas)</label>
+              <input id="wizardDailyHours" type="number" value="2" min="0.5" max="24" step="0.5" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs">
+            </div>
+          </div>
 
           <!-- PIN Display -->
           <div class="flex flex-col items-center space-y-3 py-1">
@@ -263,7 +273,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da Conta Local</label>
-                <input id="wizardFilhosUser" type="text" value="Filhos" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
+                <input id="wizardFilhosUser" type="text" value="Filhos" readonly class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Senha da Conta Windows</label>
@@ -275,6 +285,10 @@
             </div>
           </div>
 
+          <div id="wizardEnrollment" class="hidden space-y-2 text-left">
+            <p id="wizardEnrollmentStatus" class="text-xs text-cyan-300">Preparando cadastro facial...</p>
+            <img id="wizardEnrollmentPreview" alt="Imagem ao vivo da webcam para cadastro facial" class="w-full max-h-48 object-contain rounded-xl bg-slate-950" />
+          </div>
           <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
             Concluir Instalação e Abrir Painel 🚀
           </button>
@@ -493,7 +507,7 @@
               <h3 class="text-sm font-bold text-white">Senha da Conta Windows (Filhos)</h3>
               <p class="text-xs text-slate-400">Redefina a senha no Windows e sincronize com o cofre seguro DPAPI.</p>
               <div class="space-y-3">
-                <input id="inputWindowsUser" type="text" value="Filhos" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-cyan-400">
+                <input id="inputWindowsUser" type="text" value="Filhos" readonly class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-cyan-400">
                 <div class="relative">
                   <input id="inputWindowsPass" type="password" placeholder="Nova senha da conta Windows..." class="w-full px-3.5 py-2.5 pr-8 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400">
                   <button type="button" onclick="togglePasswordVisibility('inputWindowsPass', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs">👁️</button>
@@ -846,51 +860,36 @@
       const userInput = document.getElementById("wizardFilhosUser");
       const filhosPass = passInput ? passInput.value.trim() : "1";
       const filhosUser = userInput ? userInput.value.trim() : "Filhos";
-
-      let res = null;
-      let lastError = null;
-
-      // Executa com retentativa automatica caso a conexao oscile durante a inicializacao
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
-            res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0, filhosPass, filhosUser);
-          } else {
-            const resp = await fetch("/api/install", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                pin: enteredWizardPin,
-                child_name: null,
-                daily_limit_hours: 2.0,
-                filhos_password: filhosPass,
-                filhos_username: filhosUser
-              })
-            });
-            res = await resp.json().catch(() => null);
-          }
-
-          if (res && (res.ok || res.status === "success")) {
-            break;
-          }
-        } catch (err) {
-          lastError = err;
-          // Se falhou por erro de rede (Failed to fetch), verifica se o servidor ja concluiu a instalacao
-          try {
-            const check = await fetch("/api/status").then(r => r.json()).catch(() => null);
-            if (check && check.installed) {
-              res = { ok: true, status: "success", token: check.token || window.__FACEKIDS_TOKEN__ };
-              break;
-            }
-          } catch (_) {}
-          if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
+      const childName = document.getElementById("wizardChildName").value.trim();
+      const dailyHours = Number(document.getElementById("wizardDailyHours").value);
+      if (!childName || !Number.isFinite(dailyHours) || dailyHours < 0.5 || dailyHours > 24) {
+        showToast("Informe o nome da criança e o limite diário.");
+        finishBtn.dataset.busy = "false";
+        finishBtn.disabled = false;
+        finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
+        return;
       }
 
-      if (!res && lastError) {
-        res = { ok: false, error: `Falha de conexão com o servidor local: ${lastError.message || lastError}` };
+      let res = null;
+      try {
+        if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
+          res = await window.FaceKidsAPI.install(enteredWizardPin, childName, dailyHours, filhosPass, filhosUser);
+        } else {
+          const resp = await fetch("/api/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pin: enteredWizardPin,
+              child_name: childName,
+              daily_limit_hours: dailyHours,
+              filhos_password: filhosPass,
+              filhos_username: filhosUser
+            })
+          });
+          res = await resp.json();
+        }
+      } catch (err) {
+        res = { ok: false, error: `Falha de conexão com o servidor local: ${err.message || err}` };
       }
 
       if (res && res.token) {
@@ -899,19 +898,58 @@
       }
 
       if (res && (res.ok || res.status === "success")) {
-        showToast("Instalação concluída com sucesso!");
-        setTimeout(() => {
+        try {
+          const status = await FaceKidsAPI.getStatus();
+          if (!status || !Array.isArray(status.enrolled_names) ||
+              !status.enrolled_names.some(name => name.toLocaleLowerCase() === childName.toLocaleLowerCase())) {
+            await enrollWizardChild(childName);
+          }
+          finishBtn.innerText = "Ativando proteção do Windows...";
+          const completeResponse = await fetch("/api/install/complete", {
+            method: "POST",
+            headers: FaceKidsAPI.getHeaders(),
+            body: "{}"
+          });
+          const completeResult = await completeResponse.json();
+          if (!completeResult.ok) throw new Error(completeResult.error || completeResult.message || "Falha ao ativar a proteção.");
+          const verified = await FaceKidsAPI.getStatus();
+          if (!verified || !verified.installed) throw new Error("Cadastro facial ainda não foi confirmado.");
+          document.getElementById("wizardEnrollmentPreview").src = "";
+          showToast("Instalação concluída com sucesso!");
           showDashboard();
           if (typeof syncDashboardData === "function") syncDashboardData();
-        }, 150);
-      } else {
-        showToast((res && res.error) ? res.error : "Erro na instalação.");
+        } catch (err) {
+          res = { ok: false, error: err.message || String(err) };
+        }
+      }
+      if (!res || !res.ok) {
+        showToast((res && (res.error || res.message)) || "Erro na instalação.");
         if (finishBtn) {
           finishBtn.dataset.busy = "false";
           finishBtn.disabled = false;
           finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
         }
       }
+    }
+
+    async function enrollWizardChild(childName) {
+      const section = document.getElementById("wizardEnrollment");
+      const statusText = document.getElementById("wizardEnrollmentStatus");
+      const preview = document.getElementById("wizardEnrollmentPreview");
+      section.classList.remove("hidden");
+      preview.src = "/api/camera/stream";
+      statusText.innerText = "Olhe para a câmera para capturar 12 fotos...";
+      const started = await FaceKidsAPI.startEnrollment(0, childName);
+      if (!started || !started.ok) throw new Error((started && started.error) || "Não foi possível iniciar a câmera.");
+      for (let attempt = 0; attempt < 240; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const state = await FaceKidsAPI.getEnrollmentStatus();
+        if (!state) continue;
+        statusText.innerText = state.message || `Capturando ${state.samples_count || 0} de 12 fotos...`;
+        if (state.error) throw new Error(state.error);
+        if (state.completed) return;
+      }
+      throw new Error("A captura facial demorou demais. Confira a webcam e tente novamente.");
     }
 
     function showWizard() {

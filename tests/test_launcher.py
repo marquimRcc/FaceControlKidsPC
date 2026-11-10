@@ -15,11 +15,14 @@ class TestLauncher(unittest.TestCase):
 
     def test_is_system_installed_true_when_db_and_people_exist(self):
         with patch("facekids.launcher.DEFAULT_DB_FILE") as mock_db, \
+             patch("facekids.launcher.INSTALL_MARKER") as mock_marker, \
              patch("facekids.launcher.Storage") as mock_storage_cls:
             mock_db.exists.return_value = True
+            mock_marker.exists.return_value = True
             mock_store = MagicMock()
             mock_store.get_setting.return_value = "pbkdf2_sha256:..."
             mock_store.people.return_value = [(1, "Filho", 7200)]
+            mock_store.embeddings.return_value = [(1, "vector")]
             mock_storage_cls.return_value = mock_store
 
             self.assertTrue(is_system_installed())

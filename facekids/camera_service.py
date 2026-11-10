@@ -219,11 +219,14 @@ class CameraService:
         best_face_frame = None
         best_face_box = None
         next_sample_time = time.monotonic()
+        enrollment_deadline = next_sample_time + 120.0
 
         store = Storage(db_path)
         try:
             logger.info("Iniciando sessao de cadastro biometrico para crianca ID %d", child_id)
             while len(vectors) < REQUIRED_SAMPLES and self.enrollment_state["active"]:
+                if time.monotonic() >= enrollment_deadline:
+                    raise TimeoutError("Tempo esgotado na captura facial. Verifique a webcam e tente novamente.")
                 ok, clean_frame, faces = self.get_latest_frame(draw_overlay=False)
                 if not ok or clean_frame is None:
                     time.sleep(0.1)

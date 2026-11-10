@@ -14,6 +14,7 @@ Detecta o estado do sistema:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,7 @@ from .app_server import DEFAULT_DB_FILE
 from .admin_auth import AUTH_SETTING
 from .app_window import open_app_window
 from .storage import Storage
+from .installer_engine import INSTALL_MARKER
 
 
 def is_admin() -> bool:
@@ -46,23 +48,23 @@ def ensure_admin_if_needed() -> None:
 
     if not is_admin():
         import ctypes
-        params = " ".join([f'"{a}"' for a in sys.argv[1:]])
+        params = subprocess.list2cmdline(["-E", "-s", "-m", "facekids.launcher", *sys.argv[1:]])
         ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
-        if ret > 32:
-            sys.exit(0)
+        sys.exit(0 if ret > 32 else 1)
 
 
 def is_system_installed() -> bool:
     """Verifica se o FaceKids já está devidamente instalado e configurado no computador."""
     try:
-        if not DEFAULT_DB_FILE.exists():
+        if not DEFAULT_DB_FILE.exists() or not INSTALL_MARKER.exists():
             return False
 
         store = Storage(DEFAULT_DB_FILE)
         try:
             has_pin = bool(store.get_setting(AUTH_SETTING))
             people = store.people()
-            return has_pin and len(people) > 0
+            enrolled_ids = {person_id for person_id, _ in store.embeddings()}
+            return has_pin and any(person[0] in enrolled_ids for person in people)
         finally:
             store.close()
     except Exception:
@@ -82,6 +84,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         from .filhos_agent import run_agent
         return run_agent()
 
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        username = ctypes.create_unicode_buffer(257)
+        size = wintypes.DWORD(len(username))
+        if ctypes.windll.advapi32.GetUserNameW(username, ctypes.byref(size)):
+            if username.value.casefold() == "filhos":
+                return 1
     ensure_admin_if_needed()
 
     mode = "auto"

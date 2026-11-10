@@ -1,10 +1,20 @@
 # Handover Técnico: Branch `feature/redesign-installer-admin-panel`
 
+## Observação da VM em 09/11/2026 e próxima análise
+
+- O EXE Windows foi aberto por dois cliques na VM e pediu UAC uma vez. Após desinstalar a instalação anterior pelo painel, removendo dados e a conta `Filhos`, o assistente mostrou a senha inicial `1`, editável, criou a conta, capturou 12 amostras faciais e abriu o Painel dos Pais com AuthService, FilhosAgent e CredentialProvider ativos.
+- No primeiro acesso à nova conta `Filhos`, o Windows exibiu as telas automáticas `Olá` e `Isso pode levar alguns minutos` antes de chegar à área de trabalho. Até a observação registrada aqui, não apareceu pergunta de privacidade nem novo UAC.
+- **Próxima análise solicitada pelo usuário:** avaliar como preparar o perfil da conta `Filhos` durante a instalação para reduzir ou eliminar essa espera e pular todas as perguntas opcionais do primeiro login do Windows, sempre com escolhas de privacidade restritivas. Verificar quais etapas são obrigatórias do próprio Windows e não podem ser removidas. A preparação deve ocorrer apenas quando a conta for recém-criada; se `Filhos` já existir, preservar a conta, senha, perfil e configurações atuais.
+- Ainda é necessário validar o bloqueio/desbloqueio facial e a ausência de pedidos de instalação ou senha administrativa durante toda a sessão `Filhos`.
+- Na primeira sessão `Filhos` observada, a área de trabalho abriu sem UAC nem perguntas de privacidade. Depois de cerca de dois minutos sem atividade, apareceu a tela de bloqueio do Windows; ao clicar nela, a área de trabalho voltou sem digitação de senha. Confirmar em teste controlado se esse retorno foi provocado pelo reconhecimento facial do FaceKids, usando logs do provedor e um cenário sem rosto reconhecido.
+
+> **Atualização de 10/11/2026:** O fluxo foi corrigido após este handover. A instalação agora é feita em `C:\Program Files\FaceKids`, captura as 12 fotos antes de iniciar os serviços e só abre o painel após verificar conta, tarefas, DLL e canal de autenticação. A conta continua fixa como `Filhos`, com senha `1` preenchida e editável. O teste limpo na VM chegou à área de trabalho da conta `Filhos` sem novo UAC ou repetição do instalador. A suíte atual passou com **539 testes (13 ignorados)**. Ainda falta validar de forma controlada o desbloqueio facial, inclusive após reiniciar o Windows e nos cenários sem rosto reconhecido; não mesclar com `main` com base apenas nesta verificação.
+
 > **Repositório**: `C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC`  
 > **Branch**: `feature/redesign-installer-admin-panel`  
 > **Base**: `origin/main`  
-> **Status dos Testes**: 531 testes automatizados (100% aprovados)  
-> **Status do Git**: Árvore de trabalho limpa, commitada e sincronizada com o GitHub (`origin`).
+> **Status dos Testes**: 539 testes aprovados (13 ignorados) em 10/11/2026.
+> **Status do Git**: consultar `git status` e o histórico da branch; este documento não presume que a árvore de trabalho esteja limpa.
 
 ---
 
@@ -85,7 +95,7 @@ Ao assumir este projeto, observe as seguintes diretrizes:
      ```powershell
      .\.venv\Scripts\python.exe -m unittest discover -s tests
      ```
-   - Todos os 531 testes devem passar (`OK (skipped=13)`).
+   - Todos os 539 testes devem passar (`OK (skipped=13)`).
 
 4. **Mesclagem para a `main`**:
    - Assim que o usuário aprovar o teste prático de instalação e funcionamento no computador, a branch `feature/redesign-installer-admin-panel` estará pronta para ser mesclada (`merge`) na branch `main`.

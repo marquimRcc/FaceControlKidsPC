@@ -85,8 +85,8 @@ def save_filhos_credentials(username: str = "Filhos", password: str = "1") -> bo
             encrypted = _dpapi_encrypt(payload)
             CREDENTIALS_FILE.write_bytes(encrypted)
         except Exception as e:
-            logger.warning(f"Aviso ao criptografar via DPAPI (usando fallback seguro): {e}")
-            CREDENTIALS_FILE.write_bytes(payload)
+            logger.error(f"Nao foi possivel proteger a senha da conta Filhos via DPAPI: {e}")
+            return False
 
         # 2. Ajusta permissoes ACL no arquivo de credenciais
         if sys.platform == "win32":
@@ -117,7 +117,7 @@ def save_filhos_credentials(username: str = "Filhos", password: str = "1") -> bo
         return False
 
 
-def get_filhos_credentials() -> Tuple[str, str]:
+def get_filhos_credentials(*, default_password: str = "1") -> Tuple[str, str]:
     """Retorna (usuario, senha) a partir do cofre DPAPI, com fallback para TOKEN_FILE."""
     if CREDENTIALS_FILE.exists():
         try:
@@ -127,7 +127,7 @@ def get_filhos_credentials() -> Tuple[str, str]:
             except Exception:
                 decrypted = data
             info = json.loads(decrypted.decode("utf-8"))
-            return str(info.get("user", "Filhos")), str(info.get("password", "1"))
+            return str(info.get("user", "Filhos")), str(info.get("password", default_password))
         except Exception as e:
             logger.debug(f"Aviso ao ler credentials.bin: {e}")
 
@@ -140,7 +140,7 @@ def get_filhos_credentials() -> Tuple[str, str]:
         except Exception:
             pass
 
-    return "Filhos", "1"
+    return "Filhos", default_password
 
 
 def get_filhos_password() -> str:

@@ -24,9 +24,16 @@ if ($Desativar) {
     return
 }
 
-$python = Join-Path $root '.venv\Scripts\python.exe'
+$python = Join-Path $root 'runtime\python.exe'
+if (-not (Test-Path -LiteralPath $python)) {
+    $python = Join-Path $root '.venv\Scripts\python.exe'
+}
 $models = Join-Path $root 'models'
 $dataDir = 'C:\ProgramData\FaceKids'
+$dll = Join-Path $dataDir 'FaceKidsCredentialProvider.dll'
+if (Test-Path -LiteralPath (Join-Path $root 'runtime\python.exe')) {
+    $dll = Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll'
+}
 $dbFile = Join-Path $dataDir 'criancas.sqlite3'
 if (-not (Test-Path -LiteralPath $dbFile)) {
     if (-not (Test-Path $dataDir)) {
@@ -40,7 +47,7 @@ $required = @(
     (Join-Path $models 'face_detection_yunet_2023mar.onnx'),
     (Join-Path $models 'face_recognition_sface_2021dec.onnx'),
     $dbFile,
-    (Join-Path $dataDir 'FaceKidsCredentialProvider.dll')
+    $dll
 )
 foreach ($file in $required) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
@@ -48,7 +55,7 @@ foreach ($file in $required) {
     }
 }
 $installedDll = [Text.Encoding]::ASCII.GetString(
-    [IO.File]::ReadAllBytes((Join-Path $dataDir 'FaceKidsCredentialProvider.dll')))
+    [IO.File]::ReadAllBytes($dll))
 if (-not $installedDll.Contains('FACEKIDS_IPC_V1') -or
     -not $installedDll.Contains('FACEKIDS_BOOT_RETRY_V1')) {
     throw 'Atualize o Credential Provider com Instalar-FaceKids-Nativo.ps1 antes de ativar o boot.'
