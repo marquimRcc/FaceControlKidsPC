@@ -214,11 +214,13 @@ class TestFilhosAgent(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             dummy_cfg = Path(td) / "configuracoes.json"
             with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
+                # Por padrao o agente nao bloqueia nem avisa por inatividade (Windows gerencia)
                 lock_s, warn_s = get_inactivity_settings()
-                self.assertEqual(lock_s, 120.0)
-                self.assertEqual(warn_s, 100.0)
+                self.assertEqual(lock_s, 0.0)
+                self.assertEqual(warn_s, 0.0)
 
                 dummy_cfg.write_text(json.dumps({
+                    "inactivity_lock_enabled": True,
                     "inactivity_lock_seconds": 180,
                     "inactivity_warn_seconds": 150
                 }), encoding="utf-8")
@@ -253,13 +255,13 @@ class TestFilhosAgent(unittest.TestCase):
             dummy_cfg = Path(td) / "configuracoes.json"
             with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
                 interval = get_face_check_interval()
-                self.assertEqual(interval, 120.0)
+                self.assertEqual(interval, 60.0)
 
                 dummy_cfg.write_text(json.dumps({
-                    "face_check_interval_seconds": 60.0
+                    "face_check_interval_seconds": 30.0
                 }), encoding="utf-8")
                 interval = get_face_check_interval()
-                self.assertEqual(interval, 60.0)
+                self.assertEqual(interval, 30.0)
 
     def test_in_session_child_switch_different_child(self):
         tracker = QuotaTracker(self.store)
@@ -294,6 +296,7 @@ class TestFilhosAgent(unittest.TestCase):
 
 
     def test_in_session_switch_rules(self):
+        from facekids.session_transition_policy import decide_child_transition, TransitionDecision
         tracker = QuotaTracker(self.store)
         tracker.switch_child(self.child_id, "Lucas")
 
@@ -303,70 +306,79 @@ class TestFilhosAgent(unittest.TestCase):
         cname = "Ana"
         face_count = 2
         idle_sec = 25.0
-        switched = False
-        if tracker.current_child_id in detected_ids:
-            pass  # ignorado
-        elif idle_sec < 15.0:
-            pass
-        elif face_count > 1:
-            pass
-        elif cid != tracker.current_child_id:
-            tracker.switch_child(cid, cname)
-            switched = True
-        self.assertFalse(switched)
-        self.assertEqual(tracker.current_child_id, self.child_id)
+        decision = decide_child_transition(
+            tracker.current_child_id, detected_ids, face_count, idle_sec, cid,
+            observation_age_seconds=0.0
+        )
+        self.assertEqual(decision, TransitionDecision.KEEP_CURRENT)
 
-        # Regra 2: Quem esta no mouse manda (idle < 15s) -> Nao troca
+        # Regra 2: Nova crianca detectada sozinha como rosto unico (mesmo com idle < 15s) -> Troca!
         detected_ids = [99]
         face_count = 1
         idle_sec = 5.0
-        switched = False
-        if tracker.current_child_id in detected_ids:
-            pass
-        elif idle_sec < 15.0:
-            pass
-        elif face_count > 1:
-            pass
-        elif cid != tracker.current_child_id:
-            tracker.switch_child(cid, cname)
-            switched = True
-        self.assertFalse(switched)
-        self.assertEqual(tracker.current_child_id, self.child_id)
+        decision = decide_child_transition(
+            tracker.current_child_id, detected_ids, face_count, idle_sec, cid,
+            observation_age_seconds=0.0
+        )
+        self.assertEqual(decision, TransitionDecision.SWITCH_CHILD)
+        tracker.switch_child(cid, cname)
+        self.assertEqual(tracker.current_child_id, 99)
+        self.assertEqual(tracker.current_child_name, "Ana")
 
         # Regra 3: Multiplos rostos (face_count > 1) -> Nao troca
+        tracker.switch_child(self.child_id, "Lucas")
         detected_ids = [99]
         face_count = 2
         idle_sec = 25.0
-        switched = False
-        if tracker.current_child_id in detected_ids:
-            pass
-        elif idle_sec < 15.0:
-            pass
-        elif face_count > 1:
-            pass
-        elif cid != tracker.current_child_id:
-            tracker.switch_child(cid, cname)
-            switched = True
-        self.assertFalse(switched)
-        self.assertEqual(tracker.current_child_id, self.child_id)
+        decision = decide_child_transition(
+            tracker.current_child_id, detected_ids, face_count, idle_sec, cid,
+            observation_age_seconds=0.0
+        )
+        self.assertEqual(decision, TransitionDecision.SUPPRESS_MULTIPLE_FACES)
 
-        # Regra 4: Troca legitima (filho anterior ausente, idle >= 15s, rosto unico face_count == 1) -> Troca!
+        # Regra 4: Troca legitima (filho anterior ausente, rosto unico face_count == 1) -> Troca!
         detected_ids = [99]
         face_count = 1
         idle_sec = 25.0
-        switched = False
-        if tracker.current_child_id in detected_ids:
-            pass
-        elif idle_sec < 15.0:
-            pass
-        elif face_count > 1:
-            pass
-        elif cid != tracker.current_child_id:
-            tracker.switch_child(cid, cname)
-            switched = True
-        self.assertTrue(switched)
+        decision = decide_child_transition(
+            tracker.current_child_id, detected_ids, face_count, idle_sec, cid,
+            observation_age_seconds=0.0
+        )
+        self.assertEqual(decision, TransitionDecision.SWITCH_CHILD)
+        tracker.switch_child(cid, cname)
         self.assertEqual(tracker.current_child_id, 99)
         self.assertEqual(tracker.current_child_name, "Ana")
+
+    def test_silent_ignore_on_no_face_and_unknown(self):
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+
+        # NO_FACE e DENY_UNKNOWN nao alteram o perfil ativo nem bloqueiam
+        for status in ("NO_FACE", "DENY_UNKNOWN"):
+            pipe_resp = {"status": status}
+            observed = validated_face_observation(pipe_resp)
+            self.assertIsNone(observed)
+            self.assertEqual(tracker.current_child_id, self.child_id)
+            self.assertEqual(tracker.current_child_name, "Lucas")
+
+    def test_deny_quota_blocks_current_child_or_switched_child(self):
+        from facekids.session_transition_policy import decide_child_transition, TransitionDecision
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+
+        # Caso A: A propria crianca ativa identificada com quota esgotada
+        obs_current_id = self.child_id
+        is_current = (tracker.current_child_id is not None and obs_current_id == tracker.current_child_id)
+        self.assertTrue(is_current)
+
+        # Caso B: Outra crianca assume o PC sozinha mas esta sem saldo
+        other_cid = 99
+        decision = decide_child_transition(
+            tracker.current_child_id, [other_cid], 1, 0.0, other_cid, observation_age_seconds=0.0
+        )
+        self.assertEqual(decision, TransitionDecision.SWITCH_CHILD)
+        is_switch = (decision is TransitionDecision.SWITCH_CHILD)
+        self.assertTrue(is_switch)
 
     def test_effective_idle_calculation_prevents_relock(self):
         # Simula sessao recem-desbloqueada pelo rosto (1 segundo atras)

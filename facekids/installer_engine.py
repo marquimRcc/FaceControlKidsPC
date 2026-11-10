@@ -775,10 +775,11 @@ def setup_system(
     try:
         if not CONFIG_FILE.exists():
             default_settings = {
-                "inactivity_lock_seconds": 120,
-                "inactivity_warn_seconds": 100,
-                "face_check_interval_seconds": 120,
-                "description": "FaceControlKidsPC - Bloqueio por inatividade e checagem periodica"
+                "inactivity_lock_enabled": False,
+                "inactivity_lock_seconds": 0,
+                "inactivity_warn_seconds": 0,
+                "face_check_interval_seconds": 60,
+                "description": "FaceControlKidsPC - Pausa automatica no bloqueio do Windows e verificacao silenciosa de troca de perfil"
             }
             CONFIG_FILE.write_text(json.dumps(default_settings, indent=2), encoding="utf-8")
     except Exception as e:

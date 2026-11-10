@@ -69,26 +69,36 @@ logger = logging.getLogger("FilhosAgent")
 
 LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
 CONFIG_SETTINGS_FILE = application_data_dir() / "configuracoes.json"
-DEFAULT_INACTIVITY_LOCK_SECONDS = 120.0  # 2 minutos de inatividade sem teclado/mouse
-DEFAULT_INACTIVITY_WARN_SECONDS = 100.0  # Aviso aos 1m40s
-DEFAULT_FACE_CHECK_INTERVAL_SECONDS = 120.0  # Verificacao facial periodica a cada 2 minutos
+DEFAULT_INACTIVITY_LOCK_ENABLED = False
+DEFAULT_INACTIVITY_LOCK_SECONDS = 0.0
+DEFAULT_INACTIVITY_WARN_SECONDS = 0.0
+DEFAULT_FACE_CHECK_INTERVAL_SECONDS = 60.0
 
 
 def get_inactivity_settings() -> Tuple[float, float]:
-    """Retorna (lock_seconds, warn_seconds) a partir de configuracoes.json ou padroes do sistema."""
+    """Retorna (lock_seconds, warn_seconds) a partir de configuracoes.json ou padroes do sistema.
+
+    Por regra de negócio, quem bloqueia por inatividade é exclusivamente o Windows.
+    O agente não emite alertas nem força bloqueio por inatividade de mouse/teclado,
+    retornando (0.0, 0.0) por padrão quando o bloqueio por inatividade estiver desativado.
+    """
+    lock_enabled = DEFAULT_INACTIVITY_LOCK_ENABLED
     lock_sec = DEFAULT_INACTIVITY_LOCK_SECONDS
     warn_sec = DEFAULT_INACTIVITY_WARN_SECONDS
     if CONFIG_SETTINGS_FILE.exists():
         try:
             data = json.loads(CONFIG_SETTINGS_FILE.read_text(encoding="utf-8"))
+            lock_enabled = bool(data.get("inactivity_lock_enabled", False))
             if "inactivity_lock_seconds" in data:
                 lock_sec = float(data["inactivity_lock_seconds"])
             if "inactivity_warn_seconds" in data:
                 warn_sec = float(data["inactivity_warn_seconds"])
             else:
-                warn_sec = max(10.0, lock_sec - 20.0)
+                warn_sec = max(0.0, lock_sec - 20.0) if lock_sec > 0 else 0.0
         except Exception:
             pass
+    if not lock_enabled or lock_sec <= 0.0:
+        return 0.0, 0.0
     return max(30.0, lock_sec), max(10.0, warn_sec)
 
 
@@ -614,6 +624,8 @@ def run_agent():
         try:
             if not is_active_console_user_filhos():
                 # Administrador no console ativo (ex: troca rapida de usuario)
+                last_active_time = time.monotonic()
+                session_active_since_mono = time.monotonic()
                 time.sleep(2.0)
                 continue
 
@@ -672,7 +684,8 @@ def run_agent():
                             transition = decide_child_transition(
                                 tracker.current_child_id, list(observed.detected_ids),
                                 observed.face_count, idle_sec, observed.child_id,
-                                observation_age_seconds=max(0.0, time.time() - observed.timestamp))
+                                observation_age_seconds=max(0.0, time.time() - observed.timestamp),
+                                idle_threshold_seconds=0.0)
                             if observed.status == "ALLOW":
                                 if transition is TransitionDecision.SWITCH_CHILD:
                                     logger.info("Troca de perfil validada: %s -> %s",
@@ -684,25 +697,33 @@ def run_agent():
                                     show_toast("👋 Perfil Alternado",
                                                f"Olá, {registered_name}! Seu perfil foi carregado.",
                                                icon="👤", color="#A6E3A1", duration_ms=6000)
-                            elif (observed.status in ("DENY_QUOTA", "DENY_CURFEW")
-                                  and tracker.current_child_id is not None
-                                  and transition is TransitionDecision.SWITCH_CHILD):
-                                logger.warning("Perfil diferente sem quota/horario: %s", registered_name)
-                                show_toast("🔒 FaceControl Kids",
-                                           f"{registered_name}: acesso indisponivel. O computador sera bloqueado.",
-                                           icon="🔒", color="#F38BA8")
-                                time.sleep(1.2)
-                                lock_current_session()
-                    elif status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
+                            elif observed.status in ("DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW"):
+                                is_current = (tracker.current_child_id is not None and observed.child_id == tracker.current_child_id)
+                                is_switch = (transition is TransitionDecision.SWITCH_CHILD)
+                                if is_current or is_switch:
+                                    logger.warning("Criança sem saldo ou horário em frente ao PC: %s (status=%s). Bloqueando sessão...",
+                                                   registered_name, observed.status)
+                                    show_toast("🔒 FaceControl Kids",
+                                               f"{registered_name}: tempo diário esgotado. O computador será bloqueado.",
+                                               icon="🔒", color="#F38BA8")
+                                    time.sleep(1.2)
+                                    lock_current_session()
+                    elif status in ("ALLOW", "DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW"):
                         logger.warning("Decisao facial ignorada: resposta inconsistente ou antiga")
                     elif status == "ERROR_CAMERA":
                         if tracker.current_child_id is not None:
-                            logger.info(
+                            logger.debug(
                                 "Webcam ocupada por outro aplicativo (ex.: chamada ou navegador); mantendo perfil ativo para %s",
                                 tracker.current_child_name,
                             )
                         else:
                             logger.debug("Webcam ocupada ou inacessivel sem crianca previamente identificada.")
+                    elif status in ("NO_FACE", "DENY_UNKNOWN"):
+                        logger.debug(
+                            "Verificacao facial silenciosa em segundo plano: status %s; mantendo perfil ativo para %s",
+                            status,
+                            tracker.current_child_name,
+                        )
 
                 # Agenda a proxima checagem facial
                 identifier.trigger_if_due()
@@ -729,7 +750,9 @@ def run_agent():
                     continue
 
                 # Checar inatividade fisica (teclado e mouse)
-                if idle_sec >= lock_sec:
+                # Por regra de negocio, quem bloqueia por inatividade e exclusivamente o Windows.
+                # O agente nao emite alertas nem forca bloqueio por inatividade de mouse/teclado.
+                if lock_sec > 0 and idle_sec >= lock_sec:
                     logger.info("Inatividade de %.1fs detectada (limite %.0fs). Bloqueando sessao...", idle_sec, lock_sec)
                     # Reembolsa o tempo de inatividade para a crianca nao perder saldo
                     if tracker.current_child_id is not None and idle_sec > 0:
@@ -747,7 +770,7 @@ def run_agent():
                     time.sleep(3.0)
                     last_active_time = time.monotonic()
                     continue
-                elif idle_sec >= warn_sec and not inactivity_warned:
+                elif warn_sec > 0 and idle_sec >= warn_sec and not inactivity_warned:
                     inactivity_warned = True
                     logger.info("Aviso de inatividade: %.1fs sem interacao", idle_sec)
                     show_toast(
@@ -757,7 +780,7 @@ def run_agent():
                         color="#F9E2AF",
                         duration_ms=8000,
                     )
-                elif idle_sec < warn_sec:
+                elif warn_sec > 0 and idle_sec < warn_sec:
                     inactivity_warned = False
 
                 now_mono = time.monotonic()

@@ -11,7 +11,8 @@ class SessionTransitionTests(unittest.TestCase):
     def test_main_four_rules_and_unassigned_login(self):
         cases = [
             (1, [1, 2], 2, 25, 2, D.KEEP_CURRENT),
-            (1, [2], 1, 14.999, 2, D.KEEP_CURRENT),
+            (1, [2], 1, 14.999, 2, D.SWITCH_CHILD),
+            (1, [2], 1, 0, 2, D.SWITCH_CHILD),
             (1, [2], 2, 25, 2, D.SUPPRESS_MULTIPLE_FACES),
             (1, [2], 1, 15, 2, D.SWITCH_CHILD),
             (None, [2], 1, 0, 2, D.SWITCH_CHILD),
@@ -21,6 +22,16 @@ class SessionTransitionTests(unittest.TestCase):
         for current, ids, faces, idle, candidate, wanted in cases:
             with self.subTest(current=current, ids=ids, faces=faces, idle=idle):
                 self.assertEqual(self.choice(current, ids, faces, idle, candidate), wanted)
+
+        # Se explicitamente configurado idle_threshold_seconds > 0, respeita a protecao
+        self.assertEqual(
+            decide(1, [2], 1, 14.999, 2, idle_threshold_seconds=15.0),
+            D.KEEP_CURRENT
+        )
+        self.assertEqual(
+            decide(1, [2], 1, 15.0, 2, idle_threshold_seconds=15.0),
+            D.SWITCH_CHILD
+        )
 
     def test_invalid_metadata_never_switches(self):
         invalid = [

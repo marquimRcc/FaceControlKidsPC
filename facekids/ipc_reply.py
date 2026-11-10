@@ -65,7 +65,7 @@ def validated_face_observation(payload: Any, *, now: float | None = None
     if type(payload) is not dict:
         return None
     status = payload.get("status")
-    if status not in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
+    if status not in ("ALLOW", "DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW"):
         return None
     if payload.get("protocol_marker") != IPC_PROTOCOL_MARKER:
         return None

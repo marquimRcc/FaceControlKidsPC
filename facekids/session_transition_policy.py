@@ -19,8 +19,8 @@ class TransitionDecision(str, Enum):
 
 def decide_child_transition(
     current_child_id: Optional[int], detected_ids: Sequence[int],
-    face_count: int, effective_idle_seconds: float, candidate_id: Optional[int],
-    *, observation_age_seconds: float, idle_threshold_seconds: float = 15.0,
+    face_count: int, effective_idle_seconds: float = 0.0, candidate_id: Optional[int] = None,
+    *, observation_age_seconds: float = 0.0, idle_threshold_seconds: float = 0.0,
     maximum_observation_age_seconds: float = 15.0,
 ) -> TransitionDecision:
     """Prioritize current operator, then input recency, then single-face switch.
@@ -43,12 +43,12 @@ def decide_child_transition(
                idle_threshold_seconds, maximum_observation_age_seconds)
     if (any(type(v) not in (int, float) or not math.isfinite(v) for v in scalars)
             or effective_idle_seconds < 0 or observation_age_seconds < 0
-            or idle_threshold_seconds <= 0 or maximum_observation_age_seconds <= 0
+            or idle_threshold_seconds < 0 or maximum_observation_age_seconds <= 0
             or observation_age_seconds > maximum_observation_age_seconds):
         return TransitionDecision.INVALID_OBSERVATION
     if current_child_id is not None and current_child_id in detected_ids:
         return TransitionDecision.KEEP_CURRENT
-    if current_child_id is not None and effective_idle_seconds < idle_threshold_seconds:
+    if current_child_id is not None and idle_threshold_seconds > 0.0 and effective_idle_seconds < idle_threshold_seconds:
         return TransitionDecision.KEEP_CURRENT
     if face_count > 1:
         return TransitionDecision.SUPPRESS_MULTIPLE_FACES
