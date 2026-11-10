@@ -213,83 +213,69 @@
           </button>
         </div>
 
-        <!-- PASSO 3: CRIAR PIN DOS PAIS E SENHA DA CONTA FILHOS -->
-        <div id="wizardStep3" class="wizard-step flex flex-col space-y-6 transition-all duration-300" style="display: none;">
-          <div class="text-left space-y-1">
-            <span class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
-            <h2 class="text-xl font-bold text-white">Defina o PIN e a Senha da Conta</h2>
-            <p class="text-xs text-slate-400">Crie o PIN de administrador e informe a senha da conta supervisionada.</p>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-            <div>
-              <label for="wizardChildName" class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da criança</label>
-              <input id="wizardChildName" type="text" value="Filho" maxlength="60" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs">
-            </div>
-            <div>
-              <label for="wizardDailyHours" class="block text-[11px] font-semibold text-slate-300 mb-1">Limite diário (horas)</label>
-              <input id="wizardDailyHours" type="number" value="2" min="0.5" max="24" step="0.5" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs">
-            </div>
+        <!-- PASSO 3: CONTA WINDOWS FILHOS (ACIMA) E PIN DOS PAIS 40% MENOR (ABAIXO) -->
+        <div id="wizardStep3" class="wizard-step flex flex-col space-y-3.5 transition-all duration-300" style="display: none;">
+          <div class="text-left space-y-0.5">
+            <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
+            <h2 class="text-lg font-bold text-white">Configure a Conta Filhos e o PIN</h2>
+            <p class="text-[11px] text-slate-400">Defina a senha da conta supervisionada no Windows e crie o PIN de administrador.</p>
           </div>
 
-          <!-- PIN Display -->
-          <div class="flex flex-col items-center space-y-3 py-1">
-            <span class="text-xs text-slate-300 font-semibold">PIN Mestre dos Pais (4 a 6 dígitos)</span>
-            <div id="pinDotsDisplay" class="flex items-center space-x-3 cursor-pointer" title="Digite pelo teclado numérico do seu computador ou clique abaixo">
-              <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot4" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-              <div id="pinDot5" class="w-4 h-4 rounded-full border-2 border-slate-600 transition-all"></div>
-            </div>
-            <p class="text-[10px] text-slate-400 font-medium">💡 Digite pelo teclado numérico do seu PC ou use os botões abaixo</p>
-
-            <!-- Teclado Numérico -->
-            <div class="grid grid-cols-3 gap-2 w-full max-w-[220px]">
-              <button onclick="pressPinKey('1')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">1</button>
-              <button onclick="pressPinKey('2')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">2</button>
-              <button onclick="pressPinKey('3')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">3</button>
-              <button onclick="pressPinKey('4')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">4</button>
-              <button onclick="pressPinKey('5')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">5</button>
-              <button onclick="pressPinKey('6')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">6</button>
-              <button onclick="pressPinKey('7')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">7</button>
-              <button onclick="pressPinKey('8')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">8</button>
-              <button onclick="pressPinKey('9')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">9</button>
-              <button onclick="clearPinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs font-semibold text-slate-400 active:scale-95">Limpar</button>
-              <button onclick="pressPinKey('0')" class="h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-base font-bold text-white transition-all active:scale-95">0</button>
-              <button onclick="backspacePinKey()" class="h-10 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-sm font-bold text-slate-400 active:scale-95">⌫</button>
-            </div>
-          </div>
-
-          <!-- Configuracao de Senha da Conta Windows Filhos (Cofre DPAPI) -->
-          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 text-left">
+          <!-- 1. PARTE SUPERIOR: Conta Windows das Crianças (Cofre DPAPI) -->
+          <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-cyan-500/30 space-y-2.5 text-left shadow-md">
             <div class="flex items-center space-x-2">
-              <span class="text-cyan-400">🛡️</span>
+              <span class="text-cyan-400 text-sm">🛡️</span>
               <h3 class="text-xs font-bold text-white uppercase tracking-wider">Conta Windows das Crianças</h3>
             </div>
-            <p class="text-[11px] text-slate-400 leading-relaxed">
+            <p class="text-[11px] text-slate-400 leading-snug">
               Esta senha será configurada na conta Windows e criptografada via <strong>Windows DPAPI</strong> para permitir o desbloqueio facial automático sem que as crianças saibam a senha.
             </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Nome da Conta Local</label>
-                <input id="wizardFilhosUser" type="text" value="Filhos" readonly class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
+                <input id="wizardFilhosUser" type="text" value="Filhos" readonly class="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400">
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Senha da Conta Windows</label>
                 <div class="relative">
-                  <input id="wizardFilhosPass" type="password" value="1" placeholder="Digite uma senha..." class="w-full px-3 py-2 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
-                  <button type="button" onclick="togglePasswordVisibility('wizardFilhosPass', this)" class="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs">👁️</button>
+                  <input id="wizardFilhosPass" type="password" value="1" placeholder="Digite uma senha..." class="w-full px-3 py-1.5 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
+                  <button type="button" onclick="togglePasswordVisibility('wizardFilhosPass', this)" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-white text-xs">👁️</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div id="wizardEnrollment" class="hidden space-y-2 text-left">
-            <p id="wizardEnrollmentStatus" class="text-xs text-cyan-300">Preparando cadastro facial...</p>
-            <img id="wizardEnrollmentPreview" alt="Imagem ao vivo da webcam para cadastro facial" class="w-full max-h-48 object-contain rounded-xl bg-slate-950" />
+          <!-- 2. PARTE INFERIOR (~40% MENOR): PIN Mestre dos Pais -->
+          <div class="flex flex-col items-center space-y-1.5 py-2 px-3 rounded-2xl bg-slate-900/40 border border-slate-800/80">
+            <span class="text-[11px] text-slate-300 font-semibold">PIN Mestre dos Pais (4 a 6 dígitos)</span>
+            <div id="pinDotsDisplay" class="flex items-center space-x-2 cursor-pointer" title="Digite pelo teclado numérico do seu computador ou clique abaixo">
+              <div id="pinDot0" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot1" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot2" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot3" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot4" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+              <div id="pinDot5" class="w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all"></div>
+            </div>
+            <p class="text-[9px] text-slate-400 font-medium">💡 Digite pelo teclado numérico do seu PC ou use os botões abaixo</p>
+
+            <!-- Teclado Numérico Compacto (~40% menor) -->
+            <div class="grid grid-cols-3 gap-1.5 w-full max-w-[140px] pt-0.5">
+              <button type="button" onclick="pressPinKey('1')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">1</button>
+              <button type="button" onclick="pressPinKey('2')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">2</button>
+              <button type="button" onclick="pressPinKey('3')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">3</button>
+              <button type="button" onclick="pressPinKey('4')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">4</button>
+              <button type="button" onclick="pressPinKey('5')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">5</button>
+              <button type="button" onclick="pressPinKey('6')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">6</button>
+              <button type="button" onclick="pressPinKey('7')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">7</button>
+              <button type="button" onclick="pressPinKey('8')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">8</button>
+              <button type="button" onclick="pressPinKey('9')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">9</button>
+              <button type="button" onclick="clearPinKey()" class="h-7 rounded-lg bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-[10px] font-semibold text-slate-400 active:scale-95">Limpar</button>
+              <button type="button" onclick="pressPinKey('0')" class="h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-white transition-all active:scale-95">0</button>
+              <button type="button" onclick="backspacePinKey()" class="h-7 rounded-lg bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs font-bold text-slate-400 active:scale-95">⌫</button>
+            </div>
           </div>
-          <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
+
+          <button id="finishInstallBtn" type="button" onclick="finishInstallation(event)" disabled class="w-full py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 active:scale-98 transition-all">
             Concluir Instalação e Abrir Painel 🚀
           </button>
         </div>
@@ -835,8 +821,8 @@
         const dot = document.getElementById("pinDot" + i);
         if (dot) {
           dot.className = (i < enteredWizardPin.length)
-            ? "w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
-            : "w-4 h-4 rounded-full border-2 border-slate-600 transition-all";
+            ? "w-2.5 h-2.5 rounded-full bg-cyan-400 border-2 border-cyan-300 shadow-[0_0_8px_#22d3ee] scale-110 transition-all"
+            : "w-2.5 h-2.5 rounded-full border-2 border-slate-600 transition-all";
         }
       }
       const finishBtn = document.getElementById("finishInstallBtn");
@@ -860,28 +846,18 @@
       const userInput = document.getElementById("wizardFilhosUser");
       const filhosPass = passInput ? passInput.value.trim() : "1";
       const filhosUser = userInput ? userInput.value.trim() : "Filhos";
-      const childName = document.getElementById("wizardChildName").value.trim();
-      const dailyHours = Number(document.getElementById("wizardDailyHours").value);
-      if (!childName || !Number.isFinite(dailyHours) || dailyHours < 0.5 || dailyHours > 24) {
-        showToast("Informe o nome da criança e o limite diário.");
-        finishBtn.dataset.busy = "false";
-        finishBtn.disabled = false;
-        finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
-        return;
-      }
 
       let res = null;
       try {
         if (window.FaceKidsAPI && typeof window.FaceKidsAPI.install === "function") {
-          res = await window.FaceKidsAPI.install(enteredWizardPin, childName, dailyHours, filhosPass, filhosUser);
+          res = await window.FaceKidsAPI.install(enteredWizardPin, null, 2.0, filhosPass, filhosUser);
         } else {
           const resp = await fetch("/api/install", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               pin: enteredWizardPin,
-              child_name: childName,
-              daily_limit_hours: dailyHours,
+              child_name: null,
               filhos_password: filhosPass,
               filhos_username: filhosUser
             })
@@ -898,58 +874,18 @@
       }
 
       if (res && (res.ok || res.status === "success")) {
-        try {
-          const status = await FaceKidsAPI.getStatus();
-          if (!status || !Array.isArray(status.enrolled_names) ||
-              !status.enrolled_names.some(name => name.toLocaleLowerCase() === childName.toLocaleLowerCase())) {
-            await enrollWizardChild(childName);
-          }
-          finishBtn.innerText = "Ativando proteção do Windows...";
-          const completeResponse = await fetch("/api/install/complete", {
-            method: "POST",
-            headers: FaceKidsAPI.getHeaders(),
-            body: "{}"
-          });
-          const completeResult = await completeResponse.json();
-          if (!completeResult.ok) throw new Error(completeResult.error || completeResult.message || "Falha ao ativar a proteção.");
-          const verified = await FaceKidsAPI.getStatus();
-          if (!verified || !verified.installed) throw new Error("Cadastro facial ainda não foi confirmado.");
-          document.getElementById("wizardEnrollmentPreview").src = "";
-          showToast("Instalação concluída com sucesso!");
-          showDashboard();
-          if (typeof syncDashboardData === "function") syncDashboardData();
-        } catch (err) {
-          res = { ok: false, error: err.message || String(err) };
-        }
+        showToast("Instalação concluída com sucesso! Cadastre os perfis no Painel.");
+        showDashboard();
+        if (typeof syncDashboardData === "function") syncDashboardData();
+        return;
       }
-      if (!res || !res.ok) {
-        showToast((res && (res.error || res.message)) || "Erro na instalação.");
-        if (finishBtn) {
-          finishBtn.dataset.busy = "false";
-          finishBtn.disabled = false;
-          finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
-        }
-      }
-    }
 
-    async function enrollWizardChild(childName) {
-      const section = document.getElementById("wizardEnrollment");
-      const statusText = document.getElementById("wizardEnrollmentStatus");
-      const preview = document.getElementById("wizardEnrollmentPreview");
-      section.classList.remove("hidden");
-      preview.src = "/api/camera/stream";
-      statusText.innerText = "Olhe para a câmera para capturar 12 fotos...";
-      const started = await FaceKidsAPI.startEnrollment(0, childName);
-      if (!started || !started.ok) throw new Error((started && started.error) || "Não foi possível iniciar a câmera.");
-      for (let attempt = 0; attempt < 240; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const state = await FaceKidsAPI.getEnrollmentStatus();
-        if (!state) continue;
-        statusText.innerText = state.message || `Capturando ${state.samples_count || 0} de 12 fotos...`;
-        if (state.error) throw new Error(state.error);
-        if (state.completed) return;
+      showToast((res && (res.error || res.message)) || "Erro na instalação.");
+      if (finishBtn) {
+        finishBtn.dataset.busy = "false";
+        finishBtn.disabled = false;
+        finishBtn.innerText = "Concluir Instalação e Abrir Painel 🚀";
       }
-      throw new Error("A captura facial demorou demais. Confira a webcam e tente novamente.");
     }
 
     function showWizard() {

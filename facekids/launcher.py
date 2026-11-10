@@ -61,10 +61,7 @@ def is_system_installed() -> bool:
 
         store = Storage(DEFAULT_DB_FILE)
         try:
-            has_pin = bool(store.get_setting(AUTH_SETTING))
-            people = store.people()
-            enrolled_ids = {person_id for person_id, _ in store.embeddings()}
-            return has_pin and any(person[0] in enrolled_ids for person in people)
+            return bool(store.get_setting(AUTH_SETTING))
         finally:
             store.close()
     except Exception:

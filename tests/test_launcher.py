@@ -27,6 +27,20 @@ class TestLauncher(unittest.TestCase):
 
             self.assertTrue(is_system_installed())
 
+    def test_is_system_installed_true_without_children(self):
+        with patch("facekids.launcher.DEFAULT_DB_FILE") as mock_db, \
+             patch("facekids.launcher.INSTALL_MARKER") as mock_marker, \
+             patch("facekids.launcher.Storage") as mock_storage_cls:
+            mock_db.exists.return_value = True
+            mock_marker.exists.return_value = True
+            mock_store = MagicMock()
+            mock_store.get_setting.return_value = "pbkdf2_sha256:..."
+            mock_store.people.return_value = []
+            mock_store.embeddings.return_value = []
+            mock_storage_cls.return_value = mock_store
+
+            self.assertTrue(is_system_installed())
+
     @patch("facekids.launcher.open_app_window", return_value=0)
     @patch("facekids.launcher.ensure_admin_if_needed")
     def test_main_routes_to_dashboard_with_admin_flag(self, mock_ensure, mock_open):

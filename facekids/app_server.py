@@ -238,7 +238,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             health["credential_provider"]["registered"],
             health["filhos_user"]["exists"],
         ))
-        is_installed = has_db and has_pin and has_enrollment and INSTALL_MARKER.exists() and runtime_ready
+        is_installed = has_db and has_pin and INSTALL_MARKER.exists() and runtime_ready
         u, _ = get_filhos_credentials()
         self.send_json({
             "installed": is_installed,
@@ -295,7 +295,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
             raw_child = data.get("child_name")
             first_child = str(raw_child).strip() if raw_child is not None else ""
             if not first_child or first_child.lower() in ("none", "null"):
-                first_child = "Filho"
+                first_child = None
             limit_hours = float(data.get("daily_limit_hours", 2.0))
             limit_minutes = int(limit_hours * 60)
             filhos_pass = str(data.get("filhos_password", "")).strip()
@@ -311,7 +311,7 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 first_child_daily_limit_minutes=limit_minutes,
                 filhos_password=filhos_pass if filhos_pass else None,
                 filhos_username=filhos_user,
-                defer_services=True,
+                defer_services=False,
             )
             current_token = get_session_secret()
             self.send_json({
@@ -341,8 +341,8 @@ class FaceKidsApiHandler(BaseHTTPRequestHandler):
                 return
             store = Storage(DEFAULT_DB_FILE)
             try:
-                if not store.get_setting(AUTH_SETTING) or not store.embeddings():
-                    self.send_json({"ok": False, "error": "Conclua as 12 fotos do cadastro facial antes de ativar os servicos."}, 400)
+                if not store.get_setting(AUTH_SETTING):
+                    self.send_json({"ok": False, "error": "Configure o PIN antes de concluir."}, 400)
                     return
             finally:
                 store.close()

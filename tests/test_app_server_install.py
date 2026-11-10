@@ -74,13 +74,65 @@ class TestAppServerInstall(unittest.TestCase):
                     self.assertEqual(data.get("token"), mock_token)
                     self.assertEqual(data.get("message"), "Instalado com sucesso")
 
-    def test_completion_requires_facial_enrollment(self):
+    def test_post_install_without_child_passes_none_and_not_deferred(self):
+        """Verifica que POST /api/install sem crianca passa first_child_name=None e defer_services=False."""
+        with patch("facekids.app_server.setup_system", return_value=(True, "Instalado com sucesso")) as mock_setup, \
+             patch("facekids.app_server.get_session_secret", return_value="token123"):
+            payload = json.dumps({
+                "pin": "1234",
+                "child_name": None,
+                "filhos_password": "1",
+                "filhos_username": "Filhos"
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{self.base_url}/api/install",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                self.assertEqual(resp.status, 200)
+                data = json.loads(resp.read().decode("utf-8"))
+                self.assertTrue(data.get("ok"))
+            mock_setup.assert_called_once_with(
+                master_pin="1234",
+                first_child_name=None,
+                first_child_daily_limit_minutes=120,
+                filhos_password="1",
+                filhos_username="Filhos",
+                defer_services=False
+            )
+
+    def test_handle_status_installed_without_children(self):
+        """Valida que /api/status retorna installed=True e default_mode='dashboard' mesmo com 0 perfis."""
+        with patch("facekids.app_server.DEFAULT_DB_FILE") as mock_db, \
+             patch("facekids.app_server.INSTALL_MARKER") as mock_marker, \
+             patch("facekids.app_server.Storage") as mock_storage, \
+             patch("facekids.app_server.verify_runtime_health", return_value=None), \
+             patch("facekids.app_server.get_filhos_credentials", return_value=("Filhos", "1")):
+            mock_db.exists.return_value = True
+            mock_marker.exists.return_value = True
+            store_instance = mock_storage.return_value
+            store_instance.get_setting.return_value = "hashed_pin"
+            store_instance.people.return_value = []
+            store_instance.embeddings.return_value = []
+
+            req = urllib.request.Request(f"{self.base_url}/api/status", method="GET")
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                self.assertEqual(resp.status, 200)
+                data = json.loads(resp.read().decode("utf-8"))
+                self.assertTrue(data["installed"])
+                self.assertTrue(data["has_pin"])
+                self.assertEqual(data["children_count"], 0)
+                self.assertFalse(data["face_enrolled"])
+                self.assertEqual(data["default_mode"], "dashboard")
+
+    def test_completion_requires_pin(self):
         with patch("facekids.app_server.DEFAULT_DB_FILE") as db, \
              patch("facekids.app_server.Storage") as storage, \
              patch("facekids.app_server.setup_system") as setup:
             db.exists.return_value = True
-            storage.return_value.get_setting.return_value = "hashed-pin"
-            storage.return_value.embeddings.return_value = []
+            storage.return_value.get_setting.return_value = None
             req = urllib.request.Request(
                 f"{self.base_url}/api/install/complete",
                 data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
@@ -90,13 +142,13 @@ class TestAppServerInstall(unittest.TestCase):
             self.assertEqual(error.exception.code, 400)
             setup.assert_not_called()
 
-    def test_completion_starts_services_after_enrollment(self):
+    def test_completion_starts_services_without_requiring_enrollment(self):
         with patch("facekids.app_server.DEFAULT_DB_FILE") as db, \
              patch("facekids.app_server.Storage") as storage, \
              patch("facekids.app_server.setup_system", return_value=(True, "pronto")) as setup:
             db.exists.return_value = True
             storage.return_value.get_setting.return_value = "hashed-pin"
-            storage.return_value.embeddings.return_value = [(1, "vector")]
+            storage.return_value.embeddings.return_value = []
             req = urllib.request.Request(
                 f"{self.base_url}/api/install/complete",
                 data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
