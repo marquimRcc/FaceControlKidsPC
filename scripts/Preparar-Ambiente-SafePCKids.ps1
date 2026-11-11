@@ -7,6 +7,11 @@ $root = Join-Path $env:ProgramFiles 'SafePCKids'
 $dataRoot = Join-Path $env:ProgramData 'SafePCKids'
 $null = New-Item -ItemType Directory -Path $root, $dataRoot -Force
 
+schtasks.exe /end /tn SafePCKidsAuthService 2>$null
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and ($_.Name -like 'python*') -and ($_.CommandLine -like '*safepckids.auth_service*')
+} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 if ($sourceRoot -ne $root) {
     foreach ($folder in @('safepckids', 'models', 'scripts', 'assets', 'native')) {
         $source = Join-Path $sourceRoot $folder

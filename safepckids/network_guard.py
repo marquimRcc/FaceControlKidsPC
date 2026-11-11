@@ -64,11 +64,24 @@ def _send_pipe_command(command: str, timeout_sec: float = 12.0) -> Tuple[bool, A
         return False, "Plataforma nao suportada."
 
     kernel32 = ctypes.windll.kernel32
-    if hasattr(kernel32, "WaitNamedPipeW"):
-        if not kernel32.WaitNamedPipeW(PIPE_NAME, int(timeout_sec * 1000)):
-            return False, "Pipe indisponivel"
+    deadline = time.time() + timeout_sec
+    h = None
 
-    h = kernel32.CreateFileW(PIPE_NAME, 0xC0000000, 0, None, 3, 0, None)
+    while time.time() < deadline:
+        h = kernel32.CreateFileW(PIPE_NAME, 0xC0000000, 0, None, 3, 0, None)
+        if h != ctypes.c_void_p(-1).value and h:
+            break
+        err = kernel32.GetLastError()
+        if err == 231:  # ERROR_PIPE_BUSY
+            if hasattr(kernel32, "WaitNamedPipeW"):
+                kernel32.WaitNamedPipeW(PIPE_NAME, 500)
+            else:
+                time.sleep(0.05)
+        elif err == 2:  # ERROR_FILE_NOT_FOUND (recriando instância)
+            time.sleep(0.1)
+        else:
+            time.sleep(0.1)
+
     if h == ctypes.c_void_p(-1).value or not h:
         return False, "Nao foi possivel conectar ao SafePCKidsAuthPipe"
 
