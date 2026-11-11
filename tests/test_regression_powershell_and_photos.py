@@ -297,6 +297,39 @@ class TestPhotoAndAvatarIsolation(unittest.TestCase):
                 self.assertEqual(len(chk.profile_photos(id2)), 3)
                 chk.close()
 
+    def test_profile_without_photos_never_receives_other_child_photos(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            db_path = base / "criancas.sqlite3"
+            fotos_dir = base / "fotos"
+            store = Storage(db_path)
+            maria_id = store.add_person("Maria", 120)
+            joao_id = store.add_person("Joao", 120)
+
+            maria_jpg = self._make_jpeg_bytes((200, 120, 40))
+            (fotos_dir / f"amostras_{maria_id}").mkdir(parents=True)
+            for i in range(1, 13):
+                (fotos_dir / f"amostras_{maria_id}" / f"amostra_{i}.jpg").write_bytes(maria_jpg)
+                store.add_profile_photo(maria_id, maria_jpg, select=(i == 1))
+            store.close()
+
+            with patch.object(app_server, "PROGRAMDATA_DIR", base), \
+                 patch.object(app_server, "DEFAULT_DB_FILE", db_path), \
+                 patch.object(avatar_utils, "AVATAR_DIR", fotos_dir):
+                avatar_utils.select_child_sample_photo(maria_id, maria_jpg, sample_index=1)
+
+                st_m, raw_m = self._get(f"/api/children/{maria_id}/photos")
+                st_j, raw_j = self._get(f"/api/children/{joao_id}/photos")
+                self.assertEqual(st_m, 200)
+                self.assertEqual(st_j, 200)
+                self.assertEqual(len(json.loads(raw_m.decode("utf-8"))["photos"]), 12)
+                self.assertEqual(json.loads(raw_j.decode("utf-8"))["photos"], [])
+
+                st_j_sample, _ = self._get(f"/api/children/{joao_id}/photos/1")
+                st_j_avatar, _ = self._get(f"/api/child/{joao_id}/avatar")
+                self.assertEqual(st_j_sample, 404)
+                self.assertEqual(st_j_avatar, 404)
+
     def test_enroll_start_rejects_empty_target_instead_of_falling_back_to_id_1(self):
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "criancas.sqlite3"
