@@ -68,6 +68,14 @@ try {
         if (-not $items) { throw "Dependencia ausente no ambiente de compilacao: $pattern" }
         $items | Copy-Item -Destination $sitePackages -Recurse
     }
+    $modelsDir = Join-Path $root 'models'
+    $detModel = Join-Path $modelsDir 'face_detection_yunet_2023mar.onnx'
+    $recModel = Join-Path $modelsDir 'face_recognition_sface_2021dec.onnx'
+    if (-not (Test-Path -LiteralPath $detModel) -or -not (Test-Path -LiteralPath $recModel)) {
+        Write-Host "[FaceKids] Baixando modelos faciais ONNX (YuNet e SFace)..." -ForegroundColor Cyan
+        & $python -m facekids.cli download-models --models $modelsDir
+        if ($LASTEXITCODE -ne 0) { throw 'Falha ao baixar modelos faciais.' }
+    }
     foreach ($name in @('facekids', 'assets', 'models')) {
         Copy-Item -LiteralPath (Join-Path $root $name) -Destination $payload -Recurse
     }

@@ -37,6 +37,12 @@ jobs:
           Write-Host "Instalando dependencias de requirements.txt no .venv..."
           .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
+      - name: Download facial recognition models
+        shell: pwsh
+        run: |
+          Write-Host "Baixando modelos faciais ONNX (YuNet e SFace)..."
+          .\.venv\Scripts\python.exe -m facekids.cli download-models --models models
+
       - name: Run unit test suite
         shell: pwsh
         run: |
