@@ -60,7 +60,8 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
             "--no-default-browser-check"
         ]
         try:
-            proc = subprocess.Popen(cmd)
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+            proc = subprocess.Popen(cmd, creationflags=creation_flags)
         except Exception:
             pass
     else:

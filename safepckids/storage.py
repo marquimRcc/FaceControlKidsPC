@@ -240,6 +240,8 @@ class Storage:
 
                 self.db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))
 
+            self.db.execute("DELETE FROM settings WHERE key=?", (f"selected_sample_{person_id}",))
+
             removed = self.db.execute(
 
                 "DELETE FROM people WHERE id=?", (person_id,)

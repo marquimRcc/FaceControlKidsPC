@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import secrets
 import socket
+import sqlite3
 import sys
 import threading
 import time
@@ -55,6 +56,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 ASSETS_DIR = ROOT_DIR / "assets"
+_DEFAULT_PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SafePCKids"
+
+
+def _fotos_dir() -> Path:
+    """Resolve o diretorio de fotos preservando overrides de testes em PROGRAMDATA_DIR ou AVATAR_DIR."""
+    if PROGRAMDATA_DIR != _DEFAULT_PROGRAMDATA_DIR:
+        return PROGRAMDATA_DIR / "fotos"
+    return AVATAR_DIR
 
 
 def get_ui_dir() -> Path:
@@ -499,7 +508,12 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Parametros invalidos")
             return
 
-        sample_p = PROGRAMDATA_DIR / "fotos" / f"amostras_{cid}" / f"amostra_{idx}.jpg"
+        if cid <= 0 or idx <= 0:
+            self.send_error(400, "Parametros invalidos")
+            return
+
+        fotos_dir = _fotos_dir()
+        sample_p = fotos_dir / f"amostras_{cid}" / f"amostra_{idx}.jpg"
         if sample_p.exists() and sample_p.stat().st_size > 0:
             data = sample_p.read_bytes()
             self.send_response(200)
@@ -512,7 +526,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
 
-        # Fallback para profile_photos no SQLite
+        # Fallback para profile_photos no SQLite (estritamente filtrado por person_id=cid)
         store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
         if store and hasattr(store, "profile_photos"):
             try:
@@ -534,19 +548,20 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         if store:
             store.close()
 
-        # Fallback para crianca_cid.jpg
-        fallback_p = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}.jpg"
-        if fallback_p.exists():
-            data = fallback_p.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "image/jpeg")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            self.end_headers()
-            self.wfile.write(data)
-            return
+        # Fallback para crianca_cid.jpg apenas na amostra 1
+        if idx == 1:
+            fallback_p = fotos_dir / f"crianca_{cid}.jpg"
+            if fallback_p.exists():
+                data = fallback_p.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.end_headers()
+                self.wfile.write(data)
+                return
 
         self.send_error(404, "Amostra nao encontrada")
 
@@ -559,7 +574,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": "Parametros invalidos"}, 400)
             return
 
-        sample_p = PROGRAMDATA_DIR / "fotos" / f"amostras_{cid}" / f"amostra_{idx}.jpg"
+        if cid <= 0 or idx <= 0:
+            self.send_json({"ok": False, "error": "Parametros invalidos"}, 400)
+            return
+
+        sample_p = _fotos_dir() / f"amostras_{cid}" / f"amostra_{idx}.jpg"
         store = Storage(DEFAULT_DB_FILE) if DEFAULT_DB_FILE.exists() else None
         try:
             if sample_p.exists() and sample_p.stat().st_size > 0:
@@ -636,7 +655,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
     def handle_child_add(self, data: Dict[str, Any]) -> None:
         name = str(data.get("name", "")).strip()
-        hours = float(data.get("daily_limit_hours", 2.0))
+        try:
+            hours = float(data.get("daily_limit_hours", 2.0))
+        except (TypeError, ValueError):
+            self.send_json({"ok": False, "error": "Limite diario invalido."}, 400)
+            return
         if not name:
             self.send_json({"ok": False, "error": "Nome obrigatorio"}, 400)
             return
@@ -644,7 +667,13 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         store = Storage(DEFAULT_DB_FILE)
         try:
             new_id = store.add_person(name, int(hours * 60))
+            if isinstance(new_id, int) and new_id > 0:
+                remove_child_avatar_files(new_id)
             self.send_json({"ok": True, "id": new_id, "name": name})
+        except sqlite3.IntegrityError:
+            self.send_json({"ok": False, "error": f"Ja existe um perfil cadastrado com o nome '{name}'."}, 400)
+        except ValueError as e:
+            self.send_json({"ok": False, "error": str(e)}, 400)
         finally:
             store.close()
 
@@ -735,21 +764,34 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             pass
 
     def handle_camera_enroll_start(self, body: Dict[str, Any]) -> None:
-        cid = int(body.get("child_id", 0))
+        try:
+            cid = int(body.get("child_id") or 0)
+        except (TypeError, ValueError):
+            self.send_json({"ok": False, "error": "ID da crianca invalido."}, 400)
+            return
+
+        people = None
+        if DEFAULT_DB_FILE.exists():
+            try:
+                store = Storage(DEFAULT_DB_FILE)
+                people = store.people()
+                store.close()
+            except Exception:
+                people = None
+
         if cid <= 0:
-            if DEFAULT_DB_FILE.exists():
-                try:
-                    store = Storage(DEFAULT_DB_FILE)
-                    people = store.people()
-                    store.close()
-                    target_name = str(body.get("child_name", "")).strip().casefold()
-                    matches = [person for person in people if person[1].casefold() == target_name] if target_name else people
-                    if matches:
-                        cid = matches[0][0]
-                except Exception:
-                    pass
+            target_name = str(body.get("child_name") or "").strip().casefold()
+            if target_name and isinstance(people, list):
+                matches = [person for person in people if person[1].casefold() == target_name]
+                if matches:
+                    cid = int(matches[0][0])
+
         if cid <= 0:
             self.send_json({"ok": False, "error": "Crie o perfil da crianca antes de cadastrar a biometria."}, 400)
+            return
+
+        if isinstance(people, list) and not any(person[0] == cid for person in people):
+            self.send_json({"ok": False, "error": f"Perfil #{cid} nao encontrado."}, 404)
             return
 
         cam = CameraService.get_instance()
@@ -757,15 +799,30 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         self.send_json(res)
 
     def handle_camera_enroll_status(self) -> None:
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        req_cid: Optional[int] = None
+        if "child_id" in qs and qs["child_id"]:
+            try:
+                req_cid = int(qs["child_id"][0])
+            except (TypeError, ValueError):
+                req_cid = None
         cam = CameraService.get_instance()
-        self.send_json(cam.enrollment_state)
+        if hasattr(cam, "get_enrollment_status"):
+            self.send_json(cam.get_enrollment_status(child_id=req_cid))
+        else:
+            self.send_json(cam.enrollment_state)
 
     def handle_child_avatar(self, path: str) -> None:
         try:
             parts = [p for p in path.split("/") if p]
             if len(parts) >= 3 and parts[0] == "api" and parts[1] == "child":
                 cid = int(parts[2])
-                avatar_file = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}_avatar.png"
+                if cid <= 0:
+                    self.send_error(400, "ID invalido")
+                    return
+                fotos_dir = _fotos_dir()
+                avatar_file = fotos_dir / f"crianca_{cid}_avatar.png"
                 if avatar_file.exists():
                     data = avatar_file.read_bytes()
                     self.send_response(200)
@@ -778,7 +835,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                     self.wfile.write(data)
                     return
                 # Tenta jpg
-                jpg_file = PROGRAMDATA_DIR / "fotos" / f"crianca_{cid}.jpg"
+                jpg_file = fotos_dir / f"crianca_{cid}.jpg"
                 if jpg_file.exists():
                     data = jpg_file.read_bytes()
                     self.send_response(200)

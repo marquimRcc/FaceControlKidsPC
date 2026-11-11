@@ -17,7 +17,7 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from .avatar_utils import save_child_photo, get_child_samples_dir
+from .avatar_utils import AVATAR_DIR, get_child_samples_dir, save_child_photo, select_child_sample_photo
 from .parent_face_pilot import REQUIRED_SAMPLES, _valid_features, replace_templates
 from .recognition import Recognizer
 from .storage import Storage
@@ -45,6 +45,7 @@ class CameraService:
         self._recognizer: Optional[Recognizer] = None
         self._streaming_clients = 0
         self._cam_lock = threading.Lock()
+        self._enroll_lock = threading.Lock()
         
         # Estado do cadastro biometrico em andamento
         self.enrollment_state: Dict[str, Any] = {
@@ -189,21 +190,50 @@ class CameraService:
                 if self._streaming_clients == 0 and not self.enrollment_state["active"]:
                     self._close_device()
 
-    def start_enrollment(self, child_id: int, db_path: Path) -> Dict[str, Any]:
-        """Inicia o processo de captura de 12 fotos em thread dedicada."""
-        if self.enrollment_state["active"]:
-            return {"ok": False, "error": "Um cadastro ja esta em andamento."}
+    def get_enrollment_status(self, child_id: Optional[int] = None) -> Dict[str, Any]:
+        """Retorna copia segura do estado atual de captura, isolada por child_id quando informado."""
+        with self._enroll_lock:
+            state = dict(self.enrollment_state)
+            if child_id is not None and child_id > 0 and state.get("child_id") != child_id:
+                return {
+                    "active": False,
+                    "child_id": child_id,
+                    "samples_count": 0,
+                    "total_required": REQUIRED_SAMPLES,
+                    "completed": False,
+                    "error": None,
+                    "message": "Pronto para iniciar.",
+                    "latest_avatar_b64": None,
+                }
+            return state
 
-        self.enrollment_state = {
-            "active": True,
-            "child_id": child_id,
-            "samples_count": 0,
-            "total_required": REQUIRED_SAMPLES,
-            "completed": False,
-            "error": None,
-            "message": "Iniciando captura. Olhe para a webcam...",
-            "latest_avatar_b64": None
-        }
+    def start_enrollment(self, child_id: int, db_path: Path) -> Dict[str, Any]:
+        """Inicia o processo de captura de 12 fotos em thread dedicada para um child_id especifico."""
+        if not isinstance(child_id, int) or child_id <= 0:
+            return {"ok": False, "error": "ID da crianca invalido para captura biometrica."}
+
+        if db_path.exists():
+            check_store = Storage(db_path)
+            try:
+                if not any(p[0] == child_id for p in check_store.people()):
+                    return {"ok": False, "error": f"Perfil #{child_id} nao encontrado."}
+            finally:
+                check_store.close()
+
+        with self._enroll_lock:
+            if self.enrollment_state["active"]:
+                return {"ok": False, "error": "Um cadastro ja esta em andamento."}
+
+            self.enrollment_state = {
+                "active": True,
+                "child_id": child_id,
+                "samples_count": 0,
+                "total_required": REQUIRED_SAMPLES,
+                "completed": False,
+                "error": None,
+                "message": "Iniciando captura. Olhe para a webcam...",
+                "latest_avatar_b64": None
+            }
 
         thread = threading.Thread(
             target=self._run_enrollment_worker,
@@ -211,7 +241,7 @@ class CameraService:
             daemon=True
         )
         thread.start()
-        return {"ok": True, "message": "Captura iniciada."}
+        return {"ok": True, "child_id": child_id, "message": "Captura iniciada."}
 
     def _run_enrollment_worker(self, child_id: int, db_path: Path) -> None:
         vectors: List[np.ndarray] = []
@@ -221,10 +251,22 @@ class CameraService:
         next_sample_time = time.monotonic()
         enrollment_deadline = next_sample_time + 120.0
 
+        # Descarta eventuais quadros antigos acumulados no buffer da webcam
+        with self._cam_lock:
+            if self._cap is not None and self._cap.isOpened():
+                for _ in range(3):
+                    try:
+                        self._cap.grab()
+                    except Exception:
+                        break
+
         store = Storage(db_path)
         try:
             logger.info("Iniciando sessao de cadastro biometrico para crianca ID %d", child_id)
-            while len(vectors) < REQUIRED_SAMPLES and self.enrollment_state["active"]:
+            while len(vectors) < REQUIRED_SAMPLES:
+                with self._enroll_lock:
+                    if not self.enrollment_state["active"] or self.enrollment_state.get("child_id") != child_id:
+                        break
                 if time.monotonic() >= enrollment_deadline:
                     raise TimeoutError("Tempo esgotado na captura facial. Verifique a webcam e tente novamente.")
                 ok, clean_frame, faces = self.get_latest_frame(draw_overlay=False)
@@ -252,30 +294,39 @@ class CameraService:
                                 best_face_frame = clean_frame.copy()
                                 best_face_box = faces[0]
                                 
-                                self.enrollment_state["samples_count"] = len(vectors)
-                                self.enrollment_state["message"] = f"Amostra {len(vectors)} de {REQUIRED_SAMPLES} capturada..."
+                                with self._enroll_lock:
+                                    self.enrollment_state["samples_count"] = len(vectors)
+                                    self.enrollment_state["message"] = f"Amostra {len(vectors)} de {REQUIRED_SAMPLES} capturada..."
                                 
                                 # Intervalo de 0.4s entre amostras para variar angulo
                                 next_sample_time = now + 0.40
                         except Exception as e:
                             logger.debug("Erro ao extrair caracteristicas faciais: %s", e)
                 elif len(faces) > 1:
-                    self.enrollment_state["message"] = "Multiplos rostos visiveis. Apenas a crianca deve olhar para a camera."
+                    with self._enroll_lock:
+                        self.enrollment_state["message"] = "Multiplos rostos visiveis. Apenas a crianca deve olhar para a camera."
                 else:
-                    self.enrollment_state["message"] = "Posicione o rosto no centro da camera..."
+                    with self._enroll_lock:
+                        self.enrollment_state["message"] = "Posicione o rosto no centro da camera..."
 
                 time.sleep(0.04)
 
             if len(vectors) >= REQUIRED_SAMPLES:
-                # 1. Salva vetores no banco
+                # 1. Salva vetores exclusivamente para este child_id
                 replace_templates(store, child_id, vectors)
 
-                # 2. Salva fotos cortadas
+                # 2. Salva fotos cortadas em pasta isolada do child_id e limpa marcadores antigos
                 samples_dir = get_child_samples_dir(child_id)
                 samples_dir.mkdir(parents=True, exist_ok=True)
                 for old_f in samples_dir.glob("amostra_*.jpg"):
                     try:
                         old_f.unlink()
+                    except Exception:
+                        pass
+                sel_marker = samples_dir / "selecionada.txt"
+                if sel_marker.exists():
+                    try:
+                        sel_marker.unlink()
                     except Exception:
                         pass
 
@@ -292,24 +343,37 @@ class CameraService:
                     except Exception:
                         pass
 
-                if best_face_frame is not None:
-                    save_child_photo(child_id, best_face_frame, best_face_box, store=store)
+                # Define a amostra 1 deste perfil como avatar oficial inicial sem criar duplicatas no SQLite
+                if samples_crops:
+                    ok_sel = select_child_sample_photo(child_id, samples_crops[0], store=None, sample_index=1)
+                    if ok_sel and hasattr(store, "set_setting"):
+                        try:
+                            store.set_setting(f"selected_sample_{child_id}", "1")
+                        except Exception:
+                            pass
+                elif best_face_frame is not None:
+                    save_child_photo(child_id, best_face_frame, best_face_box, store=None)
 
                 # Gera versao Base64 do avatar final para exibir na tela imediatamente
-                avatar_path = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SafePCKids" / "fotos" / f"crianca_{child_id}_avatar.png"
+                avatar_path = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
+                avatar_b64 = None
                 if avatar_path.exists():
                     b64 = base64.b64encode(avatar_path.read_bytes()).decode("ascii")
-                    self.enrollment_state["latest_avatar_b64"] = f"data:image/png;base64,{b64}"
+                    avatar_b64 = f"data:image/png;base64,{b64}"
 
-                self.enrollment_state["completed"] = True
-                self.enrollment_state["message"] = "Cadastro concluido com sucesso! 12 amostras salvas."
+                with self._enroll_lock:
+                    self.enrollment_state["latest_avatar_b64"] = avatar_b64
+                    self.enrollment_state["completed"] = True
+                    self.enrollment_state["message"] = "Cadastro concluido com sucesso! 12 amostras salvas."
                 logger.info("Cadastro biometrico concluido para crianca ID %d", child_id)
         except Exception as e:
             logger.error("Falha no worker de cadastro biometrico: %s", e)
-            self.enrollment_state["error"] = str(e)
-            self.enrollment_state["message"] = f"Erro no cadastro: {e}"
+            with self._enroll_lock:
+                self.enrollment_state["error"] = str(e)
+                self.enrollment_state["message"] = f"Erro no cadastro: {e}"
         finally:
-            self.enrollment_state["active"] = False
+            with self._enroll_lock:
+                self.enrollment_state["active"] = False
             store.close()
             with self._cam_lock:
                 if self._streaming_clients == 0:

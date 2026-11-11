@@ -789,7 +789,12 @@
     let enteredLockPin = "";
     let selectedQuotaHours = 2.0;
     let editingChildId = null;
+    let modalCreatedChildId = null;
+    let modalEnrollTimer = null;
+    let modalEnrolledSuccessfully = false;
     let activeGalleryChildId = null;
+    let activeGalleryChildName = "";
+    let galleryRecaptureTimer = null;
     window.avatarTimestamps = {};
 
     // Relogio ao vivo
@@ -1046,15 +1051,18 @@
         const circ = 2 * Math.PI * radius;
         const offset = circ - (c.percent_remaining / 100) * circ;
         const displayName = (c.name && c.name !== "None") ? c.name : "Filho";
-        const ts = window.avatarTimestamps[c.id] || "";
-        const avatarUrl = ts ? `/api/child/${c.id}/avatar?t=${ts}` : `/api/child/${c.id}/avatar`;
+        if (!window.avatarTimestamps[c.id]) {
+          window.avatarTimestamps[c.id] = Date.now();
+        }
+        const ts = window.avatarTimestamps[c.id];
+        const avatarUrl = `/api/child/${c.id}/avatar?t=${ts}`;
 
         html += `
           <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 shadow-xl">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3.5">
                 <div class="relative cursor-pointer group" onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" title="Clique para escolher foto de perfil ativa">
-                  <img src="${avatarUrl}" data-child-avatar="${c.id}" onerror="this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg group-hover:scale-105 transition-all">
+                  <img src="${avatarUrl}" data-child-avatar="${c.id}" onerror="this.onerror=null;this.src='/favicon.ico'" class="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/60 shadow-lg group-hover:scale-105 transition-all">
                   <span class="absolute bottom-0 right-0 bg-slate-900 text-[10px] p-0.5 rounded-full border border-cyan-500/40">🖼️</span>
                 </div>
                 <div>
@@ -1103,23 +1111,37 @@
       grid.innerHTML = html;
     }
 
+    function stopGalleryRecapturePolling() {
+      if (galleryRecaptureTimer) {
+        clearInterval(galleryRecaptureTimer);
+        galleryRecaptureTimer = null;
+      }
+    }
+
     // Modal de Galeria de 12 Fotos com Recaptura Webcam
     async function openPhotoGalleryModal(childId, childName) {
+      stopGalleryRecapturePolling();
       activeGalleryChildId = childId;
+      if (childName) {
+        activeGalleryChildName = childName;
+      }
+      const resolvedName = childName || activeGalleryChildName || "";
       const modal = document.getElementById("photoGalleryModal");
       const title = document.getElementById("galleryChildSubtitle");
       const grid = document.getElementById("galleryGrid");
-      if (title) title.innerText = childName ? `Perfil de ${childName}: escolha a foto oficial do rosto.` : "Escolha a foto oficial do perfil.";
+      if (title) title.innerText = resolvedName ? `Perfil de ${resolvedName} (#${childId}): escolha a foto oficial do rosto.` : `Perfil #${childId}: escolha a foto oficial.`;
       if (grid) grid.innerHTML = "<p class='text-xs text-slate-400 col-span-4 p-6 text-center animate-pulse'>Carregando amostras faciais...</p>";
       if (modal) modal.classList.remove("hidden");
 
       const res = await SafePCKidsAPI.getChildPhotos(childId);
+      if (activeGalleryChildId !== childId) return;
+
       const cacheBust = Date.now();
       if (res && res.photos && res.photos.length > 0) {
         let html = "";
         res.photos.forEach(p => {
           const isSelected = p.selected;
-          const photoUrl = `${p.url}?t=${cacheBust}`;
+          const photoUrl = `${p.url}?child_id=${childId}&t=${cacheBust}`;
           html += `
             <div onclick="selectActivePhoto(${childId}, ${p.index})" class="group cursor-pointer rounded-2xl p-2 bg-slate-900/90 border ${isSelected ? 'border-cyan-400 ring-2 ring-cyan-400/50' : 'border-slate-800 hover:border-slate-600'} transition-all relative flex flex-col items-center">
               <img src="${photoUrl}" class="w-full h-24 object-cover rounded-xl mb-1.5 shadow-md">
@@ -1131,14 +1153,22 @@
         if (grid) grid.innerHTML = html;
       } else {
         if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Iniciando captura automática com a webcam...</p></div>";
-        setTimeout(startModalRecapture, 400);
+        setTimeout(() => {
+          if (activeGalleryChildId === childId) {
+            startModalRecapture(childId);
+          }
+        }, 400);
       }
     }
 
     function closePhotoGalleryModal() {
+      stopGalleryRecapturePolling();
       const modal = document.getElementById("photoGalleryModal");
+      const grid = document.getElementById("galleryGrid");
+      if (grid) grid.innerHTML = "";
       if (modal) modal.classList.add("hidden");
       activeGalleryChildId = null;
+      activeGalleryChildName = "";
     }
 
     async function selectActivePhoto(childId, photoIndex) {
@@ -1150,35 +1180,55 @@
         if (!window.avatarTimestamps) window.avatarTimestamps = {};
         window.avatarTimestamps[childId] = now;
         
-        // Atualiza imediatamente na tela os elementos de imagem
+        // Atualiza imediatamente na tela apenas os elementos de imagem deste childId
         document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
           el.src = `/api/child/${childId}/avatar?t=${now}`;
         });
         
-        await openPhotoGalleryModal(childId, "");
+        await openPhotoGalleryModal(childId, activeGalleryChildName);
         if (typeof syncDashboardData === "function") syncDashboardData();
       } else {
         showToast((res && res.error) ? res.error : "Falha ao selecionar foto.");
       }
     }
 
-    async function startModalRecapture() {
-      const childId = activeGalleryChildId;
+    async function startModalRecapture(explicitChildId = null) {
+      const childId = explicitChildId || activeGalleryChildId;
       if (!childId) return;
+      stopGalleryRecapturePolling();
+
       const grid = document.getElementById("galleryGrid");
       const subtitle = document.getElementById("galleryChildSubtitle");
-      if (subtitle) subtitle.innerText = "Capturando 12 novas fotos na webcam...";
+      if (subtitle) subtitle.innerText = `Capturando 12 novas fotos na webcam para Perfil #${childId}...`;
       if (grid) grid.innerHTML = "<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>Webcam ativada: Olhe para a câmera</p><p class='text-xs text-slate-400'>Mova levemente o rosto para registrar variações de ângulo...</p></div>";
 
       const startRes = await SafePCKidsAPI.startEnrollment(childId);
-      let t = setInterval(async () => {
-        const s = await SafePCKidsAPI.getEnrollmentStatus();
-        if (!s) return;
+      if (!startRes || !startRes.ok) {
+        const errMsg = (startRes && startRes.error) ? startRes.error : "Não foi possível iniciar a captura facial.";
+        showToast(errMsg);
+        if (grid) grid.innerHTML = `<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-rose-400 font-semibold'>${errMsg}</p></div>`;
+        return;
+      }
+
+      galleryRecaptureTimer = setInterval(async () => {
+        if (activeGalleryChildId !== childId) {
+          stopGalleryRecapturePolling();
+          return;
+        }
+        const s = await SafePCKidsAPI.getEnrollmentStatus(childId);
+        if (!s || (s.child_id && s.child_id !== childId)) return;
+
+        if (s.error) {
+          stopGalleryRecapturePolling();
+          showToast(s.error);
+          if (grid) grid.innerHTML = `<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-rose-400 font-semibold'>${s.error}</p></div>`;
+          return;
+        }
         if (s.active && grid) {
           grid.innerHTML = `<div class='col-span-4 p-8 text-center space-y-3'><div class='w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto'></div><p class='text-sm text-cyan-300 font-bold'>${s.message || 'Capturando...'}</p><p class='text-xs text-cyan-400 font-mono font-bold'>${s.samples_count || 0} de 12 fotos capturadas</p></div>`;
         }
         if (s.completed) {
-          clearInterval(t);
+          stopGalleryRecapturePolling();
           showToast("12 novas amostras biométricas capturadas com sucesso!");
           const now = Date.now();
           if (!window.avatarTimestamps) window.avatarTimestamps = {};
@@ -1186,7 +1236,7 @@
           document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
             el.src = `/api/child/${childId}/avatar?t=${now}`;
           });
-          await openPhotoGalleryModal(childId, "");
+          await openPhotoGalleryModal(childId, activeGalleryChildName);
           if (typeof syncDashboardData === "function") syncDashboardData();
         }
       }, 400);
@@ -1196,6 +1246,7 @@
       if (!confirm(`Deseja realmente excluir o perfil de '${childName}'?`)) return;
       const res = await SafePCKidsAPI.deleteChild(childId);
       if (res && res.ok) {
+        if (window.avatarTimestamps) delete window.avatarTimestamps[childId];
         showToast("Perfil removido com sucesso.");
         syncDashboardData();
       } else {
@@ -1403,19 +1454,57 @@
       }, 3500);
     }
 
+    function stopModalEnrollPolling() {
+      if (modalEnrollTimer) {
+        clearInterval(modalEnrollTimer);
+        modalEnrollTimer = null;
+      }
+    }
+
     // Modal de Cadastro de Filho
     function openAddChildModal() {
+      stopModalEnrollPolling();
+      editingChildId = null;
+      modalCreatedChildId = null;
+      modalEnrolledSuccessfully = false;
+      selectedQuotaHours = 2.0;
+
+      const nameInput = document.getElementById("modalChildName");
+      if (nameInput) nameInput.value = "";
+
+      document.querySelectorAll(".modal-quota-btn").forEach(b => {
+        const isDefault = (b.getAttribute("onclick") || "").includes("(2)");
+        b.className = isDefault
+          ? "modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold"
+          : "modal-quota-btn p-2 rounded-xl border border-slate-700 text-slate-300 hover:border-cyan-400";
+      });
+
+      const enrollBtn = document.getElementById("modalStartEnrollBtn");
+      const btnText = document.getElementById("modalEnrollBtnText");
+      const badge = document.getElementById("modalEnrollProgressBadge");
+      const status = document.getElementById("modalEnrollStatus");
+      if (enrollBtn) enrollBtn.disabled = false;
+      if (btnText) btnText.innerText = "Capturar Fotos com Webcam (12 Fotos)";
+      if (badge) badge.classList.add("hidden");
+      if (status) status.innerText = "Posicione o rosto da criança em frente à câmera.";
+
       const m = document.getElementById("childModal");
       if (m) m.classList.remove("hidden");
       const cam = document.getElementById("modalCamPreview");
-      if (cam) cam.src = "/api/camera/stream";
+      if (cam) cam.src = `/api/camera/stream?t=${Date.now()}`;
     }
+
     function closeChildModal() {
+      stopModalEnrollPolling();
       const m = document.getElementById("childModal");
       if (m) m.classList.add("hidden");
       const cam = document.getElementById("modalCamPreview");
       if (cam) cam.src = "";
+      editingChildId = null;
+      modalCreatedChildId = null;
+      modalEnrolledSuccessfully = false;
     }
+
     function selectModalQuota(h) {
       selectedQuotaHours = h;
       document.querySelectorAll(".modal-quota-btn").forEach(b => {
@@ -1425,48 +1514,124 @@
         event.target.className = "modal-quota-btn p-2 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-300 font-bold";
       }
     }
+
     async function saveChildModal() {
-      const name = document.getElementById("modalChildName").value.trim();
+      const nameInput = document.getElementById("modalChildName");
+      const name = nameInput ? nameInput.value.trim() : "";
       if (!name) {
         showToast("Informe o nome da criança.");
+        if (nameInput) nameInput.focus();
         return;
       }
+
+      if (modalCreatedChildId) {
+        const targetId = modalCreatedChildId;
+        const alreadyEnrolled = modalEnrolledSuccessfully;
+        await SafePCKidsAPI.renameChild(targetId, name);
+        await SafePCKidsAPI.setLimit(targetId, selectedQuotaHours);
+        showToast(`Perfil de '${name}' salvo com sucesso!`);
+        closeChildModal();
+        syncDashboardData();
+        setTimeout(() => {
+          openPhotoGalleryModal(targetId, name);
+        }, alreadyEnrolled ? 250 : 350);
+        return;
+      }
+
       const res = await SafePCKidsAPI.addChild(name, selectedQuotaHours);
       if (res && res.ok) {
+        const newId = res.id;
         showToast(`Perfil de '${name}' criado com sucesso!`);
         closeChildModal();
-        document.getElementById("modalChildName").value = "";
         syncDashboardData();
-        if (res.id) {
+        if (newId) {
           setTimeout(() => {
-            openPhotoGalleryModal(res.id, name);
+            openPhotoGalleryModal(newId, name);
           }, 350);
         }
       } else {
         showToast((res && res.error) ? res.error : "Erro ao criar perfil.");
       }
     }
+
     async function startModalEnrollment() {
+      const nameInput = document.getElementById("modalChildName");
+      const name = nameInput ? nameInput.value.trim() : "";
+      if (!name) {
+        showToast("Informe o nome da criança antes de capturar as fotos.");
+        if (nameInput) nameInput.focus();
+        return;
+      }
+
+      const enrollBtn = document.getElementById("modalStartEnrollBtn");
       const btn = document.getElementById("modalEnrollBtnText");
       const badge = document.getElementById("modalEnrollProgressBadge");
       const status = document.getElementById("modalEnrollStatus");
+      if (enrollBtn) enrollBtn.disabled = true;
+
+      if (!modalCreatedChildId) {
+        if (status) status.innerText = "Criando perfil antes da captura...";
+        const addRes = await SafePCKidsAPI.addChild(name, selectedQuotaHours);
+        if (!addRes || !addRes.ok || !addRes.id) {
+          if (enrollBtn) enrollBtn.disabled = false;
+          const err = (addRes && addRes.error) ? addRes.error : "Erro ao criar perfil para captura.";
+          if (status) status.innerText = err;
+          showToast(err);
+          return;
+        }
+        modalCreatedChildId = addRes.id;
+        syncDashboardData();
+      }
+
+      const targetChildId = modalCreatedChildId;
+      modalEnrolledSuccessfully = false;
       if (btn) btn.innerText = "Capturando 12 Fotos...";
       if (badge) badge.classList.remove("hidden");
       if (status) status.innerText = "Olhe para a câmera e mova levemente a cabeça...";
 
-      const startRes = await SafePCKidsAPI.startEnrollment(1);
-      let t = setInterval(async () => {
-        const s = await SafePCKidsAPI.getEnrollmentStatus();
-        if (!s) return;
+      const startRes = await SafePCKidsAPI.startEnrollment(targetChildId, name);
+      if (!startRes || !startRes.ok) {
+        if (enrollBtn) enrollBtn.disabled = false;
+        if (btn) btn.innerText = "Capturar Fotos com Webcam (12 Fotos)";
+        if (badge) badge.classList.add("hidden");
+        const err = (startRes && startRes.error) ? startRes.error : "Não foi possível iniciar a captura.";
+        if (status) status.innerText = err;
+        showToast(err);
+        return;
+      }
+
+      stopModalEnrollPolling();
+      modalEnrollTimer = setInterval(async () => {
+        if (modalCreatedChildId !== targetChildId) {
+          stopModalEnrollPolling();
+          return;
+        }
+        const s = await SafePCKidsAPI.getEnrollmentStatus(targetChildId);
+        if (!s || (s.child_id && s.child_id !== targetChildId)) return;
+
+        if (s.error) {
+          stopModalEnrollPolling();
+          if (enrollBtn) enrollBtn.disabled = false;
+          if (btn) btn.innerText = "Tentar Capturar Novamente (12 Fotos)";
+          if (badge) badge.classList.add("hidden");
+          if (status) status.innerText = s.error;
+          showToast(s.error);
+          return;
+        }
         if (s.active && status) {
           status.innerText = s.message || `Capturando ${s.samples_count}/12...`;
         }
         if (s.completed) {
-          clearInterval(t);
+          stopModalEnrollPolling();
+          modalEnrolledSuccessfully = true;
+          if (enrollBtn) enrollBtn.disabled = false;
           if (btn) btn.innerText = "✓ 12 Fotos Capturadas";
           if (badge) badge.classList.add("hidden");
           if (status) status.innerText = "Fotos gravadas com sucesso!";
+          if (!window.avatarTimestamps) window.avatarTimestamps = {};
+          window.avatarTimestamps[targetChildId] = Date.now();
           showToast("12 amostras biométricas salvas com sucesso!");
+          syncDashboardData();
         }
       }, 350);
     }

@@ -175,8 +175,8 @@ def _run_powershell_elevated(script: str, timeout: float = 30.0) -> Tuple[bool, 
     """
     try:
         script_file.write_text(wrapped_ps1, encoding="utf-8")
-        # Usa ShellExecuteW nativo para acionar o dialogo de UAC
-        params = f"-NoProfile -ExecutionPolicy Bypass -File \"{script_file}\""
+        # Usa ShellExecuteW nativo para acionar o dialogo de UAC sem janela visivel
+        params = f"-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{script_file}\""
         ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe", params, None, 0)
         if ret <= 32:
             script_file.unlink(missing_ok=True)

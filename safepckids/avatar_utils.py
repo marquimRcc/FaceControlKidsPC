@@ -173,6 +173,8 @@ def remove_child_avatar_files(child_id: int) -> bool:
 
 def get_child_avatar_path(child_id: int) -> Optional[Path]:
     """Retorna o caminho do PNG circular da crianca, gerando-o a partir do JPG ou SQLite se necessario."""
+    if not isinstance(child_id, int) or child_id <= 0:
+        return None
     ensure_avatar_dir()
     png = AVATAR_DIR / f"crianca_{child_id}_avatar.png"
     if png.exists() and png.stat().st_size > 0:
@@ -223,6 +225,8 @@ def get_child_samples_dir(child_id: int) -> Path:
 
 def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
     """Retorna lista das fotos das amostras da crianca (ate 12 fotos)."""
+    if not isinstance(child_id, int) or child_id <= 0:
+        return []
     samples = []
     s_dir = AVATAR_DIR / f"amostras_{child_id}"
 
@@ -252,11 +256,13 @@ def get_child_sample_photos(child_id: int, store=None) -> list[dict]:
                     "label": f"Foto {i}",
                     "selected": (i == selected_idx),
                 })
+        if samples and not any(s["selected"] for s in samples):
+            samples[0]["selected"] = True
 
     if not samples and store is not None and hasattr(store, "profile_photos"):
         try:
             db_photos = store.profile_photos(child_id)
-            for idx, (photo_id, jpeg_bytes, selected) in enumerate(db_photos, start=1):
+            for idx, (photo_id, jpeg_bytes, selected) in enumerate(db_photos[:12], start=1):
                 samples.append({
                     "index": idx,
                     "photo_id": photo_id,
@@ -288,6 +294,8 @@ def select_child_sample_photo(
     photo_id: Optional[int] = None,
 ) -> bool:
     """Aplica a amostra selecionada como a foto de perfil oficial da crianca."""
+    if not isinstance(child_id, int) or child_id <= 0:
+        return False
     try:
         ensure_avatar_dir()
         if isinstance(sample_path_or_bytes, (str, Path)):
@@ -322,9 +330,17 @@ def select_child_sample_photo(
                     store.set_setting(f"selected_sample_{child_id}", str(sample_index))
                 except Exception:
                     pass
-            if photo_id is not None and hasattr(store, "select_profile_photo"):
+            resolved_photo_id = photo_id
+            if resolved_photo_id is None and sample_index is not None and hasattr(store, "profile_photos"):
                 try:
-                    store.select_profile_photo(child_id, photo_id)
+                    existing_photos = store.profile_photos(child_id)
+                    if isinstance(existing_photos, list) and 0 <= sample_index - 1 < len(existing_photos):
+                        resolved_photo_id = existing_photos[sample_index - 1][0]
+                except Exception:
+                    pass
+            if resolved_photo_id is not None and hasattr(store, "select_profile_photo"):
+                try:
+                    store.select_profile_photo(child_id, resolved_photo_id)
                 except Exception:
                     pass
             elif hasattr(store, "add_profile_photo"):

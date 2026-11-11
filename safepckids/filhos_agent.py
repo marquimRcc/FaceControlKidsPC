@@ -255,11 +255,13 @@ def trigger_welcome_screen():
 
         env = os.environ.copy()
         env["PYTHONPATH"] = str(root_dir)
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
         with _welcome_lock:
             _welcome_proc = subprocess.Popen(
                 [str(pyw), "-m", "safepckids.welcome_screen"],
                 cwd=str(root_dir),
                 env=env,
+                creationflags=creation_flags,
             )
         logger.info("Tela de boas-vindas iniciada com sucesso (PID %d).", _welcome_proc.pid)
     except Exception as e:

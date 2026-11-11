@@ -1682,7 +1682,8 @@ class AdminDashboard(tk.Tk):
             str(child_id),
         ]
         try:
-            self.active_enrollment_proc = subprocess.Popen(cmd, cwd=str(ROOT_DIR))
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+            self.active_enrollment_proc = subprocess.Popen(cmd, cwd=str(ROOT_DIR), creationflags=creation_flags)
             self.status_text.set(f"Janela de captura da webcam aberta para o Perfil #{child_id}...")
 
             # Thread para aguardar termino e atualizar UI

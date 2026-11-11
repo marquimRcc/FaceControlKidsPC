@@ -32,9 +32,10 @@ $wsh = New-Object -ComObject WScript.Shell
 $lnkStartAdmin = Join-Path $startMenuDir 'SafePCKids - Painel dos Pais.lnk'
 $s1 = $wsh.CreateShortcut($lnkStartAdmin)
 $s1.TargetPath = $pythonw
-$s1.Arguments = '-m safepckids.launcher --admin'
+$s1.Arguments = '-m safepckids.launcher --dashboard'
 $s1.WorkingDirectory = $root
 $s1.Description = 'SafePCKids - Painel Administrativo dos Pais'
+$s1.WindowStyle = 7
 if (Test-Path -LiteralPath $iconPath) { $s1.IconLocation = "$iconPath,0" }
 $s1.Save()
 
@@ -45,6 +46,7 @@ $s2.TargetPath = $pythonw
 $s2.Arguments = '-m safepckids.launcher --setup'
 $s2.WorkingDirectory = $root
 $s2.Description = 'SafePCKids - Assistente de Instalacao e Cadastro Facial'
+$s2.WindowStyle = 7
 if (Test-Path -LiteralPath $iconPath) { $s2.IconLocation = "$iconPath,0" }
 $s2.Save()
 
@@ -52,9 +54,10 @@ $s2.Save()
 $lnkDesktop = Join-Path $desktop 'SafePCKids - Painel dos Pais.lnk'
 $s3 = $wsh.CreateShortcut($lnkDesktop)
 $s3.TargetPath = $pythonw
-$s3.Arguments = '-m safepckids.launcher --admin'
+$s3.Arguments = '-m safepckids.launcher --dashboard'
 $s3.WorkingDirectory = $root
 $s3.Description = 'SafePCKids - Painel de Controle Parental'
+$s3.WindowStyle = 7
 if (Test-Path -LiteralPath $iconPath) { $s3.IconLocation = "$iconPath,0" }
 $s3.Save()
 

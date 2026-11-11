@@ -45,11 +45,24 @@ def ensure_admin_if_needed() -> None:
     # O agente de monitoramento da sessão 'Filhos' deve rodar com privilégios limitados de usuário
     if "filhos_agent" in args_lower or "--filhos-agent" in args_lower:
         return
+    if "--elevated" in sys.argv[1:]:
+        return
 
     if not is_admin():
         import ctypes
-        params = subprocess.list2cmdline(["-E", "-s", "-m", "safepckids.launcher", *sys.argv[1:]])
-        ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+        elev_args = [*sys.argv[1:], "--elevated"]
+        if getattr(sys, "frozen", False):
+            target_exe = sys.executable
+            params = subprocess.list2cmdline(elev_args)
+        else:
+            exe_path = Path(sys.executable)
+            if exe_path.name.lower() == "python.exe":
+                pyw_candidate = exe_path.with_name("pythonw.exe")
+                target_exe = str(pyw_candidate) if pyw_candidate.is_file() else sys.executable
+            else:
+                target_exe = sys.executable
+            params = subprocess.list2cmdline(["-E", "-s", "-m", "safepckids.launcher", *elev_args])
+        ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", target_exe, params, None, 0)
         sys.exit(0 if ret > 32 else 1)
 
 
@@ -70,7 +83,8 @@ def is_system_installed() -> bool:
 
 def main(argv: Optional[list[str]] = None) -> int:
     """Ponto de entrada inteligente do SafePCKids."""
-    args = list(sys.argv[1:] if argv is None else argv)
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    args = [a for a in raw_args if a != "--elevated"]
     args_lower = " ".join(args).lower()
 
     # Roteamento de serviços de segundo plano

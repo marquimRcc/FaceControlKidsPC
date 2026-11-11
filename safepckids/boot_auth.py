@@ -65,7 +65,8 @@ def supervise(*, state_path: Path, popen=subprocess.Popen,
             env = os.environ.copy()
             env["PYTHONPATH"] = str(root)
             env["SAFEPCKIDS_BOOT_WORKER"] = "1"
-            process = popen(command, cwd=str(root), env=env)
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+            process = popen(command, cwd=str(root), env=env, creationflags=creation_flags)
             started = clock()
             changed = started
             previous = None

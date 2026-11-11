@@ -174,7 +174,11 @@ const SafePCKidsAPI = {
         headers: this.getHeaders(),
         body: JSON.stringify({ name, daily_limit_hours: limitHours })
       });
-      return await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        return { ok: false, error: (data && data.error) ? data.error : `Erro HTTP ${res.status}` };
+      }
+      return data || { ok: false, error: "Resposta vazia do servidor" };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -195,7 +199,7 @@ const SafePCKidsAPI = {
 
   async getChildPhotos(childId) {
     try {
-      const res = await fetch(`${this.baseUrl}/api/children/${childId}/photos`, {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/photos?t=${Date.now()}`, {
         headers: this.getHeaders()
       });
       return await res.json();
@@ -260,12 +264,16 @@ const SafePCKidsAPI = {
     }
   },
 
-  async startEnrollment(childId = 1, childName = null) {
+  async startEnrollment(childId, childName = null) {
+    const numericId = Number(childId || 0);
+    if ((!numericId || numericId <= 0) && (!childName || !String(childName).trim())) {
+      return { ok: false, error: "Informe ou selecione um perfil antes de iniciar a captura." };
+    }
     try {
       const res = await fetch(`${this.baseUrl}/api/camera/enroll/start`, {
         method: "POST",
         headers: this.getHeaders(),
-        body: JSON.stringify({ child_id: childId, child_name: childName })
+        body: JSON.stringify({ child_id: numericId, child_name: childName })
       });
       return await res.json();
     } catch (e) {
@@ -273,9 +281,10 @@ const SafePCKidsAPI = {
     }
   },
 
-  async getEnrollmentStatus() {
+  async getEnrollmentStatus(childId = null) {
     try {
-      const res = await fetch(`${this.baseUrl}/api/camera/enroll/status`, {
+      const query = childId ? `?child_id=${encodeURIComponent(childId)}&t=${Date.now()}` : `?t=${Date.now()}`;
+      const res = await fetch(`${this.baseUrl}/api/camera/enroll/status${query}`, {
         headers: this.getHeaders()
       });
       return await res.json();

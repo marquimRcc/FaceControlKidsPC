@@ -86,7 +86,7 @@ def get_system_diagnostics() -> Dict[str, Any]:
     if sys.platform == "win32":
         try:
             p = _run_win_cmd(
-                ["powershell", "-NoProfile", "-Command",
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
                  "Get-LocalUser -Name 'Filhos' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty SID"],
                 timeout=5.0
             )
@@ -152,7 +152,7 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
 
             # Define senha para nunca expirar
             _run_win_cmd(
-                ["powershell", "-NoProfile", "-Command",
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
                  f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"],
                 timeout=5.0,
                 capture=False,
@@ -175,13 +175,13 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
 
             # Adiciona ao grupo local de Usuarios (SID S-1-5-32-545)
             _run_win_cmd(
-                ["powershell", "-NoProfile", "-Command",
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
                  f"Add-LocalGroupMember -SID 'S-1-5-32-545' -Member '{username}' -ErrorAction SilentlyContinue"],
                 timeout=5.0,
                 capture=False,
             )
             _run_win_cmd(
-                ["powershell", "-NoProfile", "-Command",
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
                  f"Set-LocalUser -Name '{username}' -PasswordNeverExpires $true -ErrorAction SilentlyContinue"],
                 timeout=5.0,
                 capture=False,
@@ -189,7 +189,7 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
             if preserve_existing:
                 profile_script = get_production_project_root() / "scripts" / "Preparar-Perfil-Filhos.ps1"
                 _require_win_cmd(
-                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
                      "-File", str(profile_script)],
                     "Preparacao do primeiro acesso de Filhos", timeout=60.0,
                 )
@@ -357,7 +357,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             f"($_.CommandLine -like '*safepckids.auth_service*' -or $_.CommandLine -like '*safepckids.boot_auth*') "
             f"}} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_cleanup], timeout=30.0, capture=False)
+        _run_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_cleanup], timeout=30.0, capture=False)
 
         # 6. Tarefa Agendada 1: SafePCKidsAuthService (Interativa no logon do ADMINISTRADOR com privilegios elevados)
         # O servico de autenticacao de webcam roda na sessao do administrador para atender o Win+L
@@ -370,7 +370,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             f"Register-ScheduledTask -TaskName 'SafePCKidsAuthService' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null; "
             f"Start-ScheduledTask -TaskName 'SafePCKidsAuthService' -ErrorAction SilentlyContinue"
         )
-        _require_win_cmd(["powershell", "-NoProfile", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_auth], "Tarefa SafePCKidsAuthService")
+        _require_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_auth], "Tarefa SafePCKidsAuthService")
 
         # O pacote autonomo usa somente as tarefas agendadas.
         private_runtime = (root / "runtime" / "pythonw.exe").is_file()
@@ -436,7 +436,7 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
             f"$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 4; "
             f"Register-ScheduledTask -TaskName 'SafePCKidsFilhosAgent' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null"
         )
-        _require_win_cmd(["powershell", "-NoProfile", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_agent], "Tarefa SafePCKidsFilhosAgent")
+        _require_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_agent], "Tarefa SafePCKidsFilhosAgent")
 
         # 9. Registro da DLL do Credential Provider no Registro
         dll_target = provider_dll(root)
@@ -456,14 +456,14 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
                 f"  Set-ItemProperty -Path $regCustom -Name 'TargetUserSid' -Value $filhosUser.SID.Value -Force "
                 f"}}"
             )
-            _require_win_cmd(["powershell", "-NoProfile", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_reg], "Registro da conta Filhos no Credential Provider")
+            _require_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_reg], "Registro da conta Filhos no Credential Provider")
 
         # 10. O boot depende da DLL ja registrada e do banco inicializado.
         boot_script = root / "scripts" / "Ativar-Desbloqueio-No-Boot.ps1"
         if not boot_script.exists():
             raise RuntimeError(f"Script de autenticacao no boot ausente: {boot_script}")
         _require_win_cmd(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(boot_script)],
+            ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", str(boot_script)],
             "Autenticacao facial no boot", timeout=60.0,
         )
 
@@ -500,19 +500,28 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
     except Exception:
         pass
 
-    pythonw = get_production_pythonw(root)
+    private_pythonw = root / "runtime" / "pythonw.exe"
+    venv_pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
     target_exe = None
     args = ""
     # Prioriza sempre o pythonw.exe assinado para evitar bloqueio do Smart App Control do Windows 11
-    if pythonw.exists():
-        target_exe = pythonw
-        args = "-m safepckids.launcher --admin"
+    if private_pythonw.is_file():
+        target_exe = private_pythonw
+        args = "-m safepckids.launcher --dashboard"
+    elif venv_pythonw.is_file():
+        target_exe = venv_pythonw.resolve()
+        args = "-m safepckids.launcher --dashboard"
     elif getattr(sys, "frozen", False):
-        target_exe = Path(sys.executable)
-        args = "--admin"
+        target_exe = Path(sys.executable).resolve()
+        args = "--dashboard"
     else:
-        target_exe = Path(sys.executable)
-        args = "-m safepckids.launcher --admin"
+        pythonw = get_production_pythonw(root)
+        if pythonw.exists():
+            target_exe = pythonw
+            args = "-m safepckids.launcher --dashboard"
+        else:
+            target_exe = Path(sys.executable).resolve()
+            args = "-m safepckids.launcher --dashboard"
 
     destinations = [desktop]
     if start_menu.exists():
@@ -521,7 +530,7 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
     panel_links = 0
     for dest in destinations:
         try:
-            # 1. Atalho do Painel dos Pais
+            # 1. Atalho do Painel dos Pais (janela oculta/minimizada, nunca via .bat em loop)
             lnk_panel = dest / "SafePCKids - Painel dos Pais.lnk"
             ps_shortcut = (
                 f"$wsh = New-Object -ComObject WScript.Shell; "
@@ -531,9 +540,14 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
                 f"$s.WorkingDirectory = '{root}'; "
                 f"$s.Description = 'SafePCKids - Painel Administrativo dos Pais'; "
                 f"$s.IconLocation = '{icon_path},0'; "
+                f"$s.WindowStyle = 7; "
                 f"$s.Save()"
             )
-            _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_shortcut], timeout=5.0, capture=False)
+            _run_win_cmd(
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_shortcut],
+                timeout=5.0,
+                capture=False,
+            )
             if lnk_panel.is_file():
                 panel_links += 1
 
@@ -552,7 +566,11 @@ def create_desktop_shortcuts(root_dir: Optional[Path] = None) -> None:
                     f"$s.IconLocation = '{icon_path},0'; "
                     f"$s.Save()"
                 )
-                _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_uninst], timeout=5.0, capture=False)
+                _run_win_cmd(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_uninst],
+                    timeout=5.0,
+                    capture=False,
+                )
         except Exception as e:
             logger.warning(f"Aviso ao criar atalhos em {dest}: {e}")
 
@@ -638,7 +656,7 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
             f"Remove-Item -Path $globalAuth -Force -ErrorAction SilentlyContinue; "
             f"Remove-Item -Path $userStartup -Force -ErrorAction SilentlyContinue"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_unreg], timeout=10.0)
+        _run_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_unreg], timeout=10.0)
 
         # 2. Parar e remover tarefas agendadas
         for task in ("SafePCKidsBootAuth", "SafePCKidsAuthService", "SafePCKidsFilhosAgent"):
@@ -651,7 +669,7 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
             "$_.CommandLine -like '*auth_service*' -or $_.CommandLine -like '*filhos_agent*' -or $_.CommandLine -like '*-m safepckids.boot_auth*' "
             "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
         )
-        _run_win_cmd(["powershell", "-NoProfile", "-Command", ps_kill], timeout=10.0)
+        _run_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_kill], timeout=10.0)
 
         # 4. Remover atalhos do Desktop e Menu Iniciar
         desktop = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop"
