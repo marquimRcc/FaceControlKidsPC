@@ -567,6 +567,28 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdo
                     publish_unlock_event=command != "SESSION_QUERY")
             elif command == "PING":
                 status, data = "PONG", {"version": "1.0"}
+            elif command == "NETGUARD_ENABLE":
+                try:
+                    from .network_guard import enable_adguard_family_protection_direct
+                    ok, msg = enable_adguard_family_protection_direct()
+                    status, data = ("NETGUARD_OK" if ok else "NETGUARD_ERROR"), {"ok": ok, "message": msg}
+                except Exception as e:
+                    logger.error("Falha ao ativar NetGuard via pipe: %s", e)
+                    status, data = "NETGUARD_ERROR", {"ok": False, "message": str(e)}
+            elif command == "NETGUARD_DISABLE":
+                try:
+                    from .network_guard import disable_adguard_family_protection_direct
+                    ok, msg = disable_adguard_family_protection_direct()
+                    status, data = ("NETGUARD_OK" if ok else "NETGUARD_ERROR"), {"ok": ok, "message": msg}
+                except Exception as e:
+                    logger.error("Falha ao desativar NetGuard via pipe: %s", e)
+                    status, data = "NETGUARD_ERROR", {"ok": False, "message": str(e)}
+            elif command == "NETGUARD_STATUS":
+                try:
+                    from .network_guard import get_protection_status_direct
+                    status, data = "NETGUARD_OK", get_protection_status_direct()
+                except Exception as e:
+                    status, data = "NETGUARD_ERROR", {"ok": False, "message": str(e)}
             else:
                 status, data = "INVALID_REQUEST", {"message": "Requisicao IPC vazia"}
 
