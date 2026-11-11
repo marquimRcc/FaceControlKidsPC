@@ -8,17 +8,16 @@ Implementa 3 camadas de protecao em uma so:
 """
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import platform
 import subprocess
 import sys
+import tempfile
+import time
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
-
-if sys.platform == "win32":
-    import winreg
-else:
-    winreg = None  # type: ignore
 
 logger = logging.getLogger("safepckids.network_guard")
 
@@ -31,15 +30,25 @@ ADGUARD_DOT_HOSTNAME = "family.adguard-dns.com"
 
 FIREWALL_PREFIX = "SafePCKids_AdGuard_"
 
-BROWSER_POLICY_PATHS = [
-    r"SOFTWARE\Policies\Microsoft\Edge",
-    r"SOFTWARE\Policies\Google\Chrome",
-    r"SOFTWARE\Policies\BraveSoftware\Brave",
+BROWSER_POLICY_KEYS = [
+    r"HKLM:\SOFTWARE\Policies\Microsoft\Edge",
+    r"HKLM:\SOFTWARE\Policies\Google\Chrome",
+    r"HKLM:\SOFTWARE\Policies\BraveSoftware\Brave",
 ]
 
 
+def is_admin() -> bool:
+    """Verifica se o processo atual possui privilegios elevados de administrador."""
+    if sys.platform != "win32":
+        return False
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
+
 def _run_powershell(script: str, timeout: float = 20.0) -> Tuple[bool, str]:
-    """Executa um script PowerShell silenciosamente."""
+    """Executa script PowerShell diretamente."""
     if sys.platform != "win32":
         return False, "Plataforma nao suportada."
     try:
@@ -61,183 +70,170 @@ def _run_powershell(script: str, timeout: float = 20.0) -> Tuple[bool, str]:
         return False, str(exc)
 
 
-def apply_doh_and_dns_settings() -> Tuple[bool, str]:
-    """Configura os servidores DoH e DNS no Windows 11 para todos os adaptadores ativos."""
-    ps_script = f"""
-    $ErrorActionPreference = 'SilentlyContinue'
+def _run_powershell_elevated(script: str, timeout: float = 30.0) -> Tuple[bool, str]:
+    """Executa script PowerShell com privilegios elevados (UAC via Verb RunAs se necessario)."""
+    if sys.platform != "win32":
+        return False, "Plataforma nao suportada."
 
-    # 1. Registra os templates DoH do AdGuard Family no Windows 11
-    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV4_PRIMARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true
-    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV4_SECONDARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true
-    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV6_PRIMARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true
-    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV6_SECONDARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true
+    if is_admin():
+        return _run_powershell(script, timeout=timeout)
 
-    # 2. Configura os adaptadores fisicos conectados
+    # Quando o processo nao e administrador, delega para processo PowerShell elevado
+    timestamp = int(time.time() * 1000)
+    temp_dir = Path(tempfile.gettempdir())
+    script_file = temp_dir / f"safepckids_netguard_{timestamp}.ps1"
+    log_file = temp_dir / f"safepckids_netguard_{timestamp}.log"
+
+    wrapped_ps1 = f"""
+    try {{
+        {script}
+        Set-Content -Path '{log_file}' -Value 'SUCCESS' -Encoding UTF8
+    }} catch {{
+        Set-Content -Path '{log_file}' -Value "ERROR: $($_.Exception.Message)" -Encoding UTF8
+        exit 1
+    }}
+    """
+    try:
+        script_file.write_text(wrapped_ps1, encoding="utf-8")
+        launcher = (
+            f"Start-Process powershell.exe -Wait -WindowStyle Hidden "
+            f"-ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{script_file}\"' -Verb RunAs"
+        )
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launcher],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        for _ in range(25):
+            if log_file.exists():
+                break
+            time.sleep(0.2)
+
+        if log_file.exists():
+            out = log_file.read_text(encoding="utf-8").strip()
+            log_file.unlink(missing_ok=True)
+            script_file.unlink(missing_ok=True)
+            if "SUCCESS" in out:
+                return True, "Operacao executada com sucesso."
+            return False, out
+
+        script_file.unlink(missing_ok=True)
+        return False, "Operacao cancelada ou permissao negada no Controle de Conta de Usuario (UAC)."
+    except Exception as exc:
+        script_file.unlink(missing_ok=True)
+        log_file.unlink(missing_ok=True)
+        return False, str(exc)
+
+
+def enable_adguard_family_protection() -> Tuple[bool, str]:
+    """Ativa as 3 camadas de protecao global com privilégios de Administrador."""
+    logger.info("Ativando Protecao Global AdGuard Family no Windows...")
+
+    enable_script = f"""
+    $ErrorActionPreference = 'Stop'
+
+    # 1. Registra os servidores DoH do AdGuard Family no Windows 11
+    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV4_PRIMARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction SilentlyContinue
+    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV4_SECONDARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction SilentlyContinue
+    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV6_PRIMARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction SilentlyContinue
+    Add-DnsClientDohServerAddress -ServerAddress "{ADGUARD_IPV6_SECONDARY}" -DohTemplate "{ADGUARD_DOH_TEMPLATE}" -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction SilentlyContinue
+
+    # 2. Aplica DNS aos adaptadores fisicos (Wi-Fi e Ethernet)
     $adapters = Get-NetAdapter | Where-Object {{ $_.Status -eq 'Up' -and $_.Virtual -eq $false }}
     if (-not $adapters) {{
         $adapters = Get-NetAdapter | Where-Object {{ $_.Virtual -eq $false }}
     }}
-
-    foreach ($adapter in $adapters) {{
-        Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses ("{ADGUARD_IPV4_PRIMARY}", "{ADGUARD_IPV4_SECONDARY}")
+    foreach ($a in $adapters) {{
+        Set-DnsClientServerAddress -InterfaceIndex $a.InterfaceIndex -ServerAddresses ("{ADGUARD_IPV4_PRIMARY}", "{ADGUARD_IPV4_SECONDARY}")
     }}
 
-    # 3. Limpa o cache DNS
-    Clear-DnsClientCache
-    Write-Output "OK"
-    """
-    ok, out = _run_powershell(ps_script)
-    if not ok:
-        logger.warning("Nao foi possivel configurar DoH/DNS totalmente: %s", out)
-        return False, f"Falha ao configurar DNS/DoH: {out}"
-    return True, "DNS AdGuard Family configurado com sucesso."
+    # 3. Politicas de Navegador no Registro HKLM
+    $browsers = @(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+        "HKLM:\\SOFTWARE\\Policies\\Google\\Chrome",
+        "HKLM:\\SOFTWARE\\Policies\\BraveSoftware\\Brave"
+    )
+    foreach ($key in $browsers) {{
+        if (-not (Test-Path $key)) {{
+            New-Item -Path $key -Force | Out-Null
+        }}
+        Set-ItemProperty -Path $key -Name "ForceGoogleSafeSearch" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $key -Name "ForceYouTubeRestrict" -Value 2 -Type DWord -Force
+        Set-ItemProperty -Path $key -Name "ForceBingSafeSearch" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $key -Name "DnsOverHttpsMode" -Value "secure" -Type String -Force
+        Set-ItemProperty -Path $key -Name "DnsOverHttpsTemplates" -Value "{ADGUARD_DOH_TEMPLATE}" -Type String -Force
+    }}
 
-
-def restore_default_dns_settings() -> Tuple[bool, str]:
-    """Restaura as configuracoes de DNS dos adaptadores para DHCP."""
-    ps_script = """
-    $ErrorActionPreference = 'SilentlyContinue'
-    $adapters = Get-NetAdapter | Where-Object { $_.Virtual -eq $false }
-    foreach ($adapter in $adapters) {
-        Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ResetServerAddresses
-    }
-    Clear-DnsClientCache
-    Write-Output "OK"
-    """
-    ok, out = _run_powershell(ps_script)
-    if not ok:
-        return False, f"Falha ao restaurar DNS: {out}"
-    return True, "Configuracoes de DNS restauradas para padrao (DHCP)."
-
-
-def apply_browser_policies() -> Tuple[bool, str]:
-    """Configura politicas no Registro do Windows (HKLM) para Chrome, Edge e Brave."""
-    if sys.platform != "win32" or not winreg:
-        return False, "Nao suportado nesta plataforma."
-
-    policies = {
-        "ForceGoogleSafeSearch": (winreg.REG_DWORD, 1),
-        "ForceYouTubeRestrict": (winreg.REG_DWORD, 2),  # 2 = Modo Restrito Estrito
-        "ForceBingSafeSearch": (winreg.REG_DWORD, 1),
-        "DnsOverHttpsMode": (winreg.REG_SZ, "secure"),
-        "DnsOverHttpsTemplates": (winreg.REG_SZ, ADGUARD_DOH_TEMPLATE),
-    }
-
-    try:
-        for subkey in BROWSER_POLICY_PATHS:
-            try:
-                key = winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_SET_VALUE)
-                for val_name, (val_type, val_data) in policies.items():
-                    winreg.SetValueEx(key, val_name, 0, val_type, val_data)
-                winreg.CloseKey(key)
-            except Exception as e:
-                logger.warning("Falha ao gravar politica em %s: %s", subkey, e)
-        return True, "Politicas de SafeSearch e DoH aplicadas aos navegadores."
-    except Exception as exc:
-        return False, f"Erro ao aplicar politicas de navegadores: {exc}"
-
-
-def remove_browser_policies() -> Tuple[bool, str]:
-    """Remove as politicas aplicadas aos navegadores no Registro."""
-    if sys.platform != "win32" or not winreg:
-        return False, "Nao suportado nesta plataforma."
-
-    policy_keys = [
-        "ForceGoogleSafeSearch",
-        "ForceYouTubeRestrict",
-        "ForceBingSafeSearch",
-        "DnsOverHttpsMode",
-        "DnsOverHttpsTemplates",
-    ]
-
-    for subkey in BROWSER_POLICY_PATHS:
-        try:
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_SET_VALUE)
-            for val_name in policy_keys:
-                try:
-                    winreg.DeleteValue(key, val_name)
-                except FileNotFoundError:
-                    pass
-            winreg.CloseKey(key)
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            logger.warning("Falha ao remover politica em %s: %s", subkey, e)
-    return True, "Politicas de navegador removidas."
-
-
-def apply_firewall_anti_bypass_rules() -> Tuple[bool, str]:
-    """Cria regras no Windows Defender Firewall impedindo contorno do DNS AdGuard."""
-    ps_script = f"""
-    $ErrorActionPreference = 'SilentlyContinue'
-
-    # Remove regras antigas do SafePCKids se houver
+    # 4. Regras do Windows Defender Firewall Anti-Burla
     Remove-NetFirewallRule -Name "{FIREWALL_PREFIX}*" -ErrorAction SilentlyContinue
 
-    # 1. Permite saida UDP/TCP na porta 53 para os servidores AdGuard Family
     New-NetFirewallRule -Name "{FIREWALL_PREFIX}Allow_DNS_UDP" -DisplayName "SafePCKids - Permitir DNS AdGuard UDP" `
         -Direction Outbound -Action Allow -Protocol UDP -RemotePort 53 -RemoteAddress "{ADGUARD_IPV4_PRIMARY}","{ADGUARD_IPV4_SECONDARY}"
 
     New-NetFirewallRule -Name "{FIREWALL_PREFIX}Allow_DNS_TCP" -DisplayName "SafePCKids - Permitir DNS AdGuard TCP" `
         -Direction Outbound -Action Allow -Protocol TCP -RemotePort 53 -RemoteAddress "{ADGUARD_IPV4_PRIMARY}","{ADGUARD_IPV4_SECONDARY}"
 
-    # 2. Bloqueia qualquer outra saida na porta 53 (impede uso manual de 8.8.8.8, 1.1.1.1, etc.)
     New-NetFirewallRule -Name "{FIREWALL_PREFIX}Block_Other_DNS_UDP" -DisplayName "SafePCKids - Bloquear DNS Externo Nao Autorizado UDP" `
         -Direction Outbound -Action Block -Protocol UDP -RemotePort 53
 
     New-NetFirewallRule -Name "{FIREWALL_PREFIX}Block_Other_DNS_TCP" -DisplayName "SafePCKids - Bloquear DNS Externo Nao Autorizado TCP" `
         -Direction Outbound -Action Block -Protocol TCP -RemotePort 53
 
+    # 5. Flush de cache DNS
+    Clear-DnsClientCache
     Write-Output "OK"
     """
-    ok, out = _run_powershell(ps_script)
+
+    ok, msg = _run_powershell_elevated(enable_script)
     if not ok:
-        return False, f"Falha ao configurar regras de firewall: {out}"
-    return True, "Regras de Firewall anti-burla ativadas com sucesso."
-
-
-def remove_firewall_rules() -> Tuple[bool, str]:
-    """Remove todas as regras de firewall criadas pelo SafePCKids."""
-    ps_script = f"""
-    $ErrorActionPreference = 'SilentlyContinue'
-    Remove-NetFirewallRule -Name "{FIREWALL_PREFIX}*" -ErrorAction SilentlyContinue
-    Write-Output "OK"
-    """
-    ok, out = _run_powershell(ps_script)
-    if not ok:
-        return False, f"Falha ao remover regras de firewall: {out}"
-    return True, "Regras de firewall removidas com sucesso."
-
-
-def enable_adguard_family_protection() -> Tuple[bool, str]:
-    """Ativa as 3 camadas de protecao global: DNS DoH, Politicas de Navegador e Firewall."""
-    logger.info("Ativando Protecao Global AdGuard Family no Windows...")
-    errs = []
-
-    ok_dns, msg_dns = apply_doh_and_dns_settings()
-    if not ok_dns:
-        errs.append(msg_dns)
-
-    ok_pol, msg_pol = apply_browser_policies()
-    if not ok_pol:
-        errs.append(msg_pol)
-
-    ok_fw, msg_fw = apply_firewall_anti_bypass_rules()
-    if not ok_fw:
-        errs.append(msg_fw)
-
-    if errs:
-        return False, " | ".join(errs)
-    return True, "Protecao Global AdGuard Family (DNS DoH, SafeSearch e Firewall) ativada com sucesso."
+        logger.warning("Falha ao ativar Protecao AdGuard: %s", msg)
+        return False, f"Falha ao ativar proteção: {msg}"
+    return True, "Proteção Global AdGuard Family (DNS DoH, SafeSearch e Firewall) ativada com sucesso."
 
 
 def disable_adguard_family_protection() -> Tuple[bool, str]:
-    """Desativa completamente a protecao global e restaura configuracoes padrao."""
+    """Desativa completamente a protecao global e restaura o padrao do sistema."""
     logger.info("Desativando Protecao Global AdGuard Family...")
-    restore_default_dns_settings()
-    remove_browser_policies()
-    remove_firewall_rules()
-    return True, "Protecao Global desativada e sistema restaurado."
+
+    disable_script = f"""
+    $ErrorActionPreference = 'SilentlyContinue'
+
+    # 1. Restaura adaptadores para DHCP
+    $adapters = Get-NetAdapter | Where-Object {{ $_.Virtual -eq $false }}
+    foreach ($a in $adapters) {{
+        Set-DnsClientServerAddress -InterfaceIndex $a.InterfaceIndex -ResetServerAddresses
+    }}
+
+    # 2. Remove regras de firewall
+    Remove-NetFirewallRule -Name "{FIREWALL_PREFIX}*" -ErrorAction SilentlyContinue
+
+    # 3. Remove politicas de navegador
+    $browsers = @(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+        "HKLM:\\SOFTWARE\\Policies\Google\\Chrome",
+        "HKLM:\\SOFTWARE\\Policies\\BraveSoftware\\Brave"
+    )
+    $props = @("ForceGoogleSafeSearch", "ForceYouTubeRestrict", "ForceBingSafeSearch", "DnsOverHttpsMode", "DnsOverHttpsTemplates")
+    foreach ($key in $browsers) {{
+        if (Test-Path $key) {{
+            foreach ($p in $props) {{
+                Remove-ItemProperty -Path $key -Name $p -ErrorAction SilentlyContinue
+            }}
+        }}
+    }}
+
+    # 4. Flush de cache DNS
+    Clear-DnsClientCache
+    Write-Output "OK"
+    """
+
+    ok, msg = _run_powershell_elevated(disable_script)
+    if not ok:
+        logger.warning("Falha ao desativar Protecao AdGuard: %s", msg)
+        return False, f"Falha ao desativar proteção: {msg}"
+    return True, "Proteção Global AdGuard desativada e configurações padrão restauradas."
 
 
 def get_protection_status() -> Dict[str, Any]:
@@ -266,5 +262,5 @@ def get_protection_status() -> Dict[str, Any]:
         "firewall_rules_present": fw_active,
         "adguard_ipv4": ADGUARD_IPV4_PRIMARY,
         "doh_template": ADGUARD_DOH_TEMPLATE,
-        "details": "Ativo com DoH Criptografado, SafeSearch e Firewall Anti-Burla" if is_active else "Inativo (Usando DNS padrao da operadora)",
+        "details": "Ativo com DoH Criptografado, SafeSearch e Firewall Anti-Burla" if is_active else "Inativo (Usando DNS padrão da operadora)",
     }

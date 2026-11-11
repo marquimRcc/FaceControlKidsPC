@@ -8,6 +8,8 @@ from safepckids.network_guard import (
     ADGUARD_DOH_TEMPLATE,
     get_protection_status,
     _run_powershell,
+    is_admin,
+    _run_powershell_elevated,
 )
 
 
@@ -50,6 +52,18 @@ class TestNetworkGuard(unittest.TestCase):
         ok, out = _run_powershell("invalid")
         self.assertFalse(ok)
         self.assertEqual(out, "Command failed")
+
+    def test_is_admin_returns_bool(self):
+        val = is_admin()
+        self.assertIsInstance(val, bool)
+
+    @patch("safepckids.network_guard.is_admin", return_value=True)
+    @patch("safepckids.network_guard._run_powershell")
+    def test_run_powershell_elevated_admin(self, mock_run_ps, mock_admin):
+        mock_run_ps.return_value = (True, "OK")
+        ok, out = _run_powershell_elevated("test")
+        self.assertTrue(ok)
+        self.assertEqual(out, "OK")
 
 
 if __name__ == "__main__":

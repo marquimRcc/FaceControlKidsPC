@@ -573,10 +573,35 @@
         <div id="tabMaintenance" class="tab-content hidden space-y-6">
           <div>
             <h1 class="text-xl font-black text-white">Manutenção & Desinstalação</h1>
-            <p class="text-xs text-slate-400">Reexecute configurações ou remova com segurança o SafePCKids do Windows.</p>
+            <p class="text-xs text-slate-400">Gerencie o serviço de proteção de rede, reexecute configurações ou remova com segurança o SafePCKids.</p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Controle do Servico AdGuard Family & Firewall -->
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4 md:col-span-2">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-emerald-400 text-lg">🛡️</span>
+                    <h3 class="text-sm font-bold text-white">Serviço de Proteção Global AdGuard Family & Firewall</h3>
+                  </div>
+                  <p class="text-xs text-slate-400 max-w-xl">
+                    3 camadas em uma só: DNS DoH criptografado, busca segura SafeSearch (Google/YouTube restrito) e regras anti-burla no Windows Defender Firewall.
+                  </p>
+                </div>
+                <div class="flex items-center space-x-3">
+                  <span id="maintenanceAdGuardBadge" class="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-400 font-medium">Consultando...</span>
+                  <button id="btnMaintenanceToggleAdGuard" type="button" onclick="toggleAdGuardProtection()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer">
+                    Ativar Serviço
+                  </button>
+                </div>
+              </div>
+              <div class="p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span>DNS Configurado: <strong id="maintenanceDnsText" class="text-slate-300 font-mono">94.140.14.15, 94.140.15.16</strong></span>
+                <span>DoH Criptografado: <strong class="text-cyan-400 font-mono">https://dns-family.adguard.com/dns-query</strong></span>
+              </div>
+            </div>
+
             <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
               <h3 class="text-sm font-bold text-white">Reiniciar Assistente de Configuração</h3>
               <p class="text-xs text-slate-400">Permite refazer os passos do assistente de instalação sem apagar dados anteriores.</p>
@@ -978,10 +1003,13 @@
       if (srvStream) {
         if (tabId === "services") {
           srvStream.src = "/api/camera/stream";
-          syncServicesHealth();
         } else {
           srvStream.src = "";
         }
+      }
+
+      if (tabId === "services" || tabId === "settings" || tabId === "maintenance") {
+        syncServicesHealth();
       }
     }
 
@@ -1229,18 +1257,41 @@
         btnToggle.innerText = adguardActive ? "Desativar Proteção Global" : "Ativar Proteção Global";
         btnToggle.className = `px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer ${adguardActive ? 'bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'}`;
       }
+
+      // Painel de Manutencao
+      const badgeMaint = document.getElementById("maintenanceAdGuardBadge");
+      const btnMaint = document.getElementById("btnMaintenanceToggleAdGuard");
+      if (badgeMaint) {
+        badgeMaint.innerText = adguardActive ? "● Em Execução (Protegendo)" : "● Parado (Inativo)";
+        badgeMaint.className = `text-xs px-3 py-1 rounded-full font-medium ${adguardActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400'}`;
+      }
+      if (btnMaint) {
+        btnMaint.innerText = adguardActive ? "Parar Serviço (Desativar)" : "Ativar Serviço (AdGuard Family)";
+        btnMaint.className = `px-4 py-2 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer ${adguardActive ? 'bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'}`;
+      }
     }
 
     async function toggleAdGuardProtection() {
-      const btnToggle = document.getElementById("btnToggleAdGuard");
-      const isCurrentlyActive = btnToggle && btnToggle.innerText.includes("Desativar");
-      showToast(isCurrentlyActive ? "Desativando proteção AdGuard..." : "Ativando 3 camadas de proteção AdGuard Family...");
+      const btnToggle = document.getElementById("btnToggleAdGuard") || document.getElementById("btnMaintenanceToggleAdGuard");
+      const isCurrentlyActive = btnToggle && (btnToggle.innerText.includes("Desativar") || btnToggle.innerText.includes("Parar"));
+      
+      const allBtns = [document.getElementById("btnToggleAdGuard"), document.getElementById("btnMaintenanceToggleAdGuard")].filter(Boolean);
+      allBtns.forEach(b => {
+        b.disabled = true;
+        b.innerText = isCurrentlyActive ? "Parando serviço..." : "Ativando serviço...";
+      });
+
+      showToast(isCurrentlyActive ? "Desativando proteção AdGuard Family..." : "Ativando 3 camadas de proteção AdGuard Family (DNS + SafeSearch + Firewall)...");
       const res = await SafePCKidsAPI.setNetworkProtection(!isCurrentlyActive);
+      
+      allBtns.forEach(b => { b.disabled = false; });
+
       if (res && res.ok) {
-        showToast(res.message || "Proteção atualizada com sucesso!");
-        setTimeout(syncServicesHealth, 1000);
+        showToast(res.message || "Serviço atualizado com sucesso!");
+        setTimeout(syncServicesHealth, 800);
       } else {
         showToast("Erro: " + (res ? res.message || res.error : "Falha na comunicação"), true);
+        setTimeout(syncServicesHealth, 1000);
       }
     }
 
