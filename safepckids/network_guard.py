@@ -111,7 +111,7 @@ def _send_pipe_command(command: str, timeout_sec: float = 12.0) -> Tuple[bool, A
 
 
 def _run_powershell(script: str, timeout: float = 25.0) -> Tuple[bool, str]:
-    """Executa script PowerShell silenciosamente."""
+    """Executa script PowerShell de forma 100% silenciosa sem abrir qualquer janela de console."""
     if sys.platform != "win32":
         return False, "Plataforma nao suportada."
     try:
@@ -119,12 +119,30 @@ def _run_powershell(script: str, timeout: float = 25.0) -> Tuple[bool, str]:
             "powershell.exe",
             "-NoProfile",
             "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
             script,
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        startupinfo = None
+        creation_flags = 0
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            startupinfo=startupinfo,
+            creationflags=creation_flags,
+        )
         if res.returncode == 0:
             return True, res.stdout.strip()
         return False, res.stderr.strip() or res.stdout.strip()
@@ -353,23 +371,69 @@ def disable_adguard_family_protection() -> Tuple[bool, str]:
 
 
 def get_protection_status_direct() -> Dict[str, Any]:
-    """Consulta direta e instantanea do status real da rede."""
+    """Consulta direta, instantanea e 100% silenciosa do status real da rede."""
     if sys.platform != "win32":
         return {"active": False, "details": "Nao disponivel fora do Windows."}
 
-    ps_check = f"""
-    $dns = (Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {{ $_.ServerAddresses -contains '{ADGUARD_IPV4_PRIMARY}' }}).Count -gt 0
-    $fw = (Get-NetFirewallRule -Name '{FIREWALL_PREFIX}Allow_DNS_UDP' -ErrorAction SilentlyContinue).Count -gt 0
-    Write-Output "$dns,$fw"
-    """
-    ok, out = _run_powershell(ps_check, timeout=8.0)
     dns_active = False
     fw_active = False
-    if ok and out:
-        parts = [p.strip().lower() for p in out.split(",")]
-        if len(parts) >= 2:
-            dns_active = parts[0] == "true"
-            fw_active = parts[1] == "true"
+
+    # 1. Verificacao instantanea no Registro do Windows (0 subprocessos, 0 janelas)
+    try:
+        import winreg
+        tcpip_key = r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, tcpip_key) as parent:
+            idx = 0
+            while True:
+                try:
+                    sub = winreg.EnumKey(parent, idx)
+                    idx += 1
+                    with winreg.OpenKey(parent, sub) as iface:
+                        for val_name in ("NameServer", "DhcpNameServer"):
+                            try:
+                                val, _ = winreg.QueryValueEx(iface, val_name)
+                                if ADGUARD_IPV4_PRIMARY in str(val):
+                                    dns_active = True
+                                    break
+                            except OSError:
+                                pass
+                        if dns_active:
+                            break
+                except OSError:
+                    break
+    except Exception as exc:
+        logger.debug("Falha na consulta do registro de DNS: %s", exc)
+
+    try:
+        import winreg
+        fw_key = r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, fw_key) as key:
+            idx = 0
+            while True:
+                try:
+                    val_name, val_data, _ = winreg.EnumValue(key, idx)
+                    idx += 1
+                    if FIREWALL_PREFIX in val_name or FIREWALL_PREFIX in str(val_data):
+                        fw_active = True
+                        break
+                except OSError:
+                    break
+    except Exception as exc:
+        logger.debug("Falha na consulta do registro de Firewall: %s", exc)
+
+    # 2. Fallback silencioso via PowerShell apenas se a leitura direta do registro nao encontrar
+    if not dns_active and not fw_active:
+        ps_check = f"""
+        $dns = (Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {{ $_.ServerAddresses -contains '{ADGUARD_IPV4_PRIMARY}' }}).Count -gt 0
+        $fw = (Get-NetFirewallRule -Name '{FIREWALL_PREFIX}Allow_DNS_UDP' -ErrorAction SilentlyContinue).Count -gt 0
+        Write-Output "$dns,$fw"
+        """
+        ok, out = _run_powershell(ps_check, timeout=5.0)
+        if ok and out:
+            parts = [p.strip().lower() for p in out.split(",")]
+            if len(parts) >= 2:
+                dns_active = parts[0] == "true"
+                fw_active = parts[1] == "true"
 
     is_active = dns_active or fw_active
     return {
@@ -383,10 +447,10 @@ def get_protection_status_direct() -> Dict[str, Any]:
 
 
 def get_protection_status(force_refresh: bool = False) -> Dict[str, Any]:
-    """Consulta o status com cache de 5s para evitar sobrecarga de consultas."""
+    """Consulta o status com cache de 10s para evitar sobrecarga de consultas."""
     global _protection_status_cache, _protection_status_cache_time
     now = time.time()
-    if not force_refresh and _protection_status_cache and (now - _protection_status_cache_time < 5.0):
+    if not force_refresh and _protection_status_cache and (now - _protection_status_cache_time < 10.0):
         return dict(_protection_status_cache)
 
     status = get_protection_status_direct()
