@@ -118,6 +118,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_diagnostics()
             elif path == "/api/service/status":
                 self.handle_service_status()
+            elif path == "/api/network/protection":
+                self.handle_network_protection_get()
             elif path == "/api/dashboard":
                 self.handle_dashboard()
             elif path == "/api/heartbeat":
@@ -174,6 +176,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_auth_verify(body)
             elif path == "/api/settings/windows-account":
                 self.handle_settings_windows_account(body)
+            elif path == "/api/network/protection":
+                self.handle_network_protection_post(body)
             elif path == "/api/service/restart":
                 self.handle_service_restart(body)
             elif path.startswith("/api/children/") and path.endswith("/photos/select"):
@@ -257,7 +261,32 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
     def handle_service_status(self) -> None:
         health = verify_runtime_health()
-        self.send_json({"ok": True, "health": health})
+        try:
+            from .network_guard import get_protection_status
+            network_protection = get_protection_status()
+        except Exception as e:
+            network_protection = {"active": False, "error": str(e)}
+        self.send_json({"ok": True, "health": health, "network_protection": network_protection})
+
+    def handle_network_protection_get(self) -> None:
+        try:
+            from .network_guard import get_protection_status
+            self.send_json(get_protection_status())
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 500)
+
+    def handle_network_protection_post(self, data: Dict[str, Any]) -> None:
+        try:
+            from .network_guard import enable_adguard_family_protection, disable_adguard_family_protection, get_protection_status
+            enable = bool(data.get("enable", True))
+            if enable:
+                ok, msg = enable_adguard_family_protection()
+            else:
+                ok, msg = disable_adguard_family_protection()
+            status = get_protection_status()
+            self.send_json({"ok": ok, "message": msg, "protection": status})
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 500)
 
     def handle_service_restart(self, data: Optional[Dict[str, Any]] = None) -> None:
         service_name = "SafePCKidsAuthService"

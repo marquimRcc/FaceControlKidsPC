@@ -697,6 +697,13 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
         if remove_windows_user:
             _run_win_cmd(["net", "user", "Filhos", "/delete"], timeout=10.0)
 
+        # 8. Restaurar DNS padrao e remover regras de firewall do AdGuard Family
+        try:
+            from .network_guard import disable_adguard_family_protection
+            disable_adguard_family_protection()
+        except Exception as e:
+            logger.warning(f"Aviso ao desativar protecao de rede na desinstalacao: {e}")
+
     return True, "SafePCKids desinstalado com sucesso."
 
 
@@ -817,6 +824,13 @@ def setup_system(
             create_desktop_shortcuts(root)
         except Exception as e:
             return False, str(e)
+
+        notify("Ativando Protecao Global AdGuard Family (DNS DoH, SafeSearch e Firewall)...", 92)
+        try:
+            from .network_guard import enable_adguard_family_protection
+            enable_adguard_family_protection()
+        except Exception as exc:
+            logger.warning("Nao foi possivel ativar a protecao AdGuard durante a instalacao: %s", exc)
 
     marker_staging = INSTALL_MARKER.with_suffix(".tmp")
     marker_staging.write_text(json.dumps({"version": 1, "root": str(root)}), encoding="utf-8")

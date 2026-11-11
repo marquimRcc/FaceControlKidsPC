@@ -157,6 +157,10 @@
               <span class="text-emerald-400">✓</span>
               <span>Desbloqueio seguro por DPAPI na conta Windows supervisionada</span>
             </div>
+            <div class="flex items-start space-x-2 text-slate-300">
+              <span class="text-emerald-400 mt-0.5">✓</span>
+              <span>3 camadas de proteção em uma só com o AdGuard Family: Bloqueio de anúncios e rastreadores; Filtro de conteúdo adulto; SafeSearch</span>
+            </div>
           </div>
 
           <button id="btnStartWizard" type="button" onclick="goToStep2()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer">
@@ -205,6 +209,17 @@
                 </div>
               </div>
               <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Pronto</span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="text-xl">🛡️</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">Proteção Global AdGuard Family</h4>
+                  <p class="text-[10px] text-slate-400">DNS DoH, Filtro Adulto, SafeSearch e Firewall</p>
+                </div>
+              </div>
+              <span id="diagAdGuardBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Pronto</span>
             </div>
           </div>
 
@@ -430,7 +445,7 @@
             </button>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-white">SafePCKidsAuthService</span>
@@ -453,6 +468,14 @@
                 <span id="badgeServiceDll" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
               </div>
               <p class="text-[11px] text-slate-400">SafePCKidsCredentialProvider registrado no Registro HKLM.</p>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">AdGuard Family & Firewall</span>
+                <span id="badgeServiceAdGuard" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Consultando...</span>
+              </div>
+              <p class="text-[11px] text-slate-400">DNS DoH, Filtro Adulto, SafeSearch e Firewall Anti-Burla.</p>
             </div>
           </div>
 
@@ -501,6 +524,27 @@
                 <button onclick="updateWindowsAccount()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all">
                   Salvar e Sincronizar Senha no Windows & DPAPI
                 </button>
+              </div>
+            </div>
+
+            <!-- Protecao Global AdGuard Family -->
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4 md:col-span-2">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-emerald-400 text-base">🛡️</span>
+                    <h3 class="text-sm font-bold text-white">Proteção Global AdGuard Family & Firewall</h3>
+                  </div>
+                  <p class="text-xs text-slate-400">
+                    3 camadas de proteção em uma só: Bloqueio de anúncios e rastreadores; Filtro de conteúdo adulto; SafeSearch obrigatório e blindagem de Firewall.
+                  </p>
+                </div>
+                <div class="flex items-center space-x-3">
+                  <span id="adguardStatusBadge" class="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-400 font-medium">Consultando...</span>
+                  <button id="btnToggleAdGuard" type="button" onclick="toggleAdGuardProtection()" class="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer">
+                    Ativar Proteção
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1058,7 +1102,8 @@
         });
         if (grid) grid.innerHTML = html;
       } else {
-        if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Clique no botão abaixo para capturar as 12 fotos com a webcam!</p></div>";
+        if (grid) grid.innerHTML = "<div class='col-span-4 p-6 text-center space-y-2'><p class='text-xs text-slate-400'>Nenhuma amostra salva ainda.</p><p class='text-xs text-cyan-400'>Iniciando captura automática com a webcam...</p></div>";
+        setTimeout(startModalRecapture, 400);
       }
     }
 
@@ -1164,6 +1209,38 @@
       if (badgeDll) {
         badgeDll.innerText = dllReg ? "● Registrado HKLM" : "● Ausente";
         badgeDll.className = `text-[10px] px-2 py-0.5 rounded-full ${dllReg ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`;
+      }
+
+      // AdGuard Family & Firewall
+      const nw = res.network_protection;
+      const adguardActive = nw && nw.active;
+      const badgeAdGuard = document.getElementById("badgeServiceAdGuard");
+      if (badgeAdGuard) {
+        badgeAdGuard.innerText = adguardActive ? "● Ativo (DoH + FW)" : "● Inativo";
+        badgeAdGuard.className = `text-[10px] px-2 py-0.5 rounded-full ${adguardActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-400'}`;
+      }
+      const badgeSettings = document.getElementById("adguardStatusBadge");
+      const btnToggle = document.getElementById("btnToggleAdGuard");
+      if (badgeSettings) {
+        badgeSettings.innerText = adguardActive ? "● Ativo (Protegendo)" : "● Desativado";
+        badgeSettings.className = `text-xs px-3 py-1 rounded-full font-medium ${adguardActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400'}`;
+      }
+      if (btnToggle) {
+        btnToggle.innerText = adguardActive ? "Desativar Proteção Global" : "Ativar Proteção Global";
+        btnToggle.className = `px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer ${adguardActive ? 'bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'}`;
+      }
+    }
+
+    async function toggleAdGuardProtection() {
+      const btnToggle = document.getElementById("btnToggleAdGuard");
+      const isCurrentlyActive = btnToggle && btnToggle.innerText.includes("Desativar");
+      showToast(isCurrentlyActive ? "Desativando proteção AdGuard..." : "Ativando 3 camadas de proteção AdGuard Family...");
+      const res = await SafePCKidsAPI.setNetworkProtection(!isCurrentlyActive);
+      if (res && res.ok) {
+        showToast(res.message || "Proteção atualizada com sucesso!");
+        setTimeout(syncServicesHealth, 1000);
+      } else {
+        showToast("Erro: " + (res ? res.message || res.error : "Falha na comunicação"), true);
       }
     }
 

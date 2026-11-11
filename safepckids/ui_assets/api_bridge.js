@@ -282,6 +282,30 @@ const SafePCKidsAPI = {
     } catch (e) {
       return null;
     }
+  },
+
+  async getNetworkProtection() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/network/protection`, {
+        headers: this.getHeaders()
+      });
+      return await res.json();
+    } catch (e) {
+      return { active: false, error: e.message };
+    }
+  },
+
+  async setNetworkProtection(enable) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/network/protection`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ enable })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   }
 };
 
