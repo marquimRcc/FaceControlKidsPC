@@ -1,7 +1,7 @@
 import unittest
 
-from facekids.windows_session_diagnostic import LockView
-from facekids.hardware_camera_probe import ProbeStats
+from safepckids.windows_session_diagnostic import LockView
+from safepckids.hardware_camera_probe import ProbeStats
 
 
 class CameraProbeTests(unittest.TestCase):

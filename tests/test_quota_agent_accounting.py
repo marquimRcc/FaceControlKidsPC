@@ -6,18 +6,18 @@ import inspect
 import unittest
 from unittest.mock import MagicMock, patch
 
-from facekids.quota_agent_accounting import (
+from safepckids.quota_agent_accounting import (
     BrokerLabReadOnlyQuota, LegacyLedgerQuota, QuotaTick,
     UntrustedBrokerObservation,
 )
-from facekids.quota_broker_protocol import BROKER_PROTOCOL, VerifiedClient, handle_broker_read
-from facekids.quota_broker_read_store import ReadOnlyQuotaView
-from facekids.storage import Storage
+from safepckids.quota_broker_protocol import BROKER_PROTOCOL, VerifiedClient, handle_broker_read
+from safepckids.quota_broker_read_store import ReadOnlyQuotaView
+from safepckids.storage import Storage
 
 
 class QuotaAgentSourceTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = TemporaryDirectory(prefix="facekids-agent-readonly-")
+        self.tmp = TemporaryDirectory(prefix="safepckids-agent-readonly-")
         self.path = Path(self.tmp.name) / "synthetic.sqlite3"
         self.store = Storage(self.path)
         self.people = [self.store.add_person("Synthetic " + str(i), 2)
@@ -93,7 +93,7 @@ class QuotaAgentSourceTests(unittest.TestCase):
         self.store.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         with ReadOnlyQuotaView(self.path) as reader:
             source = BrokerLabReadOnlyQuota(lambda: handle_broker_read(
-                b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}',
+                b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"GET_BALANCE"}',
                 VerifiedClient("S-1-5-21-1-2-3-1001", "S-1-5-21-1-2-3-1001",
                                self.people[1]),
                 reader, observed_day=date(2026, 10, 25),
@@ -104,7 +104,7 @@ class QuotaAgentSourceTests(unittest.TestCase):
         self.assertEqual([self.store.used(i, self.day) for i in self.people], [10, 20, 30])
 
     def test_actual_agent_preserves_legacy_mode_until_security_cutover(self):
-        from facekids import filhos_agent
+        from safepckids import filhos_agent
         source = inspect.getsource(filhos_agent.run_agent)
         self.assertIn("LegacyLedgerQuota(store)", source)
         self.assertIn("quota_accounting.active_tick", source)

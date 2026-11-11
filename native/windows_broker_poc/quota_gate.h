@@ -5,7 +5,7 @@
 #include "quota_store.h"
 #include <string>
 
-namespace facekids_gate {
+namespace safepckids_gate {
 
 enum class GatePrerequisite {
     ReadyForFacialPolicy, // NOT a Windows authentication grant
@@ -15,13 +15,13 @@ enum class GatePrerequisite {
 };
 
 inline GatePrerequisite check(
-    const facekids_guard::Snapshot& os_session,
+    const safepckids_guard::Snapshot& os_session,
     const std::wstring& expected_windows_sid,
-    facekids_quota::Store& quota,
+    safepckids_quota::Store& quota,
     int child_id,
     const char* trusted_local_day) {
-    if (facekids_guard::check_snapshot(os_session, expected_windows_sid)
-        != facekids_guard::Verdict::ReadyForPolicyCheck) {
+    if (safepckids_guard::check_snapshot(os_session, expected_windows_sid)
+        != safepckids_guard::Verdict::ReadyForPolicyCheck) {
         return GatePrerequisite::SessionDenied;
     }
     sqlite3_int64 remaining = 0;
@@ -38,11 +38,11 @@ inline GatePrerequisite check(
 inline GatePrerequisite check_live_wts(
     DWORD session_id,
     const std::wstring& expected_windows_sid,
-    facekids_quota::Store& quota,
+    safepckids_quota::Store& quota,
     int child_id,
     const char* trusted_local_day) {
-    if (facekids_guard::inspect_real_session(session_id, expected_windows_sid)
-        != facekids_guard::Verdict::ReadyForPolicyCheck) {
+    if (safepckids_guard::inspect_real_session(session_id, expected_windows_sid)
+        != safepckids_guard::Verdict::ReadyForPolicyCheck) {
         return GatePrerequisite::SessionDenied;
     }
     sqlite3_int64 remaining = 0;
@@ -53,11 +53,11 @@ inline GatePrerequisite check_live_wts(
         : GatePrerequisite::QuotaExhausted;
 }
 
-inline bool self_test(facekids_quota::Store& quota) {
-    constexpr auto Locked = facekids_wts::LockView::Locked;
+inline bool self_test(safepckids_quota::Store& quota) {
+    constexpr auto Locked = safepckids_wts::LockView::Locked;
     const std::wstring sid = L"S-1-5-21-100-200-300-1005";
     const std::wstring admin = L"S-1-5-21-100-200-300-1001";
-    facekids_guard::Snapshot session = {7, 7, Locked, sid, true};
+    safepckids_guard::Snapshot session = {7, 7, Locked, sid, true};
     const char* day = "2026-10-20";
     if (check(session, sid, quota, 1, day) != GatePrerequisite::ReadyForFacialPolicy)
         return false;
@@ -73,7 +73,7 @@ inline bool self_test(facekids_quota::Store& quota) {
         return false;
     if (check(session, admin, quota, 3, day) != GatePrerequisite::SessionDenied)
         return false;
-    session.state = facekids_wts::LockView::Unlocked;
+    session.state = safepckids_wts::LockView::Unlocked;
     if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
         return false;
     session.state = Locked;
@@ -87,10 +87,10 @@ inline bool self_test(facekids_quota::Store& quota) {
     // No WTS transition may inherit a previous successful precheck.
     if (check(session, sid, quota, 3, day) != GatePrerequisite::ReadyForFacialPolicy)
         return false;
-    session.state = facekids_wts::LockView::Inactive;
+    session.state = safepckids_wts::LockView::Inactive;
     if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
         return false;
-    session.state = facekids_wts::LockView::Unknown;
+    session.state = safepckids_wts::LockView::Unknown;
     if (check(session, sid, quota, 3, day) != GatePrerequisite::SessionDenied)
         return false;
     session.state = Locked;
@@ -109,4 +109,4 @@ inline bool self_test(facekids_quota::Store& quota) {
     return true;
 }
 
-} // namespace facekids_gate
+} // namespace safepckids_gate

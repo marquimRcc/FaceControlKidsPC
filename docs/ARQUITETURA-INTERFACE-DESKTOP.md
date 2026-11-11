@@ -51,13 +51,13 @@ retratos e escolher a imagem exibida no painel e na tela infantil.
 
 ## Integração operacional no Linux
 
-O serviço publica `/run/facekids/admin.sock` com modo `0660`, pertencente a
+O serviço publica `/run/safepckids/admin.sock` com modo `0660`, pertencente a
 `root:wheel` por padrão. O diretório de runtime usa `0750`. Cada conexão é
 validada por `SO_PEERCRED`; somente UID 0 ou uma conta realmente pertencente ao
 grupo configurado pode prosseguir. A conta compartilhada `filhos` é removida de
 grupos suplementares pelo instalador e não consegue atravessar esse limite.
 
-A tela infantil usa outro canal, `/run/facekids-child/status.sock`, também
+A tela infantil usa outro canal, `/run/safepckids-child/status.sock`, também
 validado por `SO_PEERCRED`, pertencente ao grupo primário da conta monitorada.
 Esse canal aceita somente `{"op":"status"}` e devolve apenas o perfil que o
 serviço reconhece naquele momento. Sem identidade atual, a lista vem vazia;
@@ -81,8 +81,8 @@ e galeria de fotos. As respostas são novamente validadas com Zod no renderer.
 O aplicativo do menu KDE é criado por
 `scripts/Criar-Atalho-Painel-RegataOS.sh`. Ele abre o build local usando o
 Electron fixado no workspace. A atualização do serviço instalado, preservando
-o banco, é feita por `scripts/Atualizar-FaceKids-RegataOS.sh`.
+o banco, é feita por `scripts/Atualizar-SafePCKids-RegataOS.sh`.
 
 `scripts/Criar-Tela-Infantil-RegataOS.sh` instala na conta compartilhada o
-aplicativo **FaceKids — Meu tempo** e sua entrada de inicialização automática.
+aplicativo **SafePCKids — Meu tempo** e sua entrada de inicialização automática.
 O lançador exige que o build e o Electron do workspace continuem disponíveis.

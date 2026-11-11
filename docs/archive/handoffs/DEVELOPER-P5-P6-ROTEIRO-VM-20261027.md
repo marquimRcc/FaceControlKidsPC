@@ -1,4 +1,4 @@
-# FaceKids developer — P5/P6: roteiro de homologação em VM
+# SafePCKids developer — P5/P6: roteiro de homologação em VM
 
 **Data:** 2026-10-27  
 **Ambiente:** Windows 11 em VM descartável; não executar primeiro no PC familiar.  
@@ -9,7 +9,7 @@
 
 **P5** — o agente possui observador opt-in `VmBoundShadow`, desligado por padrão. O agente continua com `LegacyLedgerQuota` como escritor. O observador apenas consulta o pipe somente leitura do serviço registrado na VM e registra eventos `matched`, `diverged`, `unbound`, `unavailable`, `different-face-lease` ou `incomparable-sample`. Ele nunca troca perfis, altera quota, bloqueia Windows ou inicia webcam.
 
-**P6** — `scripts/Testar-P5-P6-VM-FaceKids.ps1` examina de forma não destrutiva o ambiente convidado, os vestígios do provedor de credenciais e os serviços existentes. As opções `-RunUnitTests` e `-CameraProbe` executam testes sintéticos ou somente abertura temporária da câmera da sessão interativa; nenhum arquivo de imagem é salvo. O script não configura login nem instala serviços.
+**P6** — `scripts/Testar-P5-P6-VM-SafePCKids.ps1` examina de forma não destrutiva o ambiente convidado, os vestígios do provedor de credenciais e os serviços existentes. As opções `-RunUnitTests` e `-CameraProbe` executam testes sintéticos ou somente abertura temporária da câmera da sessão interativa; nenhum arquivo de imagem é salvo. O script não configura login nem instala serviços.
 
 ## Antes de rodar o P6
 
@@ -24,20 +24,20 @@
 
 Preflight (somente leitura):
 ```powershell
-.\scripts\Testar-P5-P6-VM-FaceKids.ps1
+.\scripts\Testar-P5-P6-VM-SafePCKids.ps1
 ```
 
 Suíte automatizada (fixtures de laboratório):
 ```powershell
-.\scripts\Testar-P5-P6-VM-FaceKids.ps1 -RunUnitTests
+.\scripts\Testar-P5-P6-VM-SafePCKids.ps1 -RunUnitTests
 ```
 
 Teste opcional da webcam interativa (não é Session 0):
 ```powershell
-.\scripts\Testar-P5-P6-VM-FaceKids.ps1 -CameraProbe -CameraIndex 0
+.\scripts\Testar-P5-P6-VM-SafePCKids.ps1 -CameraProbe -CameraIndex 0
 ```
 
-O modo sombra exige VM com serviço SCM de laboratório **previamente homologado**. Para habilitar apenas no processo interativo de teste, usar as duas variáveis de ambiente documentadas em `facekids/quota_vm_shadow_integration.py`; desativado por padrão. Não confundir os saldos de bancos sintéticos distintos com uma validação definitiva de cobrança.
+O modo sombra exige VM com serviço SCM de laboratório **previamente homologado**. Para habilitar apenas no processo interativo de teste, usar as duas variáveis de ambiente documentadas em `safepckids/quota_vm_shadow_integration.py`; desativado por padrão. Não confundir os saldos de bancos sintéticos distintos com uma validação definitiva de cobrança.
 
 ## Checklist manual obrigatório
 

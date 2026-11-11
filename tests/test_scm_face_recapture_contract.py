@@ -5,10 +5,10 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
 
-from facekids.auth_service import FaceAuthenticator
-from facekids.quota_broker_runtime import ServiceOwnedQuotaRuntime
-from facekids.quota_broker_wts import WtsSnapshot
-from facekids.storage import Storage
+from safepckids.auth_service import FaceAuthenticator
+from safepckids.quota_broker_runtime import ServiceOwnedQuotaRuntime
+from safepckids.quota_broker_wts import WtsSnapshot
+from safepckids.storage import Storage
 
 
 class ScmRecognizerContract(unittest.TestCase):

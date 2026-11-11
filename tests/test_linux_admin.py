@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from facekids.linux_admin import main
-from facekids.storage import Storage
+from safepckids.linux_admin import main
+from safepckids.storage import Storage
 
 
 class LinuxAdminTests(unittest.TestCase):

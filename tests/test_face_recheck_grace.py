@@ -4,10 +4,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_broker_face_binding import PrivilegedLocalFaceBinder
-from facekids.quota_broker_policy import ServiceOwnedQuotaBroker
-from facekids.quota_broker_wts import VerifiedWtsQuotaWorker, WtsLockTracker, WtsSnapshot
-from facekids.storage import Storage
+from safepckids.quota_broker_face_binding import PrivilegedLocalFaceBinder
+from safepckids.quota_broker_policy import ServiceOwnedQuotaBroker
+from safepckids.quota_broker_wts import VerifiedWtsQuotaWorker, WtsLockTracker, WtsSnapshot
+from safepckids.storage import Storage
 
 
 class FaceRecheckGraceTests(unittest.TestCase):

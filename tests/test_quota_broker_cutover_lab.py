@@ -8,13 +8,13 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from facekids.quota_broker_cutover_lab import rehearse_offline_cutover
-from facekids.storage import Storage
+from safepckids.quota_broker_cutover_lab import rehearse_offline_cutover
+from safepckids.storage import Storage
 
 
 class OfflineQuotaCutoverTests(unittest.TestCase):
     def fixture(self, parent: Path) -> Path:
-        root = parent / "facekids-quota-lab"
+        root = parent / "safepckids-quota-lab"
         root.mkdir()
         db = root / "fixture.sqlite3"
         store = Storage(db)
@@ -43,9 +43,9 @@ class OfflineQuotaCutoverTests(unittest.TestCase):
                     backup.execute("SELECT SUM(seconds) FROM daily_usage").fetchone()[0],
                     112.5,
                 )
-            self.assertEqual(list(db.parent.glob(".facekids-held-*")), [])
-            self.assertEqual(list(db.parent.glob(".facekids-retired-*")), [])
-            self.assertEqual(list(db.parent.glob(".facekids-stage-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-held-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-retired-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-stage-*")), [])
 
     def test_fault_after_cutover_still_restores_original_bytes(self):
         with TemporaryDirectory() as td:
@@ -54,9 +54,9 @@ class OfflineQuotaCutoverTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Synthetic failure"):
                 rehearse_offline_cutover(db, lab_root=db.parent, inject_failure=True)
             self.assertEqual(db.read_bytes(), original)
-            self.assertEqual(list(db.parent.glob(".facekids-held-*")), [])
-            self.assertEqual(list(db.parent.glob(".facekids-retired-*")), [])
-            self.assertEqual(list(db.parent.glob(".facekids-stage-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-held-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-retired-*")), [])
+            self.assertEqual(list(db.parent.glob(".safepckids-stage-*")), [])
 
     def test_reject_wal_and_unsafe_nonlab_directories(self):
         with TemporaryDirectory() as td:
@@ -72,9 +72,9 @@ class OfflineQuotaCutoverTests(unittest.TestCase):
             outside.write_bytes(before)
             with self.assertRaises(ValueError):
                 rehearse_offline_cutover(outside, lab_root=base)
-            production = base / "ProgramData" / "FaceKids"
+            production = base / "ProgramData" / "SafePCKids"
             production.mkdir(parents=True)
-            lab = production / "facekids-quota-lab"
+            lab = production / "safepckids-quota-lab"
             lab.mkdir()
             forbidden = lab / "fixture.sqlite3"
             forbidden.write_bytes(before)

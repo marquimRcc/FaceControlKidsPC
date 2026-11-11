@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from facekids.broker import Broker, AccessDenied
-from facekids.storage import Storage
+from safepckids.broker import Broker, AccessDenied
+from safepckids.storage import Storage
 
 
 def features(i):

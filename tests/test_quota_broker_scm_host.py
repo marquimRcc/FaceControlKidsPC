@@ -8,16 +8,16 @@ from tempfile import TemporaryDirectory
 import threading
 import unittest
 
-from facekids.quota_broker_protocol import VerifiedClient, handle_broker_read
-from facekids.quota_broker_runtime import ServiceOwnedQuotaRuntime
-from facekids.quota_broker_scm_host import ServiceOwnedScmHost
-from facekids.quota_broker_wts import WtsSnapshot
-from facekids.storage import Storage
+from safepckids.quota_broker_protocol import VerifiedClient, handle_broker_read
+from safepckids.quota_broker_runtime import ServiceOwnedQuotaRuntime
+from safepckids.quota_broker_scm_host import ServiceOwnedScmHost
+from safepckids.quota_broker_wts import WtsSnapshot
+from safepckids.storage import Storage
 
 
 class ScmHostIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = TemporaryDirectory(prefix="facekids-quota-host-")
+        self.temp = TemporaryDirectory(prefix="safepckids-quota-host-")
         self.store = Storage(Path(self.temp.name) / "synthetic-ledger.sqlite3")
         self.children = [self.store.add_person("Fictional " + str(n), 2) for n in (1, 2, 3)]
         self.sid = "S-1-5-21-1-2-3-1002"
@@ -68,8 +68,8 @@ class ScmHostIntegrationTests(unittest.TestCase):
     def test_forged_client_requests_cannot_enable_face_or_charge(self):
         self.host.step()
         for packet in (
-            b'{"version":"FACEKIDS_QUOTA_V1","action":"CHARGE","seconds":999999}',
-            b'{"version":"FACEKIDS_QUOTA_V1","action":"SET_CHILD","child_id":3}',
+            b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"CHARGE","seconds":999999}',
+            b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"SET_CHILD","child_id":3}',
         ):
             reply = handle_broker_read(
                 packet, VerifiedClient(self.sid, self.sid, self.children[0]), self.store

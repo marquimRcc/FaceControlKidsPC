@@ -8,7 +8,7 @@
 #include <limits>
 #include <algorithm>
 
-namespace facekids_matcher {
+namespace safepckids_matcher {
 enum class Status { CandidateOnly, Unknown, Ambiguous, InvalidProbe, StorageError };
 struct Match {
     Status status=Status::Unknown;
@@ -35,7 +35,7 @@ inline bool normalized_dot(const std::array<float,128>& a,
 // Compare by PERSON (max similarity over enrollment samples), then require
 // a confidence threshold and a separation margin from the runner-up PERSON.
 // Raw cosine score alone cannot verify presentation authenticity.
-inline Match candidate(facekids_quota::Store& db,
+inline Match candidate(safepckids_quota::Store& db,
                        const std::array<float,128>& observed) {
     // Thresholds are fixed in this internal POC; an IPC caller must not
     // lower them, making unknown faces appear to match a child profile.
@@ -75,7 +75,7 @@ inline Match candidate(facekids_quota::Store& db,
     return {Status::CandidateOnly,winner,top};
 }
 
-inline bool self_test(facekids_quota::Store& db) {
+inline bool self_test(safepckids_quota::Store& db) {
     std::array<float,128> a={},b={},x={},unknown={},bad={};
     a[0]=1; b[1]=1; x[0]=1; x[1]=1; unknown[2]=1;
     bad[0]=std::numeric_limits<float>::quiet_NaN();
@@ -97,4 +97,4 @@ inline bool self_test(facekids_quota::Store& db) {
     if(candidate(db,x).status!=Status::Ambiguous) return false;
     return true;
 }
-} // namespace facekids_matcher
+} // namespace safepckids_matcher

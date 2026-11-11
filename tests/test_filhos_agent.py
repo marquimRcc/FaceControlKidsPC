@@ -7,9 +7,9 @@ import ctypes
 import types
 from unittest.mock import patch, MagicMock
 
-from facekids.filhos_agent import QuotaTracker, read_last_unlock_child
-from facekids.storage import Storage
-from facekids.ipc_reply import validated_face_observation
+from safepckids.filhos_agent import QuotaTracker, read_last_unlock_child
+from safepckids.storage import Storage
+from safepckids.ipc_reply import validated_face_observation
 
 
 class TestFilhosAgent(unittest.TestCase):
@@ -43,8 +43,8 @@ class TestFilhosAgent(unittest.TestCase):
         self.assertFalse(tracker.warned_5m)
         self.assertFalse(tracker.warned_10m)
 
-    @patch("facekids.filhos_agent.show_toast")
-    @patch("facekids.filhos_agent.lock_current_session")
+    @patch("safepckids.filhos_agent.show_toast")
+    @patch("safepckids.filhos_agent.lock_current_session")
     def test_notifications_and_lock_progression(self, mock_lock, mock_toast):
         tracker = QuotaTracker(self.store)
         tracker.switch_child(self.child_id, "Lucas")
@@ -86,7 +86,7 @@ class TestFilhosAgent(unittest.TestCase):
                 json.dumps({"child_id": 2, "child_name": "Crianca 2", "timestamp": time.time()}),
                 encoding="utf-8",
             )
-            with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
+            with patch("safepckids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
                 cid, cname, ts = read_last_unlock_child()
                 self.assertEqual(cid, 2)
                 self.assertEqual(cname, "Crianca 2")
@@ -103,7 +103,7 @@ class TestFilhosAgent(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
-            with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
+            with patch("safepckids.filhos_agent.LAST_UNLOCK_FILE", unlock_file):
                 cid, cname, ts = read_last_unlock_child()
                 self.assertIsNone(cid)
                 self.assertEqual(cname, "")
@@ -131,18 +131,18 @@ class TestFilhosAgent(unittest.TestCase):
         tracker = QuotaTracker(self.store)
         self.assertIsNone(tracker.current_child_id)
         # Notifications should use fallback name without crashing
-        with patch("facekids.filhos_agent.show_toast"):
+        with patch("safepckids.filhos_agent.show_toast"):
             tracker.check_notifications_and_lock(500)
             self.assertTrue(tracker.warned_10m)
 
     def test_in_session_face_identifier_async(self):
-        from facekids.filhos_agent import InSessionFaceIdentifier
+        from safepckids.filhos_agent import InSessionFaceIdentifier
         identifier = InSessionFaceIdentifier(interval_seconds=0.1)
         self.assertIsNone(identifier.check_result())
 
         # Mock query_auth_service
         fake_payload = {"status": "ALLOW", "child_id": 2, "child_name": "Crianca 2"}
-        with patch("facekids.filhos_agent.query_auth_service", return_value=fake_payload):
+        with patch("safepckids.filhos_agent.query_auth_service", return_value=fake_payload):
             identifier.trigger_if_due()
             # Aguarda a thread de background concluir
             if identifier.thread:
@@ -154,7 +154,7 @@ class TestFilhosAgent(unittest.TestCase):
             self.assertIsNone(identifier.check_result())
 
     def test_query_auth_service_cancels_stalled_overlapped_read(self):
-        import facekids.filhos_agent as filhos_agent
+        import safepckids.filhos_agent as filhos_agent
         from ctypes import wintypes as real_wintypes
 
         class FakeKernel32:
@@ -197,7 +197,7 @@ class TestFilhosAgent(unittest.TestCase):
 
         fake_kernel32 = FakeKernel32()
         fake_windll = types.SimpleNamespace(kernel32=fake_kernel32)
-        with patch("facekids.filhos_agent.sys.platform", "win32"), patch.object(
+        with patch("safepckids.filhos_agent.sys.platform", "win32"), patch.object(
             filhos_agent, "wintypes", real_wintypes
         ), patch.object(ctypes, "windll", fake_windll, create=True):
             result = filhos_agent.query_auth_service(timeout_seconds=0.1)
@@ -210,10 +210,10 @@ class TestFilhosAgent(unittest.TestCase):
 
 
     def test_inactivity_settings_default_and_custom(self):
-        from facekids.filhos_agent import get_inactivity_settings
+        from safepckids.filhos_agent import get_inactivity_settings
         with tempfile.TemporaryDirectory() as td:
             dummy_cfg = Path(td) / "configuracoes.json"
-            with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
+            with patch("safepckids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
                 # Por padrao o agente nao bloqueia nem avisa por inatividade (Windows gerencia)
                 lock_s, warn_s = get_inactivity_settings()
                 self.assertEqual(lock_s, 0.0)
@@ -229,7 +229,7 @@ class TestFilhosAgent(unittest.TestCase):
                 self.assertEqual(warn_s, 150.0)
 
     def test_get_user_idle_seconds(self):
-        from facekids.filhos_agent import get_user_idle_seconds
+        from safepckids.filhos_agent import get_user_idle_seconds
         idle = get_user_idle_seconds()
         self.assertIsInstance(idle, float)
         self.assertGreaterEqual(idle, 0.0)
@@ -250,10 +250,10 @@ class TestFilhosAgent(unittest.TestCase):
 
 
     def test_face_check_interval_settings(self):
-        from facekids.filhos_agent import get_face_check_interval
+        from safepckids.filhos_agent import get_face_check_interval
         with tempfile.TemporaryDirectory() as td:
             dummy_cfg = Path(td) / "configuracoes.json"
-            with patch("facekids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
+            with patch("safepckids.filhos_agent.CONFIG_SETTINGS_FILE", dummy_cfg):
                 interval = get_face_check_interval()
                 self.assertEqual(interval, 60.0)
 
@@ -296,7 +296,7 @@ class TestFilhosAgent(unittest.TestCase):
 
 
     def test_in_session_switch_rules(self):
-        from facekids.session_transition_policy import decide_child_transition, TransitionDecision
+        from safepckids.session_transition_policy import decide_child_transition, TransitionDecision
         tracker = QuotaTracker(self.store)
         tracker.switch_child(self.child_id, "Lucas")
 
@@ -362,7 +362,7 @@ class TestFilhosAgent(unittest.TestCase):
             self.assertEqual(tracker.current_child_name, "Lucas")
 
     def test_deny_quota_blocks_current_child_or_switched_child(self):
-        from facekids.session_transition_policy import decide_child_transition, TransitionDecision
+        from safepckids.session_transition_policy import decide_child_transition, TransitionDecision
         tracker = QuotaTracker(self.store)
         tracker.switch_child(self.child_id, "Lucas")
 

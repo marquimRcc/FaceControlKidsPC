@@ -1,9 +1,9 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from facekids.storage import Storage
-from facekids.dashboard import cards_from_storage,time_label
-from facekids.admin_auth import hash_pin,verify_pin,AUTH_SETTING
+from safepckids.storage import Storage
+from safepckids.dashboard import cards_from_storage,time_label
+from safepckids.admin_auth import hash_pin,verify_pin,AUTH_SETTING
 
 class AdminTests(unittest.TestCase):
     def test_independent_bonus(self):

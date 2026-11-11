@@ -4,11 +4,11 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from facekids.filhos_bound_vm_agent import (
+from safepckids.filhos_bound_vm_agent import (
     VmBoundChildObserver, VmBoundStatus, observe_vm_bound_once,
     require_vm_bound_policy,
 )
-from facekids.quota_broker_bound_protocol import BoundBalance
+from safepckids.quota_broker_bound_protocol import BoundBalance
 
 
 class BoundVmAgentTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class BoundVmAgentTests(unittest.TestCase):
                                  "unavailable")
 
     def test_no_sqlite_open_billing_winlogon_or_env_override_in_agent(self):
-        import facekids.filhos_bound_vm_agent as agent
+        import safepckids.filhos_bound_vm_agent as agent
         source = inspect.getsource(agent)
         for disallowed in (
             "Storage(", "sqlite3.connect(", "LockWorkStation(",

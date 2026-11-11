@@ -13,8 +13,8 @@ import shutil
 import subprocess
 import uuid
 
-from facekids.quota_migration_lab import prepare_lab_cutover, restore_lab_snapshot
-from facekids.storage import Storage
+from safepckids.quota_migration_lab import prepare_lab_cutover, restore_lab_snapshot
+from safepckids.storage import Storage
 from scripts.ci_scm_lab_smoke import _require_ephemeral_host
 from scripts.ci_acl_child_token_smoke import _restrict
 
@@ -37,7 +37,7 @@ def main() -> int:
 
     username = "FKCUT" + uuid.uuid4().hex[:11]
     password = "A9!" + secrets.token_urlsafe(24)
-    root = Path(os.environ["RUNNER_TEMP"]) / uuid.uuid4().hex / "facekids-quota-lab"
+    root = Path(os.environ["RUNNER_TEMP"]) / uuid.uuid4().hex / "safepckids-quota-lab"
     if root.exists():
         raise RuntimeError("Existing lab root refused")
     user_created = False

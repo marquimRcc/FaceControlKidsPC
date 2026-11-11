@@ -26,7 +26,7 @@ try {
     Write-Host 'Abrindo camera XWF-1080P para comparar APENAS com cadastro adulto existente.' -ForegroundColor Cyan
     Write-Host 'Aperte Win+L agora, fique na frente da webcam e desbloqueie com PIN/senha normal depois de ~50 s.'
     Write-Host 'SEM desbloqueio automatico. Nao salvara fotos, videos ou novos vetores.'
-    & $python -m facekids.locked_face_probe --duration $Duration --camera-index $CameraIndex
+    & $python -m safepckids.locked_face_probe --duration $Duration --camera-index $CameraIndex
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Diagnostico ainda inconclusivo ($LASTEXITCODE); envie a linha final e o resumo."
     } else {

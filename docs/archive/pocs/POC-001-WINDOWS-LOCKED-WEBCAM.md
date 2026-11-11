@@ -22,7 +22,7 @@ sem alterar registro Windows e sem acessar qualquer senha.
    \`\`\`
 4. Inicie o teste por 120 segundos:
    \`\`\`powershell
-   .\\.venv\\Scripts\\python.exe -m facekids.windows_lock_probe --duration 120
+   .\\.venv\\Scripts\\python.exe -m safepckids.windows_lock_probe --duration 120
    \`\`\`
 5. **Pressione Win+L manualmente**, deixe a tela bloqueada por 30–60 s e
    faça login normalmente usando a senha da conta.
@@ -40,7 +40,7 @@ Teste **dshow**, **msmf** e **any** separadamente se houver falhas.
 - Erros pelo tipo, sem texto de driver, senhas, identidade ou caminho pessoal.
 
 **Não grava vídeo, fotografias, biometria, rostos ou áudio.**
-O CSV fica em \`%LOCALAPPDATA%\\FaceKids\\diagnostics\\\` e **não deve ser commitado**.
+O CSV fica em \`%LOCALAPPDATA%\\SafePCKids\\diagnostics\\\` e **não deve ser commitado**.
 
 ## Critério mínimo
 

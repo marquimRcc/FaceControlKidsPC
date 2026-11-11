@@ -23,9 +23,9 @@ graph TD
     end
 
     subgraph "Modelo B: Processo Auxiliar Interativo (Recomendado SDD)"
-        LUI[LogonUI / Sessao Interativa] -->|Inicia Helper| HLP[FaceKids Camera Helper]
+        LUI[LogonUI / Sessao Interativa] -->|Inicia Helper| HLP[SafePCKids Camera Helper]
         HLP -->|DirectShow/MF em Sessao Interativa| USB2[Webcam USB]
-        HLP -->|Embeddings + Anti-Spoof via Named Pipe Seguro| S0_AUTH[Face Kids Auth Service SYSTEM]
+        HLP -->|Embeddings + Anti-Spoof via Named Pipe Seguro| S0_AUTH[SafePCKids Auth Service SYSTEM]
         S0_AUTH -->|Valida SID + Quotas| DB[(kids.sqlite3)]
     end
 ```

@@ -1,4 +1,4 @@
-# FaceKids `developer` — P0 a P4: integração e limites de homologação
+# SafePCKids `developer` — P0 a P4: integração e limites de homologação
 
 **Data:** 27/10/2026. **Alvo:** `developer` derivada da `main`
 `4f2ec165`. **NÃO implantado no computador familiar; nenhuma alteração da main.**
@@ -43,7 +43,7 @@ ser falsificado para exibir saudação; isso não autoriza a troca de quota.
 
 ## P1 — Decisão de sessão pura e centralizada
 
-Novo `facekids/session_transition_policy.py` e testes parametrizados
+Novo `safepckids/session_transition_policy.py` e testes parametrizados
 incluindo dados malformados, face secundária, jogador ativo, múltiplas faces,
 ausência de perfil, limiar exato de 15s e observação expirada. `filhos_agent`
 invoca diretamente a mesma função para ALLOW e para transições DENY.
@@ -101,7 +101,7 @@ no computador familiar.
 - `tests/test_scm_face_recapture_contract.py`
 - suites antigas de storage, auth, agente, broker, WTS e native CP.
 - CI Windows/Ubuntu e Linux Regata. Resultados disponíveis em
-  https://github.com/marquimRcc/FaceControlKidsPC/actions?query=branch%3Adeveloper
+  https://github.com/marquimRcc/SafePCKids/actions?query=branch%3Adeveloper
 
 **NÃO promover a main ainda:** homologação em VM com snapshot/rollback,
 revisão de confiança dos Named Pipes, possível conflito de captura USB,

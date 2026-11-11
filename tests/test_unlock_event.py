@@ -7,9 +7,9 @@ import time
 import unittest
 from unittest.mock import patch
 
-from facekids.unlock_event import validated_unlock_event, enrolled_display_name
-from facekids.storage import Storage
-from facekids.filhos_agent import read_last_unlock_child
+from safepckids.unlock_event import validated_unlock_event, enrolled_display_name
+from safepckids.storage import Storage
+from safepckids.filhos_agent import read_last_unlock_child
 
 
 class UnlockEventTests(unittest.TestCase):
@@ -73,7 +73,7 @@ class UnlockEventTests(unittest.TestCase):
     def test_file_reader_rejects_future_and_bad_id(self):
         with TemporaryDirectory() as td:
             path = Path(td) / "last_unlock.json"
-            with patch("facekids.filhos_agent.LAST_UNLOCK_FILE", path):
+            with patch("safepckids.filhos_agent.LAST_UNLOCK_FILE", path):
                 for candidate in (
                     {**self.event, "timestamp": self.now + 3600},
                     {**self.event, "child_id": True},

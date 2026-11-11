@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Baixando modelos faciais ONNX (YuNet e SFace)..."
-          .\.venv\Scripts\python.exe -m facekids.cli --models models download-models
+          .\.venv\Scripts\python.exe -m safepckids.cli --models models download-models
 
       - name: Run unit test suite
         shell: pwsh
@@ -72,27 +72,27 @@ jobs:
           $certBase64 = "${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}"
           if ($certBase64) {
               $certBytes = [Convert]::FromBase64String($certBase64)
-              $certPath = Join-Path $env:RUNNER_TEMP "facekids_signing_cert.pfx"
+              $certPath = Join-Path $env:RUNNER_TEMP "safepckids_signing_cert.pfx"
               [IO.File]::WriteAllBytes($certPath, $certBytes)
-              Add-Content -Path $env:GITHUB_ENV -Value "FACEKIDS_SIGNING_CERT=$certPath"
+              Add-Content -Path $env:GITHUB_ENV -Value "SAFEPCKIDS_SIGNING_CERT=$certPath"
               if ("${{ secrets.WINDOWS_SIGNING_PASSWORD }}") {
-                  Add-Content -Path $env:GITHUB_ENV -Value "FACEKIDS_SIGNING_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
+                  Add-Content -Path $env:GITHUB_ENV -Value "SAFEPCKIDS_SIGNING_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
               }
               Write-Host "Certificado de assinatura preparado com sucesso."
           } else {
               Write-Host "Segredo de assinatura ausente. O executavel sera gerado sem assinatura digital."
           }
 
-      - name: Build FaceKids-Instalador-Windows-x64.exe
+      - name: Build SafePCKids-Instalador-Windows-x64.exe
         shell: pwsh
         run: |
           Write-Host "Iniciando compilacao do instalador..."
-          & scripts/Construir-FaceKids-Setup.ps1
+          & scripts/Construir-SafePCKids-Setup.ps1
 
       - name: Confirm EXE self-test
         shell: pwsh
         run: |
-          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
+          $exePath = "dist\SafePCKids-Instalador-Windows-x64.exe"
           if (-not (Test-Path -LiteralPath $exePath)) {
               throw "Executavel nao encontrado em $exePath"
           }
@@ -106,12 +106,12 @@ jobs:
       - name: Validate code signature
         shell: pwsh
         run: |
-          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
-          $dllPath = "native\credential_provider_facekids\FaceKidsCredentialProvider.dll"
+          $exePath = "dist\SafePCKids-Instalador-Windows-x64.exe"
+          $dllPath = "native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll"
           $sigExe = Get-AuthenticodeSignature -FilePath $exePath
           $sigDll = Get-AuthenticodeSignature -FilePath $dllPath
 
-          if ($env:FACEKIDS_SIGNING_CERT -and (Test-Path -LiteralPath $env:FACEKIDS_SIGNING_CERT)) {
+          if ($env:SAFEPCKIDS_SIGNING_CERT -and (Test-Path -LiteralPath $env:SAFEPCKIDS_SIGNING_CERT)) {
               Write-Host "Validando assinaturas digitais configuradas..."
               if ($sigExe.Status -notin @('Valid', 'UnknownError')) {
                   throw "Assinatura do EXE invalida: $($sigExe.Status) ($($sigExe.StatusMessage))"
@@ -130,7 +130,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $certPath = Join-Path $env:RUNNER_TEMP "facekids_signing_cert.pfx"
+          $certPath = Join-Path $env:RUNNER_TEMP "safepckids_signing_cert.pfx"
           if (Test-Path -LiteralPath $certPath) {
               Remove-Item -LiteralPath $certPath -Force
           }
@@ -138,7 +138,7 @@ jobs:
       - name: Generate SHA256SUMS.txt
         shell: pwsh
         run: |
-          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
+          $exePath = "dist\SafePCKids-Instalador-Windows-x64.exe"
           $hash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLower()
           $fileName = [System.IO.Path]::GetFileName($exePath)
           $checksumLine = "$hash  $fileName"
@@ -151,7 +151,7 @@ jobs:
         with:
           name: windows-installer
           path: |
-            dist/FaceKids-Instalador-Windows-x64.exe
+            dist/SafePCKids-Instalador-Windows-x64.exe
             dist/SHA256SUMS.txt
             dist/SIGNING_STATUS.txt
           if-no-files-found: error
@@ -197,16 +197,16 @@ jobs:
           fi
 
           SHA256_LINE=$(cat release_assets/SHA256SUMS.txt)
-          EXE_SIZE=$(stat -c%s "release_assets/FaceKids-Instalador-Windows-x64.exe" 2>/dev/null || echo "0")
+          EXE_SIZE=$(stat -c%s "release_assets/SafePCKids-Instalador-Windows-x64.exe" 2>/dev/null || echo "0")
           EXE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $EXE_SIZE / 1048576}")
 
           cat <<EOF > release_notes.md
-          ## FaceKids $VERSION
+          ## SafePCKids $VERSION
 
-          Primeira release oficial do **FaceKids** para Windows x64.
+          Primeira release oficial do **SafePCKids** para Windows x64.
 
           ### 📦 Arquivos da Release
-          - **FaceKids-Instalador-Windows-x64.exe** (~${EXE_SIZE_MB} MB)
+          - **SafePCKids-Instalador-Windows-x64.exe** (~${EXE_SIZE_MB} MB)
           - **SHA256SUMS.txt** (Checksum de integridade SHA-256)
 
           ### 🛡️ Integridade e Hashes
@@ -230,19 +230,19 @@ jobs:
           if gh release view "$FINAL_TAG" >/dev/null 2>&1; then
             echo "Release $FINAL_TAG já existente; atualizando arquivos..."
             gh release upload "$FINAL_TAG" \
-              release_assets/FaceKids-Instalador-Windows-x64.exe \
+              release_assets/SafePCKids-Instalador-Windows-x64.exe \
               release_assets/SHA256SUMS.txt \
               --clobber
             gh release edit "$FINAL_TAG" \
-              --title "FaceKids $VERSION" \
+              --title "SafePCKids $VERSION" \
               --notes-file release_notes.md \
               --draft=false \
               --prerelease=false
           else
             echo "Criando nova release pública para $FINAL_TAG..."
             gh release create "$FINAL_TAG" \
-              release_assets/FaceKids-Instalador-Windows-x64.exe \
+              release_assets/SafePCKids-Instalador-Windows-x64.exe \
               release_assets/SHA256SUMS.txt \
-              --title "FaceKids $VERSION" \
+              --title "SafePCKids $VERSION" \
               --notes-file release_notes.md
           fi

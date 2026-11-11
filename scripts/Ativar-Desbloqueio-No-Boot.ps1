@@ -12,7 +12,7 @@ param([switch]$Desativar)
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$taskName = 'FaceKidsBootAuth'
+$taskName = 'SafePCKidsBootAuth'
 
 if ($Desativar) {
     $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -29,21 +29,21 @@ if (-not (Test-Path -LiteralPath $python)) {
     $python = Join-Path $root '.venv\Scripts\python.exe'
 }
 $models = Join-Path $root 'models'
-$dataDir = 'C:\ProgramData\FaceKids'
-$dll = Join-Path $dataDir 'FaceKidsCredentialProvider.dll'
+$dataDir = 'C:\ProgramData\SafePCKids'
+$dll = Join-Path $dataDir 'SafePCKidsCredentialProvider.dll'
 if (Test-Path -LiteralPath (Join-Path $root 'runtime\python.exe')) {
-    $dll = Join-Path $root 'native\credential_provider_facekids\FaceKidsCredentialProvider.dll'
+    $dll = Join-Path $root 'native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll'
 }
 $dbFile = Join-Path $dataDir 'criancas.sqlite3'
 if (-not (Test-Path -LiteralPath $dbFile)) {
     if (-not (Test-Path $dataDir)) {
         New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
     }
-    & $python -c "import facekids.storage, pathlib; s = facekids.storage.Storage(pathlib.Path('$dbFile')); s.close()"
+    & $python -c "import safepckids.storage, pathlib; s = safepckids.storage.Storage(pathlib.Path('$dbFile')); s.close()"
 }
 $required = @(
     $python,
-    (Join-Path $root 'facekids\boot_auth.py'),
+    (Join-Path $root 'safepckids\boot_auth.py'),
     (Join-Path $models 'face_detection_yunet_2023mar.onnx'),
     (Join-Path $models 'face_recognition_sface_2021dec.onnx'),
     $dbFile,
@@ -51,27 +51,27 @@ $required = @(
 )
 foreach ($file in $required) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-        throw "Arquivo necessario ausente: $file. Instale/cadastre o FaceKids primeiro."
+        throw "Arquivo necessario ausente: $file. Instale/cadastre o SafePCKids primeiro."
     }
 }
 $installedDll = [Text.Encoding]::ASCII.GetString(
     [IO.File]::ReadAllBytes($dll))
-if (-not $installedDll.Contains('FACEKIDS_IPC_V1') -or
-    -not $installedDll.Contains('FACEKIDS_BOOT_RETRY_V1')) {
-    throw 'Atualize o Credential Provider com Instalar-FaceKids-Nativo.ps1 antes de ativar o boot.'
+if (-not $installedDll.Contains('SAFEPCKIDS_IPC_V1') -or
+    -not $installedDll.Contains('SAFEPCKIDS_BOOT_RETRY_V1')) {
+    throw 'Atualize o Credential Provider com Instalar-SafePCKids-Nativo.ps1 antes de ativar o boot.'
 }
 if (-not (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{FAC0D042-3DD0-4A8C-9F18-440C44330C20}')) {
-    throw 'Credential Provider FaceKids nao esta registrado. Execute o instalador principal primeiro.'
+    throw 'Credential Provider SafePCKids nao esta registrado. Execute o instalador principal primeiro.'
 }
 
 # Import check only: no webcam acquisition and no writes to the biometric DB.
 Push-Location $root
 try {
-    & $python -c 'import cv2; import facekids.auth_service; import facekids.boot_auth'
+    & $python -c 'import cv2; import safepckids.auth_service; import safepckids.boot_auth'
     if ($LASTEXITCODE -ne 0) { throw 'Python/dependencias do autenticador indisponiveis.' }
 } finally { Pop-Location }
 
-$action = New-ScheduledTaskAction -Execute $python -WorkingDirectory $root -Argument '-m facekids.boot_auth'
+$action = New-ScheduledTaskAction -Execute $python -WorkingDirectory $root -Argument '-m safepckids.boot_auth'
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
@@ -95,8 +95,8 @@ if ($registeredLogonType -notin @('ServiceAccount', '5') -or
     throw 'Principal da tarefa de boot diferente de SYSTEM/ServiceAccount.'
 }
 Start-ScheduledTask -TaskName $taskName
-Write-Host 'FaceKidsBootAuth configurado para iniciar ANTES do logon.' -ForegroundColor Green
+Write-Host 'SafePCKidsBootAuth configurado para iniciar ANTES do logon.' -ForegroundColor Green
 Write-Host 'Reinicie quando desejar, aguarde a webcam e teste sem entrar no administrador.'
-Write-Host 'Diagnostico: C:\ProgramData\FaceKids\boot_status.json e boot_events.jsonl'
+Write-Host 'Diagnostico: C:\ProgramData\SafePCKids\boot_status.json e boot_events.jsonl'
 Write-Host 'Se a camera for bloqueada pelo driver em Sessao 0, o log informara; nao ha garantia antes do teste real.'
 Write-Host 'Para voltar: execute este script com -Desativar. Login normal nao foi alterado.'

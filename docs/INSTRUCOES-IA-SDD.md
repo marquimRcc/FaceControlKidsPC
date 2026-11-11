@@ -1,4 +1,4 @@
-# DIRETRIZES DE ATUAÇÃO E TRANSIÇÃO PARA SDD — FaceControlKidsPC
+# DIRETRIZES DE ATUAÇÃO E TRANSIÇÃO PARA SDD — SafePCKids
 
 > **DESTINATÁRIO:** Qualquer Agente de IA (Claude Code, Antigravity, Cursor, etc.) que for assumir ou continuar o desenvolvimento deste repositório.  
 > **OBJETIVO:** Estabelecer governança estrita via **Spec-Driven Development (SDD)**, organizar a base documental existente e executar os próximos marcos do roadmap sem degradar a estabilidade do sistema em produção.
@@ -7,11 +7,11 @@
 
 ## 1. REGRA DE OURO (NÃO QUEBRAR O QUE JÁ FUNCIONA)
 
-O **FaceControlKidsPC** é um sistema em produção física homologado no computador da família, cobrindo autenticação biométrica em nível de sistema operacional (Windows LogonUI/LSA via C++ Credential Provider) com **339 testes automatizados de CI passando**.
+O **SafePCKids** é um sistema em produção física homologado no computador da família, cobrindo autenticação biométrica em nível de sistema operacional (Windows LogonUI/LSA via C++ Credential Provider) com **339 testes automatizados de CI passando**.
 
 ### Proibições Absolutas:
 1. **NÃO reescrever do zero** nenhum módulo existente.
-2. **NÃO alterar** a DLL C++ (`native/FaceKidsCredentialProvider.dll`) ou contratos de autenticação Kerberos sem uma especificação formal aprovada.
+2. **NÃO alterar** a DLL C++ (`native/SafePCKidsCredentialProvider.dll`) ou contratos de autenticação Kerberos sem uma especificação formal aprovada.
 3. **NÃO misturar** código de **Produção Física** com código de **Laboratório de VM**:
    - **Produção Física:** Usa `filhos_agent.py`, `agent_watchdog.py`, `welcome_screen.py`, `quota_agent_accounting.py`.
    - **Laboratório Experimental:** Módulos `quota_broker_*` e `quota_vm_*` (isolados para testes de cutover).
@@ -25,14 +25,14 @@ O **FaceControlKidsPC** é um sistema em produção física homologado no comput
 Webcam USB (XWF-1080P)
       │
       ▼
-Face Kids Auth Service (Python SYSTEM / Admin)
+SafePCKids Auth Service (Python SYSTEM / Admin)
    ├── OpenCV YuNet (detecção) + SFace (reconhecimento 1:N)
    ├── Banco SQLite local (kids.sqlite3)
    ├── Watchdog Anti-Burla (agent_watchdog.py)
-   └── Servidor Named Pipe: \\.\pipe\FaceKidsAuthPipe
+   └── Servidor Named Pipe: \\.\pipe\SafePCKidsAuthPipe
       │
       ▼ (IPC com SID Binding exclusivo da conta Filhos)
-Face Kids Credential Provider (C++ nativo / COM)
+SafePCKids Credential Provider (C++ nativo / COM)
    └── AutoLogon transparente via KerbInteractiveLogon (senha fixa "1")
       │
       ▼
@@ -113,7 +113,7 @@ Quando a IA estiver implementando código:
 Copie e envie o bloco abaixo para o Claude Code (ou outro agente de IA) ao abrir este repositório:
 
 ```text
-Você está atuando no repositório FaceControlKidsPC sob a metodologia Spec-Driven Development (SDD).
+Você está atuando no repositório SafePCKids sob a metodologia Spec-Driven Development (SDD).
 Leia atentamente o arquivo INSTRUCOES-IA-SDD.md antes de qualquer ação.
 
 Suas diretrizes imediatas são:

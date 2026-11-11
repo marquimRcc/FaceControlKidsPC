@@ -1,12 +1,12 @@
 {
-  "name": "facekids-workspace",
+  "name": "safepckids-workspace",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev": "pnpm --filter @facekids/desktop dev",
-    "build": "pnpm --filter @facekids/desktop build",
+    "dev": "pnpm --filter @safepckids/desktop dev",
+    "build": "pnpm --filter @safepckids/desktop build",
     "typecheck": "pnpm -r typecheck",
-    "test:ui": "pnpm --filter @facekids/contracts test"
+    "test:ui": "pnpm --filter @safepckids/contracts test"
   }
 }

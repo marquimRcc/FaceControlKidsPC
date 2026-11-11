@@ -1,15 +1,15 @@
-# FaceKids `developer` — iniciar laboratório da VM com uma linha
+# SafePCKids `developer` — iniciar laboratório da VM com uma linha
 
 **Importante:** executar somente no PowerShell de uma **VM Windows 11 descartável**, com uma conta administrativa convencional, após criar e testar um snapshot no hipervisor.
 
 ## Comando único
 
 ```powershell
-irm https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/Iniciar-FaceKids-VM-Developer.ps1 | iex
+irm https://raw.githubusercontent.com/marquimRcc/SafePCKids/developer/scripts/Iniciar-SafePCKids-VM-Developer.ps1 | iex
 ```
 
 O comando baixa e executa o script versionado em
-`scripts/Iniciar-FaceKids-VM-Developer.ps1`, que:
+`scripts/Iniciar-SafePCKids-VM-Developer.ps1`, que:
 
 1. Confere que o Windows apresenta indicadores de máquina virtual e que a conta não é `Filhos`.
 2. Baixa o ZIP da branch `developer` do GitHub, sem exigir Git instalado.
@@ -18,7 +18,7 @@ O comando baixa e executa o script versionado em
 5. Executa preflight P6, testes unitários e uma leitura breve da câmera interativa (quando disponível).
 6. **Abre automaticamente o Painel dos Pais** com um banco de dados de laboratório, permitindo cadastrar **um ou mais perfis**, inclusive um rosto adulto voluntário.
 
-O laboratório é separado em `%LOCALAPPDATA%\FaceKids-VM-Lab`:
+O laboratório é separado em `%LOCALAPPDATA%\SafePCKids-VM-Lab`:
 - `codigo-developer`: arquivos do GitHub;
 - `.venv`: dependências do Python;
 - `dados-isolados`: SQLite, fotos, configurações e log da interface.
@@ -32,7 +32,7 @@ Se Python e modelos não puderem ser baixados por falta de rede, o script inform
 Após a primeira abertura, para repetir o preflight isolado da VM:
 
 ```powershell
-& "$env:LOCALAPPDATA\FaceKids-VM-Lab\codigo-developer\scripts\Testar-P5-P6-VM-FaceKids.ps1"
+& "$env:LOCALAPPDATA\SafePCKids-VM-Lab\codigo-developer\scripts\Testar-P5-P6-VM-SafePCKids.ps1"
 ```
 
 O roteiro completo está em

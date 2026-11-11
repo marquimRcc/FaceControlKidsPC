@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChildStatus, EnrollmentStatus, ProfilePhoto } from "@facekids/contracts";
+import type { ChildStatus, EnrollmentStatus, ProfilePhoto } from "@safepckids/contracts";
 import { AlertTriangle, Camera, Check, Clock3, Gift, Image as ImageIcon, Pencil, ShieldCheck, Trash2, X } from "lucide-react";
 
 export function ProfilePhotoManager({ child, enrollment, loadPhotos, selectPhoto, renameChild, deleteChild, startCapture, cancelCapture, setDailyLimit, addBonus, onClose }: {

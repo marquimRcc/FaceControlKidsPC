@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/usr/lib/safepckids
+exec /opt/safepckids/venv/bin/python -m safepckids.linux_admin \
+  --database /var/lib/safepckids/criancas.sqlite3 \
+  --models /usr/lib/safepckids/models "$@"

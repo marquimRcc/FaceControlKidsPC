@@ -10,7 +10,7 @@
 #include <mutex>
 #include <string>
 
-namespace facekids_usage {
+namespace safepckids_usage {
 
 enum class Result {
     Denied,
@@ -23,16 +23,16 @@ enum class Result {
     PausedClockRegression
 };
 
-inline bool valid_unlocked_wts(const facekids_guard::Snapshot& wts,
+inline bool valid_unlocked_wts(const safepckids_guard::Snapshot& wts,
                                const std::wstring& expected_sid) {
     return wts.requested_id!=0 &&
            wts.requested_id!=0xffffffff &&
            wts.requested_id==wts.actual_id &&
-           wts.state==facekids_wts::LockView::Unlocked &&
+           wts.state==safepckids_wts::LockView::Unlocked &&
            wts.token_from_os &&
-           facekids_guard::valid_local_account_sid(expected_sid) &&
-           facekids_guard::valid_local_account_sid(wts.token_sid) &&
-           facekids_guard::sid_equals(wts.token_sid,expected_sid);
+           safepckids_guard::valid_local_account_sid(expected_sid) &&
+           safepckids_guard::valid_local_account_sid(wts.token_sid) &&
+           safepckids_guard::sid_equals(wts.token_sid,expected_sid);
 }
 
 class Meter {
@@ -42,7 +42,7 @@ class Meter {
     DWORD session_=0;
     ULONGLONG last_tick_=0;
     std::string day_;
-    friend bool self_test(facekids_quota::Store&);
+    friend bool self_test(safepckids_quota::Store&);
     explicit Meter(bool allowSynthetic):synthetic_enabled_(allowSynthetic){}
     void reset() {
         child_=0;
@@ -55,9 +55,9 @@ public:
     Meter(const Meter&)=delete;
     Meter& operator=(const Meter&)=delete;
 
-    Result start(const facekids_guard::Snapshot& os,
+    Result start(const safepckids_guard::Snapshot& os,
                  const std::wstring& sid,
-                 facekids_quota::Store& quota,
+                 safepckids_quota::Store& quota,
                  int child, const char* service_day,
                  ULONGLONG service_tick) {
         std::lock_guard<std::mutex> guard(mutex_);
@@ -65,7 +65,7 @@ public:
         // Synthetic child attribution is NEVER trusted in production.
         if(!synthetic_enabled_ ||
            !valid_unlocked_wts(os,sid) ||
-           child<1 || child>3 || !facekids_date::valid(service_day))
+           child<1 || child>3 || !safepckids_date::valid(service_day))
             return Result::Denied;
         sqlite3_int64 remaining=0;
         if(!quota.remaining(child,service_day,&remaining) || remaining<=0)
@@ -77,9 +77,9 @@ public:
         return Result::ArmedForSyntheticTest;
     }
 
-    Result pulse(const facekids_guard::Snapshot& os,
+    Result pulse(const safepckids_guard::Snapshot& os,
                  const std::wstring& sid,
-                 facekids_quota::Store& quota,
+                 safepckids_quota::Store& quota,
                  const char* service_day,
                  ULONGLONG service_tick) {
         std::lock_guard<std::mutex> guard(mutex_);
@@ -88,7 +88,7 @@ public:
             reset();
             return Result::PausedUnverifiedSession;
         }
-        if(!facekids_date::valid(service_day)) {
+        if(!safepckids_date::valid(service_day)) {
             reset();
             return Result::Denied;
         }
@@ -137,11 +137,11 @@ public:
 };
 
 // No actual child identities or faces are used by this isolated self-test.
-inline bool self_test(facekids_quota::Store& quota) {
+inline bool self_test(safepckids_quota::Store& quota) {
     const std::wstring childSid=L"S-1-5-21-100-200-300-1005";
     const std::wstring wrongSid=L"S-1-5-21-100-200-300-1001";
-    constexpr auto Unlocked=facekids_wts::LockView::Unlocked;
-    facekids_guard::Snapshot os={7,7,Unlocked,childSid,true};
+    constexpr auto Unlocked=safepckids_wts::LockView::Unlocked;
+    safepckids_guard::Snapshot os={7,7,Unlocked,childSid,true};
     const char* day="2026-10-20";
     Meter production;
     if(production.start(os,childSid,quota,1,day,1000)!=Result::Denied)
@@ -156,7 +156,7 @@ inline bool self_test(facekids_quota::Store& quota) {
     sqlite3_int64 remaining=0;
     if(!quota.remaining(1,day,&remaining) || remaining!=7199)
         return false;
-    os.state=facekids_wts::LockView::Locked;
+    os.state=safepckids_wts::LockView::Locked;
     if(meter.pulse(os,childSid,quota,day,4000)!=
        Result::PausedUnverifiedSession) return false;
     if(meter.pulse(os,childSid,quota,day,5000)!=Result::Denied)
@@ -194,4 +194,4 @@ inline bool self_test(facekids_quota::Store& quota) {
     return true;
 }
 
-} // namespace facekids_usage
+} // namespace safepckids_usage

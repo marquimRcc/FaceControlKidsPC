@@ -3,11 +3,11 @@ import inspect
 import unittest
 from unittest.mock import MagicMock, patch
 
-from facekids.filhos_quota_vm_readonly import (
+from safepckids.filhos_quota_vm_readonly import (
     VmLabSnapshot, observe_vm_lab_once,
 )
-from facekids.quota_broker_transport_win import LAB_PIPE_PREFIX
-from facekids.quota_broker_protocol import BROKER_PROTOCOL
+from safepckids.quota_broker_transport_win import LAB_PIPE_PREFIX
+from safepckids.quota_broker_protocol import BROKER_PROTOCOL
 
 
 SID = "S-1-5-21-1-2-3-1001"
@@ -54,7 +54,7 @@ class VmReadOnlyChildAgentTests(unittest.TestCase):
 
     def test_invalid_pipe_or_malicious_reply_cannot_trigger_actions(self):
         for pipe in (LAB_PIPE[:-1], LAB_PIPE + "x", LAB_PIPE_PREFIX + "../",
-                     r"\\.\pipe\FaceKidsAuthPipe"):
+                     r"\\.\pipe\SafePCKidsAuthPipe"):
             with self.subTest(pipe=pipe):
                 query = MagicMock()
                 result = observe_vm_lab_once(
@@ -74,7 +74,7 @@ class VmReadOnlyChildAgentTests(unittest.TestCase):
         self.assertFalse(observed.may_enforce_lock)
 
     def test_vm_probe_source_does_not_access_storage_lock_or_windows_auth(self):
-        from facekids import filhos_quota_vm_readonly as probe
+        from safepckids import filhos_quota_vm_readonly as probe
         text = inspect.getsource(probe)
         for disallowed in ("Storage(", "charge(", "lock_current_session(",
                            "LockWorkStation(", "last_unlock.json", "win32serviceutil.InstallService("):
@@ -84,7 +84,7 @@ class VmReadOnlyChildAgentTests(unittest.TestCase):
         self.assertIn("effective_windows_sid()", text)
 
     def test_effective_sid_does_not_fall_back_to_name_on_non_windows(self):
-        from facekids.filhos_quota_vm_readonly import effective_windows_sid
+        from safepckids.filhos_quota_vm_readonly import effective_windows_sid
         import os
         if os.name != "nt":
             with self.assertRaises(RuntimeError):

@@ -1,6 +1,6 @@
 # P0-28 — Diagnostico seguro da webcam durante Win+L
 
-Foi adicionado \`facekids/hardware_camera_probe.py\` para uma execucao
+Foi adicionado \`safepckids/hardware_camera_probe.py\` para uma execucao
 **opt-in** na conta Windows ja conectada.
 
 Nao e instalacao de servico, Credential Provider ou desbloqueio de
@@ -18,7 +18,7 @@ Requisitos antes do teste real:
 
 Na conta principal, em um terminal com o projeto atualizado:
 
-    .\.venv\Scripts\python.exe -m facekids.hardware_camera_probe --duration 120
+    .\.venv\Scripts\python.exe -m safepckids.hardware_camera_probe --duration 120
 
 O programa mostra numero de amostras WTS LOCKED, frames e leituras
 nao uniformes. Resultado

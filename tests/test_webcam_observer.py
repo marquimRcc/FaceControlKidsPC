@@ -4,8 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import numpy as np
 
-from facekids.webcam_observer import WebcamObserver, classify_face_sample, load_enrollments
-from facekids.storage import Storage
+from safepckids.webcam_observer import WebcamObserver, classify_face_sample, load_enrollments
+from safepckids.storage import Storage
 
 
 class ObserverUnitTest(unittest.TestCase):

@@ -1,9 +1,9 @@
 import unittest
 
-from facekids.unlock_coordinator import (
+from safepckids.unlock_coordinator import (
     BridgeStatus, OfflineUnlockCoordinator, WindowsSession,
 )
-from facekids.unlock_policy import FacialEvidence, UnlockReason
+from safepckids.unlock_policy import FacialEvidence, UnlockReason
 
 
 CHILD = "S-1-5-21-100-200-300-1005"

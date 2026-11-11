@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
- FaceKids: pilot for one or more configured profiles.
+ SafePCKids: pilot for one or more configured profiles.
  Does NOT install services, edit logon, register scheduled tasks or
  automatically lock the Windows administrator.
  This script runs in the CURRENT Windows user's local data directory.
@@ -35,12 +35,12 @@ try {
     $models = Join-Path $root 'models'
     if (-not (Test-Path (Join-Path $models 'face_detection_yunet_2023mar.onnx')) -or
         -not (Test-Path (Join-Path $models 'face_recognition_sface_2021dec.onnx'))) {
-        & $python -m facekids.cli download-models
+        & $python -m safepckids.cli download-models
         if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel preparar modelos ONNX.' }
     }
     $currentUser=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     Write-Host ''
-    Write-Host "FaceKids Piloto Infantil - usuario $currentUser" -ForegroundColor Cyan
+    Write-Host "SafePCKids Piloto Infantil - usuario $currentUser" -ForegroundColor Cyan
     Write-Host 'Nenhum bloqueio Windows sera executado neste menu.'
     Write-Host 'Cadastro facial e quotas sao LOCAIS desta conta e ainda nao antiviolacao.'
     Write-Host 'Acompanhe pessoalmente cada cadastro e confirme consentimento dos responsaveis.'
@@ -81,7 +81,7 @@ try {
             $arguments += @('erase',$idx)
         } elseif ($choice -eq '0') { break }
         else { Write-Warning 'Opcao invalida'; continue }
-        & $python -m facekids.children_pilot @arguments
+        & $python -m safepckids.children_pilot @arguments
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Acao encerrada com codigo $LASTEXITCODE. Leia a mensagem acima."
         }

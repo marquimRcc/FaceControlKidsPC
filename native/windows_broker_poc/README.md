@@ -1,6 +1,6 @@
 # P0-5 - Servico Windows e pipe protegido (sem instalacao)
 
-Esta etapa adiciona o executavel C++ FaceKidsBrokerPoc.exe que possui
+Esta etapa adiciona o executavel C++ SafePCKidsBrokerPoc.exe que possui
 estrutura de Windows Service Control Manager (SCM) e um named pipe
 de diagnostico em contexto local.
 
@@ -28,7 +28,7 @@ verifica a DACL e executa um servidor de uma requisicao. Um cliente
 separado conecta ao pipe e verifica PONG. O teste nao altera registro
 ou instalacao do Windows.
 
-O executavel aprovado e publicado no artifact FaceKidsBrokerPoc-HostOnly.
+O executavel aprovado e publicado no artifact SafePCKidsBrokerPoc-HostOnly.
 
 ## PC principal - diagnostico sem servico
 

@@ -47,7 +47,7 @@ try {
     Write-Host 'Agora voce pode pressionar Win+L e aguardar o teste.' -ForegroundColor Cyan
     Write-Host 'Nao feche o terminal antes do termino. Desbloqueie com sua senha usual.'
     Write-Host 'Nenhuma imagem, foto, modelo facial ou video sera salvo.'
-    & $python -m facekids.hardware_camera_probe --duration $Duration --camera-index $CameraIndex
+    & $python -m safepckids.hardware_camera_probe --duration $Duration --camera-index $CameraIndex
     if ($LASTEXITCODE -ne 0) { throw "Diagnostico encerrado com codigo $LASTEXITCODE." }
     Write-Host 'IMPORTANTE: apenas FRAMES_DURING_WIN_L_PRELIMINARY_ONLY evidencia frames no bloqueio.' -ForegroundColor Yellow
     Write-Host 'Nem esse resultado prova acesso confiavel ao LogonUI ou desbloqueio facial.' -ForegroundColor Yellow

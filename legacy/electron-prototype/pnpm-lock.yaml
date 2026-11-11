@@ -10,13 +10,13 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@facekids/admin':
+      '@safepckids/admin':
         specifier: workspace:*
         version: link:../../packages/admin
-      '@facekids/contracts':
+      '@safepckids/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@facekids/ui':
+      '@safepckids/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       lucide-react:
@@ -53,10 +53,10 @@ importers:
 
   packages/admin:
     dependencies:
-      '@facekids/contracts':
+      '@safepckids/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@facekids/ui':
+      '@safepckids/ui':
         specifier: workspace:*
         version: link:../ui
       lucide-react:
@@ -94,7 +94,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@facekids/contracts':
+      '@safepckids/contracts':
         specifier: workspace:*
         version: link:../contracts
       lucide-react:

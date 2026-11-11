@@ -18,8 +18,8 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $branch = (& git -C $root branch --show-current)
-if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'fix/facekids-ipc-security-hardening-20261024') {
-    throw 'Use exclusivamente a branch de seguranca fix/facekids-ipc-security-hardening-20261024.'
+if ($LASTEXITCODE -ne 0 -or $branch.Trim() -ne 'fix/safepckids-ipc-security-hardening-20261024') {
+    throw 'Use exclusivamente a branch de seguranca fix/safepckids-ipc-security-hardening-20261024.'
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $account = ($identity.Name -split '\\')[-1]
@@ -30,7 +30,7 @@ if ($account -ine 'Filhos' -or $principal.IsInRole([Security.Principal.WindowsBu
 if (-not $env:LOCALAPPDATA) {
     throw 'LOCALAPPDATA ausente: nao foi possivel separar os dados do laboratorio.'
 }
-$lab = Join-Path $env:LOCALAPPDATA 'FaceKids\laboratorio-adulto-filhos'
+$lab = Join-Path $env:LOCALAPPDATA 'SafePCKids\laboratorio-adulto-filhos'
 $db = Join-Path $lab 'adulto-teste.sqlite3'
 $python = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) {
@@ -66,13 +66,13 @@ try {
     $models = Join-Path $root 'models'
     if (-not (Test-Path -LiteralPath (Join-Path $models 'face_detection_yunet_2023mar.onnx')) -or
         -not (Test-Path -LiteralPath (Join-Path $models 'face_recognition_sface_2021dec.onnx'))) {
-        & $python -m facekids.cli download-models
+        & $python -m safepckids.cli download-models
         if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar modelos de reconhecimento.' }
     }
     Write-Host 'TESTE FACIAL REAL - APENAS ROSTO DO RESPONSAVEL, USADO COMO PERFIL FICTICIO' -ForegroundColor Cyan
     Write-Host 'Conta Windows: Filhos. Nenhuma senha, login, servico, tarefa ou quota familiar sera alterada.'
-    Write-Host 'O cadastro e guardado somente em LOCALAPPDATA\FaceKids\laboratorio-adulto-filhos.'
-    $argsPilot = @('-m','facekids.parent_face_pilot',
+    Write-Host 'O cadastro e guardado somente em LOCALAPPDATA\SafePCKids\laboratorio-adulto-filhos.'
+    $argsPilot = @('-m','safepckids.parent_face_pilot',
         '--database',$db,'--models',$models,
         '--camera-index',"$CameraIndex",'--verify-seconds',"$VerifySeconds")
     if ($ReEnroll) { $argsPilot += '--re-enroll' }
@@ -82,7 +82,7 @@ try {
     if ($WinL) {
         Write-Host 'Em seguida pressione Win+L manualmente, observe a camera por 40-60 segundos.' -ForegroundColor Yellow
         Write-Host 'Desbloqueie com seu PIN/senha habituais. Este diagnostico NAO desbloqueia o Windows.'
-        & $python -m facekids.locked_face_probe --database $db --models $models --camera-index $CameraIndex --duration $LockedSeconds
+        & $python -m safepckids.locked_face_probe --database $db --models $models --camera-index $CameraIndex --duration $LockedSeconds
         if ($LASTEXITCODE -ne 0) {
             Write-Warning 'Resultado Win+L inconclusivo. Leia o resumo; isto NAO reprova o login normal.'
             exit 4

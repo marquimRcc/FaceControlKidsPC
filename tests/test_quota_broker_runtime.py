@@ -5,15 +5,15 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_broker_protocol import VerifiedClient, handle_broker_read
-from facekids.quota_broker_runtime import ServiceOwnedQuotaRuntime
-from facekids.quota_broker_wts import WtsSnapshot
-from facekids.storage import Storage
+from safepckids.quota_broker_protocol import VerifiedClient, handle_broker_read
+from safepckids.quota_broker_runtime import ServiceOwnedQuotaRuntime
+from safepckids.quota_broker_wts import WtsSnapshot
+from safepckids.storage import Storage
 
 
 class RuntimeIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = TemporaryDirectory(prefix="synthetic-facekids-runtime-")
+        self.tmp = TemporaryDirectory(prefix="synthetic-safepckids-runtime-")
         self.store = Storage(Path(self.tmp.name) / "ledger.sqlite3")
         self.people = [self.store.add_person("Synthetic " + str(i), 2)
                        for i in range(1, 4)]
@@ -142,7 +142,7 @@ class RuntimeIntegrationTest(unittest.TestCase):
 
     def test_actual_face_authenticator_is_called_only_locally_without_metadata(self):
         from unittest.mock import patch
-        from facekids.auth_service import FaceAuthenticator
+        from safepckids.auth_service import FaceAuthenticator
 
         auth = FaceAuthenticator(Path(self.tmp.name), Path(self.tmp.name) / "ledger.sqlite3")
         fake_reply = (
@@ -172,8 +172,8 @@ class RuntimeIntegrationTest(unittest.TestCase):
     def test_child_ipc_cannot_send_debit_or_set_enrollment(self):
         self.runtime.on_service_session_change(8, (42,))
         for body in (
-            b'{"version":"FACEKIDS_QUOTA_V1","action":"CHARGE"}',
-            b'{"version":"FACEKIDS_QUOTA_V1","action":"SET_CHILD","child_id":2}',
+            b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"CHARGE"}',
+            b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"SET_CHILD","child_id":2}',
         ):
             response = handle_broker_read(
                 body, VerifiedClient(self.sid, self.sid, self.people[0]),

@@ -1,5 +1,5 @@
 {
-  "name": "@facekids/desktop",
+  "name": "@safepckids/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "start": "electron ."
   },
   "dependencies": {
-    "@facekids/admin": "workspace:*",
-    "@facekids/contracts": "workspace:*",
-    "@facekids/ui": "workspace:*",
+    "@safepckids/admin": "workspace:*",
+    "@safepckids/contracts": "workspace:*",
+    "@safepckids/ui": "workspace:*",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

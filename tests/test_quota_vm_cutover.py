@@ -9,18 +9,18 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from unittest.mock import patch
 
-from facekids.quota_vm_cutover import (
+from safepckids.quota_vm_cutover import (
     OWNER_KEY, SERVICE_ONLY, promote_vm_lab_writer, restore_vm_lab_offline
 )
-from facekids.quota_broker_writer_scm_win import LAB_MARKER_KEY, LAB_MARKER_VALUE
-from facekids.storage import Storage
-from facekids.quota_broker_migration import create_vm_snapshot
+from safepckids.quota_broker_writer_scm_win import LAB_MARKER_KEY, LAB_MARKER_VALUE
+from safepckids.storage import Storage
+from safepckids.quota_broker_migration import create_vm_snapshot
 
 
 class OfflineVmCutoverTests(unittest.TestCase):
     def setUp(self):
-        self.temp = TemporaryDirectory(prefix="facekids-offline-vm-cutover-")
-        self.root = Path(self.temp.name) / "facekids-quota-lab"
+        self.temp = TemporaryDirectory(prefix="safepckids-offline-vm-cutover-")
+        self.root = Path(self.temp.name) / "safepckids-quota-lab"
         self.root.mkdir()
         self.db = self.root / "writer-fixture.sqlite3"
         self.models = self.root / "models"
@@ -179,7 +179,7 @@ class OfflineVmCutoverTests(unittest.TestCase):
                 writer.commit()  # closing() alone rolls back uncommitted writes
             return snapshot
 
-        with patch("facekids.quota_vm_cutover.create_vm_snapshot", side_effect=race):
+        with patch("safepckids.quota_vm_cutover.create_vm_snapshot", side_effect=race):
             with self.assertRaisesRegex(RuntimeError, "content changed"):
                 self.promote()
         self.assertTrue(self.backup.exists())

@@ -1,7 +1,7 @@
 """Synthetic service-owned quota-clock policy tests (no Windows services)."""
 import unittest
 
-from facekids.quota_broker_clock import ServerObservedQuotaClock
+from safepckids.quota_broker_clock import ServerObservedQuotaClock
 
 
 class ServerObservedQuotaClockTests(unittest.TestCase):

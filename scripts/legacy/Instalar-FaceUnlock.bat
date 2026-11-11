@@ -1,5 +1,5 @@
 @echo off
-title FaceKids - Instalador de Desbloqueio Facial
+title SafePCKids - Instalador de Desbloqueio Facial
 cd /d "%~dp0"
 
 :: Verificar privilegios de administrador
@@ -11,6 +11,6 @@ if %errorLevel% neq 0 (
 )
 
 echo Privilegios de Administrador confirmados!
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Instalar-FaceKids-Nativo.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Instalar-SafePCKids-Nativo.ps1"
 echo.
 pause

@@ -6,16 +6,16 @@ $user = Get-LocalUser -Name 'Filhos'
 Add-Type -TypeDefinition @'
 using System.Runtime.InteropServices;
 using System.Text;
-public static class FaceKidsUserProfile {
+public static class SafePCKidsUserProfile {
     [DllImport("userenv.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     public static extern int CreateProfile(string sid, string name, StringBuilder path, uint size);
 }
 '@
 $profilePath = New-Object System.Text.StringBuilder 1024
-$status = [FaceKidsUserProfile]::CreateProfile($user.SID.Value, $user.Name, $profilePath, 1024)
+$status = [SafePCKidsUserProfile]::CreateProfile($user.SID.Value, $user.Name, $profilePath, 1024)
 if ($status -ne 0) { throw ('CreateProfile falhou: 0x{0:X8}' -f $status) }
 
-$hive = 'FaceKidsFirstLogon_' + [Guid]::NewGuid().ToString('N')
+$hive = 'SafePCKidsFirstLogon_' + [Guid]::NewGuid().ToString('N')
 $hiveFile = Join-Path $profilePath.ToString() 'NTUSER.DAT'
 & reg.exe load "HKU\$hive" $hiveFile
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel carregar as preferencias de Filhos.' }

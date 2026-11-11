@@ -2,7 +2,7 @@
 <#
   Piloto real de rosto do responsavel; sem alterar login ou instalar
   servicos. Executar com PowerShell NORMAL, sem elevar privilegios.
-  Base: C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC
+  Base: C:\Users\MarcosMiniPC\Documents\git\SafePCKids
 #>
 [CmdletBinding()]
 param(
@@ -67,14 +67,14 @@ try {
     $rec = Join-Path $modelDir 'face_recognition_sface_2021dec.onnx'
     if (-not ((Test-Path -LiteralPath $det) -and (Test-Path -LiteralPath $rec))) {
         Write-Host 'Baixando os modelos publicos YuNet e SFace para a pasta models...'
-        & $python -m facekids.cli download-models
+        & $python -m safepckids.cli download-models
         if ($LASTEXITCODE -ne 0) { throw 'Falha ao baixar modelos de reconhecimento.' }
     }
     Write-Host ''
     Write-Host 'CADASTRO REAL DO SEU ROSTO - AMBIENTE DE TESTE' -ForegroundColor Cyan
     Write-Host 'Sem foto em disco, sem envio de biometria, sem mudar login, sem bloquear Windows.'
-    Write-Host 'Os vetores faciais ficarao em LOCALAPPDATA\FaceKids\piloto-responsavel.'
-    $arguments = @('-m','facekids.parent_face_pilot','--camera-index',"$CameraIndex",
+    Write-Host 'Os vetores faciais ficarao em LOCALAPPDATA\SafePCKids\piloto-responsavel.'
+    $arguments = @('-m','safepckids.parent_face_pilot','--camera-index',"$CameraIndex",
                    '--verify-seconds',"$VerifySeconds")
     if ($ReEnroll) { $arguments += '--re-enroll' }
     & $python @arguments

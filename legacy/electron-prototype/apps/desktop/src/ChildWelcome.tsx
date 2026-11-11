@@ -1,5 +1,5 @@
-import type { SystemSnapshot } from "@facekids/contracts";
-import { StatusPill, TimeRing } from "@facekids/ui";
+import type { SystemSnapshot } from "@safepckids/contracts";
+import { StatusPill, TimeRing } from "@safepckids/ui";
 import { BellRing, Clock3, ScanFace, ShieldCheck, Sparkles, SunMedium } from "lucide-react";
 
 export function ChildWelcome({ snapshot }: { snapshot: SystemSnapshot }) {
@@ -9,9 +9,9 @@ export function ChildWelcome({ snapshot }: { snapshot: SystemSnapshot }) {
   if (snapshot.service !== "online") return <main className="welcome-shell">
     <div className="welcome-orb welcome-orb--one" /><div className="welcome-orb welcome-orb--two" />
     <section className="welcome-card welcome-card--waiting">
-      <header className="welcome-card__brand"><span><Sparkles /></span><strong>FaceKids</strong><StatusPill tone="warn">Iniciando</StatusPill></header>
+      <header className="welcome-card__brand"><span><Sparkles /></span><strong>SafePCKids</strong><StatusPill tone="warn">Iniciando</StatusPill></header>
       <div className="scan-face"><ShieldCheck /></div><span className="eyebrow">SERVIÇO TEMPORARIAMENTE INDISPONÍVEL</span>
-      <h1>Aguarde um instante</h1><p className="welcome-lead">O FaceKids está se conectando ao controle deste computador.</p>
+      <h1>Aguarde um instante</h1><p className="welcome-lead">O SafePCKids está se conectando ao controle deste computador.</p>
       <div className="welcome-note"><ShieldCheck /><span>O tempo não é exibido sem uma conexão segura.</span></div>
     </section>
     <div className="welcome-weather"><SunMedium /><span>{greeting}</span><b>•</b><span>{today}</span></div>
@@ -19,7 +19,7 @@ export function ChildWelcome({ snapshot }: { snapshot: SystemSnapshot }) {
   if (!child) return <main className="welcome-shell">
     <div className="welcome-orb welcome-orb--one" /><div className="welcome-orb welcome-orb--two" />
     <section className="welcome-card welcome-card--waiting">
-      <header className="welcome-card__brand"><span><Sparkles /></span><strong>FaceKids</strong><StatusPill tone="warn">Identificando</StatusPill></header>
+      <header className="welcome-card__brand"><span><Sparkles /></span><strong>SafePCKids</strong><StatusPill tone="warn">Identificando</StatusPill></header>
       <div className="scan-face"><ScanFace /></div><span className="eyebrow">AGUARDANDO RECONHECIMENTO</span>
       <h1>Olhe para a câmera</h1><p className="welcome-lead">Mantenha somente um rosto visível para consultar seu tempo.</p>
       <div className="welcome-note"><ShieldCheck /><span>Nenhuma imagem é enviada para a internet.</span></div>
@@ -31,7 +31,7 @@ export function ChildWelcome({ snapshot }: { snapshot: SystemSnapshot }) {
   return <main className="welcome-shell">
     <div className="welcome-orb welcome-orb--one" /><div className="welcome-orb welcome-orb--two" />
     <section className="welcome-card">
-      <header className="welcome-card__brand"><span><Sparkles /></span><strong>FaceKids</strong><StatusPill tone="ok">Proteção ativa</StatusPill></header>
+      <header className="welcome-card__brand"><span><Sparkles /></span><strong>SafePCKids</strong><StatusPill tone="ok">Proteção ativa</StatusPill></header>
       <div className={`welcome-avatar${child.avatarPhoto ? " welcome-avatar--photo" : ""}`}>{child.avatarPhoto ? <img src={child.avatarPhoto} alt={`Foto de ${child.name}`} /> : child.initials}<i /></div>
       <span className="eyebrow">ROSTO RECONHECIDO</span>
       <h1>Olá, {child.name}! <span>👋</span></h1>

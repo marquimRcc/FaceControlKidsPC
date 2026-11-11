@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from facekids import admin_dashboard
+from safepckids import admin_dashboard
 
 
 class FakeVariable:

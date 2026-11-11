@@ -1,6 +1,6 @@
 import unittest
-from facekids.session import SessionState, state_from_wts_flags
-from facekids.policy import SessionAwarePolicy, Action
+from safepckids.session import SessionState, state_from_wts_flags
+from safepckids.policy import SessionAwarePolicy, Action
 
 
 class SessionTest(unittest.TestCase):

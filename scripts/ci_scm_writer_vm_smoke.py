@@ -18,16 +18,16 @@ import subprocess
 import uuid
 import winreg
 
-from facekids.quota_broker_writer_scm_win import (
+from safepckids.quota_broker_writer_scm_win import (
     VM_WRITER_REGISTRY_PATH, VM_WRITER_SERVICE_NAME,
-    LAB_MARKER_KEY, LAB_MARKER_VALUE, FaceKidsQuotaWriterVmService,
+    LAB_MARKER_KEY, LAB_MARKER_VALUE, SafePCKidsQuotaWriterVmService,
     assert_protected_vm_ledger_acl,
 )
-from facekids.storage import Storage
-from facekids.quota_broker_bound_client_win import query_current_bound_vm_balance
-from facekids.quota_vm_recovery_gate_win import verify_offline_vm_recovery
-from facekids.filhos_bound_vm_agent import observe_vm_bound_once
-from facekids.quota_vm_cutover import (
+from safepckids.storage import Storage
+from safepckids.quota_broker_bound_client_win import query_current_bound_vm_balance
+from safepckids.quota_vm_recovery_gate_win import verify_offline_vm_recovery
+from safepckids.filhos_bound_vm_agent import observe_vm_bound_once
+from safepckids.quota_vm_cutover import (
     OWNER_KEY, SERVICE_ONLY, promote_vm_lab_writer, restore_vm_lab_offline,
 )
 from scripts.ci_scm_lab_smoke import (
@@ -62,7 +62,7 @@ def main() -> int:
     root_parent = Path(os.environ["RUNNER_TEMP"]) / ("fk-vm-writer-" + uuid.uuid4().hex)
     if root_parent.exists():
         raise RuntimeError("Refusing to reuse a VM writer fixture")
-    lab_root = root_parent / "facekids-quota-lab"
+    lab_root = root_parent / "safepckids-quota-lab"
     username = "FKWR" + uuid.uuid4().hex[:11]
     password = "A9!" + secrets.token_urlsafe(25)
     user_created = False
@@ -71,7 +71,7 @@ def main() -> int:
     impersonating = False
     token = None
     pth = None
-    parent_registry = r"SOFTWARE\FaceControlKidsPC"
+    parent_registry = r"SOFTWARE\SafePCKids"
     parent_registry_existed = _registry_exists(parent_registry)
     try:
         win32net.NetUserAdd(None, 1, {
@@ -170,16 +170,16 @@ def main() -> int:
         candidates = [Path(p) for p in site.getsitepackages() if Path(p).is_dir()]
         if not candidates:
             raise RuntimeError("SCM import path unavailable")
-        pth = candidates[0] / ("_facekids_writer_ci_" + uuid.uuid4().hex + ".pth")
+        pth = candidates[0] / ("_safepckids_writer_ci_" + uuid.uuid4().hex + ".pth")
         pth.write_text(str(Path(__file__).resolve().parents[1]) + "\n", encoding="utf-8")
 
         service_attempted = True
         win32serviceutil.InstallService(
-            "facekids.quota_broker_writer_scm_win.FaceKidsQuotaWriterVmService",
+            "safepckids.quota_broker_writer_scm_win.SafePCKidsQuotaWriterVmService",
             VM_WRITER_SERVICE_NAME,
-            FaceKidsQuotaWriterVmService._svc_display_name_,
+            SafePCKidsQuotaWriterVmService._svc_display_name_,
             startType=win32service.SERVICE_DEMAND_START,
-            description=FaceKidsQuotaWriterVmService._svc_description_,
+            description=SafePCKidsQuotaWriterVmService._svc_description_,
         )
         win32serviceutil.StartService(VM_WRITER_SERVICE_NAME)
         _await_state(VM_WRITER_SERVICE_NAME, win32service.SERVICE_RUNNING)

@@ -1,9 +1,9 @@
-# FaceControlKidsPC — PLANO DE EXECUÇÃO TÉCNICA PARA OUTRA IA
+# SafePCKids — PLANO DE EXECUÇÃO TÉCNICA PARA OUTRA IA
 
 **Data de referência:** 21/10/2026 (America/Sao_Paulo)  
 **Natureza:** handoff executável, backlog, arquitetura, testes e critérios de aceite.  
-**Repositório:** https://github.com/marquimRcc/FaceControlKidsPC  
-**Branch reservada para a implementação:** handoff/facekids-auto-unlock-stabilization-20261021  
+**Repositório:** https://github.com/marquimRcc/SafePCKids  
+**Branch reservada para a implementação:** handoff/safepckids-auto-unlock-stabilization-20261021  
 **Baseline de origem:** main em ef7eed1f324a9994528517ab4d3708ddc4248399  
 **Responsabilidades:** a IA executora implementa e testa; o ChatGPT revisor analisa entregas e resultados, sem assumir desenvolvimento.  
 **Estado deste documento:** diagnóstico estático e verificação de GitHub Actions. Nenhum teste de hardware, login/Winlogon ou instalação doméstica foi realizado pelo revisor nesta entrega.
@@ -80,12 +80,12 @@ Commits relevantes em main, do mais recente para o mais antigo:
 | dc208d317cbd | Serialização real CredPack/CP e tentativa de auto-logon |
 | 4025a006e8dd | DLL C++ de login + Named Pipe + instalador |
 
-**GitHub Actions do baseline:** https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39634262101
+**GitHub Actions do baseline:** https://github.com/marquimRcc/SafePCKids/actions/runs/39634262101
 
 - Windows: 142 testes Python executados, 1 erro. Teste test_authenticator_nonexistent_db inicializa Recognizer ANTES de verificar ausência do banco e falha por ONNX indisponível na CI.
 - Linux: os mesmos testes apresentam 2 erros: o problema do ONNX e tentativa de acessar ctypes.windll no teste de segurança Windows.
-- O workflow C++ “Credential Provider compile and host checks” ficou verde, porém COMPILA o código DIAGNÓSTICO native/credential_provider_poc e não prova build/funcionamento de native/credential_provider_facekids (código de login real).
-- Há binários compilados versionados em native/credential_provider_facekids, mas não considerar a existência deles como prova de build reprodutível.
+- O workflow C++ “Credential Provider compile and host checks” ficou verde, porém COMPILA o código DIAGNÓSTICO native/credential_provider_poc e não prova build/funcionamento de native/credential_provider_safepckids (código de login real).
+- Há binários compilados versionados em native/credential_provider_safepckids, mas não considerar a existência deles como prova de build reprodutível.
 - README e docs/ADR-003-WINDOWS-REAL-FACE-UNLOCK.md descrevem implementação anterior e podem contradizer os commits novos.
 - O usuário confirmou posteriormente que o desbloqueio facial automático e as funcionalidades estão funcionando no Windows doméstico. O revisor não possui registros independentes desse teste e não deve negar a evidência relatada. Evidências anteriores de webcam Win+L permanecem úteis para diagnósticos, mas não substituem o teste prático do usuário.
 
@@ -94,31 +94,31 @@ Commits relevantes em main, do mais recente para o mais antigo:
 ## 2. Mapa de arquivos e funcionalidades presentes
 
 ### Login Windows / webcam
-- native/credential_provider_facekids/FaceKidsProvider.cpp e .h: implementação COM ICredentialProvider e associação SID da conta Filhos.
-- native/credential_provider_facekids/FaceKidsCredential.cpp e .h: autenticação assíncrona, GetSerialization, seleção automática de tile.
-- native/credential_provider_facekids/FaceKidsPipeClient.h: cliente local do Named Pipe; lê resposta e decide ALLOW.
-- native/credential_provider_facekids/FaceKidsSerialization.h: CredPackAuthenticationBufferW, pacote Negotiate, .\\Filhos.
-- native/credential_provider_facekids/dllmain.cpp: registro do COM/CLSID {FAC0D042-3DD0-4A8C-9F18-440C44330C20}.
-- native/credential_provider_facekids/build.ps1: build MinGW/w64devkit atualmente amarrado a caminho local.
-- native/credential_provider_facekids/TestProviderHost.cpp e TestPipeClient.cpp: hosts/testes superficiais disponíveis.
-- facekids/auth_service.py: webcam YuNet/SFace, verifica saldo/horário, responde AUTH_QUERY/ALLOW no pipe \\.\pipe\FaceKidsAuthPipe.
-- facekids/recognition.py: carregamento dos ONNX, detecção/alinhamento/extração e comparação 1:N.
-- facekids/children_pilot.py: cadastro e SQLite compartilhado/diretório por usuário, além do piloto legado.
-- facekids/locked_face_probe.py, windows_lock_probe.py, hardware_camera_probe.py, webcam_observer.py: diagnósticos a reaproveitar.
+- native/credential_provider_safepckids/SafePCKidsProvider.cpp e .h: implementação COM ICredentialProvider e associação SID da conta Filhos.
+- native/credential_provider_safepckids/SafePCKidsCredential.cpp e .h: autenticação assíncrona, GetSerialization, seleção automática de tile.
+- native/credential_provider_safepckids/SafePCKidsPipeClient.h: cliente local do Named Pipe; lê resposta e decide ALLOW.
+- native/credential_provider_safepckids/SafePCKidsSerialization.h: CredPackAuthenticationBufferW, pacote Negotiate, .\\Filhos.
+- native/credential_provider_safepckids/dllmain.cpp: registro do COM/CLSID {FAC0D042-3DD0-4A8C-9F18-440C44330C20}.
+- native/credential_provider_safepckids/build.ps1: build MinGW/w64devkit atualmente amarrado a caminho local.
+- native/credential_provider_safepckids/TestProviderHost.cpp e TestPipeClient.cpp: hosts/testes superficiais disponíveis.
+- safepckids/auth_service.py: webcam YuNet/SFace, verifica saldo/horário, responde AUTH_QUERY/ALLOW no pipe \\.\pipe\SafePCKidsAuthPipe.
+- safepckids/recognition.py: carregamento dos ONNX, detecção/alinhamento/extração e comparação 1:N.
+- safepckids/children_pilot.py: cadastro e SQLite compartilhado/diretório por usuário, além do piloto legado.
+- safepckids/locked_face_probe.py, windows_lock_probe.py, hardware_camera_probe.py, webcam_observer.py: diagnósticos a reaproveitar.
 
 ### Sessão / quotas / UI
-- facekids/filhos_agent.py: agente na sessão Filhos, relógio monotônico, avisos, auto LockWorkStation, last_unlock.json.
-- facekids/storage.py: people, embeddings, daily_usage, daily_bonus, settings, PIN, histórico e curfew.
-- facekids/welcome_screen.py: foto/nome/tempo e launch do Brave/YouTube Kids.
-- facekids/avatar_utils.py: foto, avatar PNG, extração opcional de embedding a partir de arquivo.
-- facekids/admin_dashboard.py: painel principal.
-- facekids/admin_auth.py: PBKDF2 do PIN.
-- facekids/session.py e locker.py: API WTS/estado de sessão e LockWorkStation.
+- safepckids/filhos_agent.py: agente na sessão Filhos, relógio monotônico, avisos, auto LockWorkStation, last_unlock.json.
+- safepckids/storage.py: people, embeddings, daily_usage, daily_bonus, settings, PIN, histórico e curfew.
+- safepckids/welcome_screen.py: foto/nome/tempo e launch do Brave/YouTube Kids.
+- safepckids/avatar_utils.py: foto, avatar PNG, extração opcional de embedding a partir de arquivo.
+- safepckids/admin_dashboard.py: painel principal.
+- safepckids/admin_auth.py: PBKDF2 do PIN.
+- safepckids/session.py e locker.py: API WTS/estado de sessão e LockWorkStation.
 
 ### Instalação e QA
-- scripts/Instalar-FaceKids-Nativo.ps1, scripts/Desinstalar-FaceKids-Nativo.ps1.
-- Instalar-FaceUnlock.bat, Desinstalar-FaceUnlock.bat, abrir-facekids.bat e cadastrar-filho-*.bat.
-- FaceKids-Teste-Webcam-WinL.bat: instalador de teste legado referenciando feature/windows-native-unlock-poc, NÃO confundir com instalação atual.
+- scripts/Instalar-SafePCKids-Nativo.ps1, scripts/Desinstalar-SafePCKids-Nativo.ps1.
+- Instalar-FaceUnlock.bat, Desinstalar-FaceUnlock.bat, abrir-safepckids.bat e cadastrar-filho-*.bat.
+- SafePCKids-Teste-Webcam-WinL.bat: instalador de teste legado referenciando feature/windows-native-unlock-poc, NÃO confundir com instalação atual.
 - .github/workflows/tests.yml, credential-provider-build.yml, windows-broker-build.yml, windows-broker-scm-vm.yml e demais.
 - native/windows_broker_poc: experiências importantes P0-1..P0-42 com SID/WTS/ACL/SCM/IPC.
 - docs/PROGRESSO-AUTONOMO.md e docs/POC-*.md: histórico antigo; confrontar com o que é utilizado hoje.
@@ -160,7 +160,7 @@ Separar explicitamente estes estados:
 1. Windows ligado na tela de login antes do PRIMEIRO logon da conta Filhos.
 2. Sessão Filhos já iniciada, depois bloqueada com Win+L (primeira meta obrigatória).
 3. Volta de suspensão/hibernação/monitor desligado com sessão Filhos bloqueada.
-4. Conta administrativa ativa ou bloqueada — FaceKids NUNCA deve tentar autenticar no lugar dela.
+4. Conta administrativa ativa ou bloqueada — SafePCKids NUNCA deve tentar autenticar no lugar dela.
 5. Troca rápida de usuário para Filhos, com ou sem sessão preexistente.
 
 Não presumir nem negar a capacidade do processo existente sem inspecionar e reproduzir o comportamento da instalação que já funciona. Serviço Windows executa na Sessão 0 e NÃO pode mostrar interface no desktop do usuário; webcam DirectShow/MSMF em Sessão 0 deve ser validada empiricamente. Se um worker em Sessão 0 não acessa o hardware sob Win+L, definir arquitetura alternativa e comprovar antes da instalação real. Um agente em Filhos já conectado pode resolver unlock, mas não necessariamente logon a frio. **Jamais esconder esse gap.**
@@ -168,7 +168,7 @@ Não presumir nem negar a capacidade do processo existente sem inspecionar e rep
 ## 4. Problemas encontrados: evidências concretas e solução esperada
 
 ### A. Critérios do pipe e credencial (alta prioridade)
-- auth_service.py usa SDDL_PERMISSIVE com (A;;GA;;;IU): usuários interativos têm acesso amplo. FaceKidsPipeClient.h considera sucesso se a resposta contiver a substring "ALLOW". Um servidor ou conteúdo inadequado pode simular a decisão.
+- auth_service.py usa SDDL_PERMISSIVE com (A;;GA;;;IU): usuários interativos têm acesso amplo. SafePCKidsPipeClient.h considera sucesso se a resposta contiver a substring "ALLOW". Um servidor ou conteúdo inadequado pode simular a decisão.
 - ALTERAR para contrato explícito versão/operação/status/child_id/session_id/nonce/timestamp; limitar tamanho; rejeitar JSON inválido/status desconhecido/múltiplos campos; o processo cliente não decide por substring.
 - Validar token/SID da contraparte, lado servidor e, quando aplicável, lado cliente. Usar ACL mínima para o cenário local real. Aproveitar princípios do Broker C++ protegido antigo; NÃO conectar cegamente o pipe experimental antigo como se já fornecesse biometria.
 - Colocar timeout FINITO em conexão, leitura, processamento e cancelamento. Detectar travamento do worker/câmera e manter login convencional disponível.
@@ -177,8 +177,8 @@ Não presumir nem negar a capacidade do processo existente sem inspecionar e rep
 - Avaliar o contrato GetCredentialCount/pbAutoLogonWithDefault e NotifyAuthSuccess/CredentialsChanged em host de testes e no LogonUI verdadeiro.
 
 ### B. Ciclo de vida do worker
-- Instalar-FaceKids-Nativo.ps1 atualmente adiciona script VBS no Startup do ADMINISTRADOR, em vez de serviço independente. Após logout/reboot sem login admin, o processo poderá não estar ativo. Isso contradiz o requisito sentar-e-desbloquear.
-- Mesmo script usa taskkill /f /im pythonw.exe: pode matar Python alheio ao produto. SUBSTITUIR por controle específico via PID/serviço/tarefa identificados do FaceKids.
+- Instalar-SafePCKids-Nativo.ps1 atualmente adiciona script VBS no Startup do ADMINISTRADOR, em vez de serviço independente. Após logout/reboot sem login admin, o processo poderá não estar ativo. Isso contradiz o requisito sentar-e-desbloquear.
+- Mesmo script usa taskkill /f /im pythonw.exe: pode matar Python alheio ao produto. SUBSTITUIR por controle específico via PID/serviço/tarefa identificados do SafePCKids.
 - Criar identidade estável do componente de autenticação iniciado no boot (SCM ou tarefa apropriada), com restart supervisionado e logging local rotativo. Confirmar câmera disponível sob contexto escolhido.
 - Usar um único proprietário da câmera por vez; fechamento/liberação em finally; política para disputa com webcam em uso; fila, exclusão mútua, timeout e retentativas sem CPU 100%.
 
@@ -190,7 +190,7 @@ Não presumir nem negar a capacidade do processo existente sem inspecionar e rep
 - O serviço de login/autorização não pode depender da vida do agente. Falha de agente não deve afetar administrador nem impedir login tradicional.
 
 ### D. Identidade incorreta após login por PIN
-- filhos_agent.py lê C:\ProgramData\FaceKids\last_unlock.json. Na ausência desse evento usa o primeiro filho cadastrado. welcome_screen.py usa fallback no ID 2 e saldo 7200; isto gera foto, saldo e descontos de OUTRA criança.
+- filhos_agent.py lê C:\ProgramData\SafePCKids\last_unlock.json. Na ausência desse evento usa o primeiro filho cadastrado. welcome_screen.py usa fallback no ID 2 e saldo 7200; isto gera foto, saldo e descontos de OUTRA criança.
 - **PROIBIDO qualquer fallback arbitrário de child_id/nome/120 minutos.**
 - Requisito: após login convencional, exibir estado "criança ainda não identificada", capturar/confirmar rosto no desktop se possível, ou orientar identificação. Enquanto não houver identificação confiável, não atribuir consumo a alguém aleatório.
 - Não bloquear usuário por ter usado PIN nesta fase; o proprietário aceitou essa possibilidade.
@@ -218,17 +218,17 @@ Não presumir nem negar a capacidade do processo existente sem inspecionar e rep
 - Não colocar nomes/fotos de crianças em prints, logs de CI ou artifacts.
 
 ### G. Instalação / desinstalação
-- Instalar-FaceUnlock.bat e outros comandos têm caminho rígido C:\Users\MarcosMiniPC\Documents\git\FaceControlKidsPC; localizar raiz por caminho do próprio script e aceitar clone em local diferente.
+- Instalar-FaceUnlock.bat e outros comandos têm caminho rígido C:\Users\MarcosMiniPC\Documents\git\SafePCKids; localizar raiz por caminho do próprio script e aceitar clone em local diferente.
 - Compilador MinGW referenciado por caminho pessoal; detectar ferramenta disponível ou fornecer dependência explícita com erro informativo; CI compila a mesma fonte.
 - Instalar apenas componente pretendido, pedir elevação UAC de modo explícito, checar arquitetura x64, existência da conta local Filhos/SID e o método de recuperação/admin antes de registro.
 - Não instalar / registrar DLL automaticamente numa mera execução de testes ou import de módulo.
-- Remoção atual não exclui necessariamente o Startup por usuário, tarefa agendada FaceKidsFilhosAgent e arquivos associados; tem ErrorActionPreference SilentlyContinue e imprime “estado original restaurado” sem provar. Corrigir com rastreamento real de recursos criados e validação pós-uninstall.
+- Remoção atual não exclui necessariamente o Startup por usuário, tarefa agendada SafePCKidsFilhosAgent e arquivos associados; tem ErrorActionPreference SilentlyContinue e imprime “estado original restaurado” sem provar. Corrigir com rastreamento real de recursos criados e validação pós-uninstall.
 - Não fazer registro silencioso em máquina do usuário até haver backup/rollback e teste isolado documentados. Criar opção de dry-run / preflight; opção real somente consciente do risco da integração LogonUI.
 - Preservar providers nativos de senha/PIN e acesso administrativo. Nunca filtrar globalmente ou esconder a conta/admin.
 - Testar uninstall idempotente, reinício depois da remoção e ausência de recursos órfãos. Não deletar fotos/quotas no uninstall sem escolha explícita do responsável.
 
 ### H. Código obsoleto, testes verdes e documentação
-- README, ADR-003, PROGRESSO-AUTONOMO e várias POC afirmam que CP real ainda não serializa; estão desatualizados frente a native/credential_provider_facekids.
+- README, ADR-003, PROGRESSO-AUTONOMO e várias POC afirmam que CP real ainda não serializa; estão desatualizados frente a native/credential_provider_safepckids.
 - Há dois caminhos de CP/Broker: o antigo “somente diagnóstico” e o novo “faz logon”. Definir de forma explícita qual é o produto atual e o que permanece legado experimental; não apagar código antigo sem antes aproveitar guardrails seguros.
 - O teste tests/test_windows_login_guardrails.py só inspeciona native/credential_provider_poc/provider.cpp; ampliar para cobrir a DLL real e separar premissas do código diagnóstico. Não remover guardrails antigos apenas para conseguir CI verde.
 - A pipeline principal roda Linux e Windows; não adicionar teste que suponha hardware/ctypes.windll em Linux sem skip/mock. Testar estado sem banco ANTES de inicializar modelos ONNX.
@@ -273,12 +273,12 @@ Cada etapa deve resultar em código, testes automatizados, commit e um registro 
 
 ### P0-43 — Baseline, CI e contrato de testes (BLOQUEADOR)
 **Implementar:** testes importáveis em Windows e Linux; refatorar FaceAuthenticator.evaluate para verificar falta de banco e pré-condições antes de carregar ONNX; diferir/lazy-load do Recognizer ou injeção fake. create_security_attributes deve ser testado só em Windows ou com mock explícito; isolar imports de plataforma. Não mascarar erros reais com skip geral. Adicionar smoke de contratos que exercitam nome da conta e caminhos mínimos sem webcam.  
-**Arquivos:** facekids/auth_service.py, tests/test_auth_service.py, .github/workflows/tests.yml e, se necessário, recognition.py.  
+**Arquivos:** safepckids/auth_service.py, tests/test_auth_service.py, .github/workflows/tests.yml e, se necessário, recognition.py.  
 **Aceite:** GitHub Actions Unit tests VERDE Windows + Ubuntu; toda a suíte antiga continua rodando; logs mostram contagem e zero errors/failures. Guardar links e SHA dos runs.  
 **Não fazer:** criar arquivo ONNX real apenas para passar um teste que deveria ser unitário; reduzir cobertura para esconder erro.
 
 ### P0-44 — Build reprodutível do Credential Provider REAL
-**Implementar:** job Windows que compile native/credential_provider_facekids/FaceKidsProvider.cpp, FaceKidsCredential.cpp, dllmain.cpp, etc. Garantir x64, dependências e exports corretos; rodar TestProviderHost.exe e TestPipeClient.exe com casos de NEGATIVA e timeouts em processo isolado. Não registrar DLL no runner/PC sem intenção. Gerar binário apenas como artifact de CI se desejado.  
+**Implementar:** job Windows que compile native/credential_provider_safepckids/SafePCKidsProvider.cpp, SafePCKidsCredential.cpp, dllmain.cpp, etc. Garantir x64, dependências e exports corretos; rodar TestProviderHost.exe e TestPipeClient.exe com casos de NEGATIVA e timeouts em processo isolado. Não registrar DLL no runner/PC sem intenção. Gerar binário apenas como artifact de CI se desejado.  
 **Aceite:** teste que falha se real source não compila; versão reportada por commit; diagnóstico separado continua verde; não confundir verde do antigo com novo.
 
 ### P0-45 — Prova de ciclo de vida do serviço facial sem admin logado
@@ -317,7 +317,7 @@ Cada etapa deve resultar em código, testes automatizados, commit e um registro 
 **Aceite:** pais podem fazer ajustes sem entrar na conta Filhos; todos os componentes refletem alteração consistente.
 
 ### P0-52 — Instalação, atualização e rollback idempotentes
-**Implementar:** scripts relativos à pasta repo, preflight de conta Filhos/SID e arquitetura; registrar apenas a DLL real após validação consciente; instalar worker e agente; verificar instalação por status; rollback se falha; desinstalar SOMENTE FaceKids e deixar login Windows e outros pythonw intactos. Registrar manifesto dos recursos criados (serviço/tarefa/startup/registry/arquivo) para remoção.  
+**Implementar:** scripts relativos à pasta repo, preflight de conta Filhos/SID e arquitetura; registrar apenas a DLL real após validação consciente; instalar worker e agente; verificar instalação por status; rollback se falha; desinstalar SOMENTE SafePCKids e deixar login Windows e outros pythonw intactos. Registrar manifesto dos recursos criados (serviço/tarefa/startup/registry/arquivo) para remoção.  
 **Testes:** dry-run, instalação em diretório com espaços, instalação repetida, falha no meio, remove/reinstala, sem credenciais admin comprometidas, sem tarefa órfã, sem deixar pasta de fotos apagada sem consentimento.  
 **Aceite:** instalador não mata processos alheios; uninstall confirma itens realmente removidos e não afirma restauração completa sem verificar; login manual continua funcionando.
 
@@ -349,7 +349,7 @@ Não implementar apenas “uma tela bonita” sem desbloqueio nem adicionar nova
 
 | ID | Cenário | Resultado esperado | Evidência mínima |
 |---|---|---|---|
-| RF-01 | Admin bloqueado | FaceKids não tenta logar/desbloquear conta admin | teste SID/logon |
+| RF-01 | Admin bloqueado | SafePCKids não tenta logar/desbloquear conta admin | teste SID/logon |
 | RF-02 | Filhos em Win+L, filho A com saldo | Desbloqueia sozinho com webcam sem clique | teste Windows real |
 | RF-03 | Filhos em Win+L, filho B com saldo | Mesmo resultado e ID B correto | teste Windows real |
 | RF-04 | Filhos em Win+L, filho C com saldo | Mesmo resultado e ID C correto | teste Windows real |
@@ -368,7 +368,7 @@ Não implementar apenas “uma tela bonita” sem desbloqueio nem adicionar nova
 | RF-17 | Quota chega a zero | Bloquear Filhos, não admin | teste real acompanhado |
 | RF-18 | Admin faz logout | Worker de reconhecimento permanece operacional | teste real |
 | RF-19 | Reboot até tela de logon | Registrar se opera a frio sem login prévio | evidência real; se não, gap declarado |
-| RF-20 | Desinstalação | CP do FaceKids removido, login normal permanece | teste recuperação |
+| RF-20 | Desinstalação | CP do SafePCKids removido, login normal permanece | teste recuperação |
 | RF-21 | Dados biométricos | Somente armazenamento local, remoção individual | inspeção/teste |
 | RF-22 | Programas infantis | Brave/YouTube Kids apenas em Filhos, opcional | teste conta |
 | RF-23 | Duas faces simultâneas | Sem identificação silenciosa indevida (exigir política explícita) | teste câmera |
@@ -430,7 +430,7 @@ O hardware fica sob controle do proprietário. Testes que mexem em LogonUI e reg
 
 ## 11. Instruções de qualidade, logs e observabilidade
 
-- Adicionar logs locais rotativos em C:\ProgramData\FaceKids\logs ou pasta equivalente. Incluir data/hora, processo, PID, Windows session_id, estado WTS, childId pseudônimo, etapa e duração; não incluir imagem nem senha.
+- Adicionar logs locais rotativos em C:\ProgramData\SafePCKids\logs ou pasta equivalente. Incluir data/hora, processo, PID, Windows session_id, estado WTS, childId pseudônimo, etapa e duração; não incluir imagem nem senha.
 - Usar correlation/request ID da câmera até CP/agent para depurar sem adivinhar qual criança desbloqueou.
 - Para erro no desbloqueio registrar “camera indisponível”, “sem face”, “desconhecido”, “quota zero”, “curfew”, “IPC indisponível”, “credencial rejeitada” distintamente.
 - Evitar log repetitivo contínuo em polling, implementar backoff e limitação de log.
@@ -444,8 +444,8 @@ Procedimento obrigatório para IA executora, no início e a cada rodada:
 
 ~~~powershell
 git fetch origin
-git switch handoff/facekids-auto-unlock-stabilization-20261021
-git pull --ff-only origin handoff/facekids-auto-unlock-stabilization-20261021
+git switch handoff/safepckids-auto-unlock-stabilization-20261021
+git pull --ff-only origin handoff/safepckids-auto-unlock-stabilization-20261021
 git status --short
 git log -5 --oneline
 ~~~
@@ -461,7 +461,7 @@ git log -5 --oneline
 ## 13. Modelo obrigatório de relatório da IA executora
 
 ~~~text
-FaceKids — Execução [data/hora BR]
+SafePCKids — Execução [data/hora BR]
 Branch e HEAD:
 P0(s) concluídas:
 Resumo das alterações (arquivos/funções):
@@ -511,10 +511,10 @@ Se qualquer item físico não foi executado, informar “implementado mas não v
 ## 16. Fonte de referência para auditoria futura
 
 **GitHub / baseline**
-- Repositório: https://github.com/marquimRcc/FaceControlKidsPC
-- HEAD analisado: https://github.com/marquimRcc/FaceControlKidsPC/commit/ef7eed1f324a9994528517ab4d3708ddc4248399
-- CI Python falhando (baseline): https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39634262101
-- CI CP diagnóstica verde (não cobre CP real): https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39630304875
+- Repositório: https://github.com/marquimRcc/SafePCKids
+- HEAD analisado: https://github.com/marquimRcc/SafePCKids/commit/ef7eed1f324a9994528517ab4d3708ddc4248399
+- CI Python falhando (baseline): https://github.com/marquimRcc/SafePCKids/actions/runs/39634262101
+- CI CP diagnóstica verde (não cobre CP real): https://github.com/marquimRcc/SafePCKids/actions/runs/39630304875
 - docs/ADR-003-WINDOWS-REAL-FACE-UNLOCK.md (arquitetura anterior a reconciliar).
 - docs/PROGRESSO-AUTONOMO.md (histórico dos protótipos antigos).
 
@@ -530,26 +530,26 @@ Se qualquer item físico não foi executado, informar “implementado mas não v
 
 # PROMPT PRONTO PARA A OUTRA IA (copiar e usar)
 
-Você é a IA executora principal do projeto FaceControlKidsPC. **ATENÇÃO: o usuário confirmou o sistema atual funcionando no PC real; não redesenhe nem substitua a arquitetura existente. Corrija apenas problemas concretos, mantenha a mesma experiência e trate toda etapa como proteção contra regressão, não como reconstrução.** Leia integralmente o arquivo docs/HANDOFF-EXECUCAO-AUTO-UNLOCK-OUTRA-IA-20261021.md na branch handoff/facekids-auto-unlock-stabilization-20261021 do repositório https://github.com/marquimRcc/FaceControlKidsPC. Implemente o plano P0-43 a P0-55 nessa mesma branch, em lotes de várias tarefas, criando testes, commits e verificando GitHub Actions antes de declarar cada etapa concluída. Avance sem pedir autorização a cada passo. NÃO faça merge na main. A prioridade é a criança sentar diante da webcam, ser reconhecida e DESBLOQUEAR AUTOMATICAMENTE a conta Windows Filhos sem clicar/digitar, com quotas individuais e painel parental. A conta administradora deve permanecer intacta. A senha local da conta Filhos é deliberadamente fixa como "1" neste PC doméstico; não gastar esta rodada tentando trocá-la ou redesenhar sua gestão. O login convencional permanece disponível por escolha do proprietário. Firewall/Internet/conteúdo ficam fora do escopo. Não minta sobre testes físicos; se a câmera/LogonUI real exigir participação do proprietário, forneça o teste preciso e continue o restante do desenvolvimento. Corrija regressões da CI, inclua build da DLL de login REAL, consolide o processo de autenticação e não use fallback de ID de criança. O revisor apenas acompanhará e analisará seus commits e provas. Trabalhe até onde as ferramentas permitirem no mesmo ciclo, priorizando entregas reais com documentação de resultado.
+Você é a IA executora principal do projeto SafePCKids. **ATENÇÃO: o usuário confirmou o sistema atual funcionando no PC real; não redesenhe nem substitua a arquitetura existente. Corrija apenas problemas concretos, mantenha a mesma experiência e trate toda etapa como proteção contra regressão, não como reconstrução.** Leia integralmente o arquivo docs/HANDOFF-EXECUCAO-AUTO-UNLOCK-OUTRA-IA-20261021.md na branch handoff/safepckids-auto-unlock-stabilization-20261021 do repositório https://github.com/marquimRcc/SafePCKids. Implemente o plano P0-43 a P0-55 nessa mesma branch, em lotes de várias tarefas, criando testes, commits e verificando GitHub Actions antes de declarar cada etapa concluída. Avance sem pedir autorização a cada passo. NÃO faça merge na main. A prioridade é a criança sentar diante da webcam, ser reconhecida e DESBLOQUEAR AUTOMATICAMENTE a conta Windows Filhos sem clicar/digitar, com quotas individuais e painel parental. A conta administradora deve permanecer intacta. A senha local da conta Filhos é deliberadamente fixa como "1" neste PC doméstico; não gastar esta rodada tentando trocá-la ou redesenhar sua gestão. O login convencional permanece disponível por escolha do proprietário. Firewall/Internet/conteúdo ficam fora do escopo. Não minta sobre testes físicos; se a câmera/LogonUI real exigir participação do proprietário, forneça o teste preciso e continue o restante do desenvolvimento. Corrija regressões da CI, inclua build da DLL de login REAL, consolide o processo de autenticação e não use fallback de ID de criança. O revisor apenas acompanhará e analisará seus commits e provas. Trabalhe até onde as ferramentas permitirem no mesmo ciclo, priorizando entregas reais com documentação de resultado.
 
 
 ---
 
 ## 17. Registro de Execução e Evidências — IA Executora (21/10/2026)
 
-FaceKids — Execução [21/10/2026 14:20 BRT]
-Branch e HEAD: handoff/facekids-auto-unlock-stabilization-20261021
+SafePCKids — Execução [21/10/2026 14:20 BRT]
+Branch e HEAD: handoff/safepckids-auto-unlock-stabilization-20261021
 P0(s) concluídas: P0-43, P0-44, P0-45, P0-46, P0-47, P0-48, P0-49, P0-50, P0-51, P0-52, P0-53, P0-54, P0-55
 
 Resumo das alterações (arquivos/funções):
-1. facekids/auth_service.py: inicialização de logs e SECURITY_ATTRIBUTES compatível multiplataforma; carregamento diferido (lazy loading) e injeção do Recognizer no FaceAuthenticator; verificação prévia de existência de banco e embeddings antes de acessar webcam ou modelos ONNX.
+1. safepckids/auth_service.py: inicialização de logs e SECURITY_ATTRIBUTES compatível multiplataforma; carregamento diferido (lazy loading) e injeção do Recognizer no FaceAuthenticator; verificação prévia de existência de banco e embeddings antes de acessar webcam ou modelos ONNX.
 2. .github/workflows/tests.yml e scripts/Iniciar-Piloto-Filhos.ps1: remoção de caractere não ASCII que quebrava o parser do PowerShell; execução sem erros em Windows e Ubuntu.
-3. .github/workflows/credential-provider-build.yml: criação do job build-real-credential-provider que compila FaceKidsCredentialProvider.dll, TestProviderHost.exe e TestPipeClient.exe com MinGW/g++ em Windows runner e testa a instanciação COM e timeouts do pipe sem registrar DLL indevidamente.
-4. native/credential_provider_facekids/build.ps1: detecção dinâmica de compilador g++ (PATH, w64devkit, msys64 mingw64/ucrt64, ProgramData); remoção de warnings de compilação.
-5. native/credential_provider_facekids/FaceKidsPipeClient.h e TestPipeClient.cpp: eliminação de substring matching inseguro ("ALLOW"); criação do método ParseResponse e ExtractJsonString para validação exata do campo status == "ALLOW", mapeamento de DENY_QUOTA, DENY_CURFEW, DENY_UNKNOWN, DENY_NO_ENROLLMENT, ERROR_CAMERA; suíte de testes unitários de parsing embarcada em TestPipeClient.exe com 100% de aprovação.
-6. native/credential_provider_facekids/FaceKidsProvider.cpp e FaceKidsCredential.cpp: garantia de que pbAutoLogonWithDefault só é verdadeiro se m_eligible for verdadeiro; reset de estado de autenticação em ReportResult caso o Windows reporte erro de logon.
-7. facekids/welcome_screen.py e filhos_agent.py: eliminação de fallback arbitrário para Crianca 2 / 7200s e primeiro filho; estado UNIDENTIFIED quando a entrada for manual por PIN ou sem evento facial recente válido; rejeição de last_unlock.json obsoleto (> 10min ou de outro dia); proteção no disparo de programas adicionais usando shell=False.
-8. scripts/Instalar-FaceKids-Nativo.ps1: substituição do taskkill /f /im pythonw.exe por filtragem estrita via CIM pelo CommandLine (*auth_service*), preservando outros processos Python da máquina; integração direta com build.ps1.
+3. .github/workflows/credential-provider-build.yml: criação do job build-real-credential-provider que compila SafePCKidsCredentialProvider.dll, TestProviderHost.exe e TestPipeClient.exe com MinGW/g++ em Windows runner e testa a instanciação COM e timeouts do pipe sem registrar DLL indevidamente.
+4. native/credential_provider_safepckids/build.ps1: detecção dinâmica de compilador g++ (PATH, w64devkit, msys64 mingw64/ucrt64, ProgramData); remoção de warnings de compilação.
+5. native/credential_provider_safepckids/SafePCKidsPipeClient.h e TestPipeClient.cpp: eliminação de substring matching inseguro ("ALLOW"); criação do método ParseResponse e ExtractJsonString para validação exata do campo status == "ALLOW", mapeamento de DENY_QUOTA, DENY_CURFEW, DENY_UNKNOWN, DENY_NO_ENROLLMENT, ERROR_CAMERA; suíte de testes unitários de parsing embarcada em TestPipeClient.exe com 100% de aprovação.
+6. native/credential_provider_safepckids/SafePCKidsProvider.cpp e SafePCKidsCredential.cpp: garantia de que pbAutoLogonWithDefault só é verdadeiro se m_eligible for verdadeiro; reset de estado de autenticação em ReportResult caso o Windows reporte erro de logon.
+7. safepckids/welcome_screen.py e filhos_agent.py: eliminação de fallback arbitrário para Crianca 2 / 7200s e primeiro filho; estado UNIDENTIFIED quando a entrada for manual por PIN ou sem evento facial recente válido; rejeição de last_unlock.json obsoleto (> 10min ou de outro dia); proteção no disparo de programas adicionais usando shell=False.
+8. scripts/Instalar-SafePCKids-Nativo.ps1: substituição do taskkill /f /im pythonw.exe por filtragem estrita via CIM pelo CommandLine (*auth_service*), preservando outros processos Python da máquina; integração direta com build.ps1.
 9. Instalar-FaceUnlock.bat, Desinstalar-FaceUnlock.bat, cadastrar-filho-*.bat: migração de caminhos rígidos absolutos para caminhos relativos ao script (%~dp0).
 10. README.md e docs/ADR-003: reconciliação da documentação com o sistema real testado pelo proprietário.
 11. tests/: adição e expansão de testes cobrindo guardrails, contratos de autenticação, expiração de unlock, isolamento de conta admin e ausência de fallback para criança 2 (total de 150 testes unitários).
@@ -562,8 +562,8 @@ Comandos/testes locais executados e resultados:
 - build.ps1: compilação limpa sem warnings de macros.
 
 Links GitHub Actions e estado final (success/failure):
-- Unit tests (Ubuntu + Windows): https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39640829909 (SUCCESS)
-- Credential Provider compile and host checks: https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39640829913 (SUCCESS)
+- Unit tests (Ubuntu + Windows): https://github.com/marquimRcc/SafePCKids/actions/runs/39640829909 (SUCCESS)
+- Credential Provider compile and host checks: https://github.com/marquimRcc/SafePCKids/actions/runs/39640829913 (SUCCESS)
 
 Matriz de hardware: comprovado / não testado / falhou:
 - Webcam USB XWF-1080P: COMPROVADO pelo usuário no hardware real da máquina.
@@ -583,13 +583,13 @@ Próxima atividade a executar: Apresentar pacote de entrega e relatório consoli
 
 ## 18. Segunda Rodada de Execução e Correção Técnica dos 5 Problemas Apontados pelo Revisor (21/10/2026)
 
-FaceKids — Execução e Hardening [21/10/2026 15:35 BRT]  
-Branch e HEAD: `handoff/facekids-auto-unlock-stabilization-20261021`  
+SafePCKids — Execução e Hardening [21/10/2026 15:35 BRT]  
+Branch e HEAD: `handoff/safepckids-auto-unlock-stabilization-20261021`  
 P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico: P0-45, P0-46, P0-47, P0-48, P0-49, P0-50, P0-51, P0-52, P0-53, P0-54, P0-55.
 
 ### Itens Concretos Corrigidos e Evidências
 
-#### 1. Evento facial antigo em `facekids/filhos_agent.py` (P0-48, P0-49, P0-50)
+#### 1. Evento facial antigo em `safepckids/filhos_agent.py` (P0-48, P0-49, P0-50)
 - **Problema:** O carregamento inicial ignorava eventos vencidos, mas o loop subsequente aceitava qualquer timestamp > `last_seen_ts` (iniciado em `0.0`), permitindo que um `last_unlock.json` residual antigo comutasse a criança e debitasse tempo incorretamente.
 - **Correção:**
   - `read_last_unlock_child()` retorna `(cid, cname, ts)`.
@@ -599,30 +599,30 @@ P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico
   - Testes unitários adicionados em `tests/test_filhos_agent.py`: `test_read_last_unlock_child_stale_ignored` e `test_stale_event_in_loop_does_not_switch_child`.
 
 #### 2. Serviço de autenticação independente do Startup do administrador (P0-45)
-- **Problema:** `Instalar-FaceKids-Nativo.ps1` criava `FaceKidsAuthService.vbs` apenas no perfil administrativo (`$env:APPDATA`), sem mecanismo independente após reboot sem login do administrador.
+- **Problema:** `Instalar-SafePCKids-Nativo.ps1` criava `SafePCKidsAuthService.vbs` apenas no perfil administrativo (`$env:APPDATA`), sem mecanismo independente após reboot sem login do administrador.
 - **Correção:**
-  - `scripts/Instalar-FaceKids-Nativo.ps1` cria `C:\ProgramData\FaceKids\iniciar-auth-service.bat` e registra tarefa agendada no Windows: `schtasks /create /tn "FaceKidsAuthService" /tr "cmd.exe /c ...iniciar-auth-service.bat" /sc onstart /ru "SYSTEM" /rl HIGHEST /f`.
+  - `scripts/Instalar-SafePCKids-Nativo.ps1` cria `C:\ProgramData\SafePCKids\iniciar-auth-service.bat` e registra tarefa agendada no Windows: `schtasks /create /tn "SafePCKidsAuthService" /tr "cmd.exe /c ...iniciar-auth-service.bat" /sc onstart /ru "SYSTEM" /rl HIGHEST /f`.
   - O VBS no Startup permanece como contingência redundante supervisionada.
-  - O mutex global `Global\FaceKidsAuthServiceMutex` garante que instâncias redundantes encerrem imediatamente sem colisão.
+  - O mutex global `Global\SafePCKidsAuthServiceMutex` garante que instâncias redundantes encerrem imediatamente sem colisão.
 
 #### 3. Proteção e validação do Named Pipe (P0-46, P0-47)
-- **Problema:** SDDL usava `(A;;GA;;;IU)` (Generic All para usuários interativos) e `FaceKidsPipeClient.h` fazia busca simples de texto por substring de status.
+- **Problema:** SDDL usava `(A;;GA;;;IU)` (Generic All para usuários interativos) e `SafePCKidsPipeClient.h` fazia busca simples de texto por substring de status.
 - **Correção:**
-  - `facekids/auth_service.py`: SDDL atualizado para `D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)` (restringindo usuários interativos a leitura e escrita, sem direitos de alteração de DACL ou posse).
+  - `safepckids/auth_service.py`: SDDL atualizado para `D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)` (restringindo usuários interativos a leitura e escrita, sem direitos de alteração de DACL ou posse).
   - Limite estrito de mensagem de 512 bytes no pipe e validação de comandos (`AUTH_QUERY`, `PING`), rejeitando payloads malformados com `INVALID_COMMAND`.
-  - `native/credential_provider_facekids/FaceKidsPipeClient.h`: método `ExtractJsonString` agora valida início e fim de objeto JSON (`{ ... }`), avalia a profundidade de chaves (`depth == 1`) para rejeitar status falso aninhado em sub-objetos (ex: `{"data": {"status": "ALLOW"}}`), e no status `ALLOW` verifica explicitamente se `user == "Filhos"`, rejeitando imediatamente contas administrativas.
-  - Suíte de testes em `native/credential_provider_facekids/TestPipeClient.cpp` expandida para 8 testes unitários cobrindo todos os cenários de rejeição de formato e usuário inválido.
+  - `native/credential_provider_safepckids/SafePCKidsPipeClient.h`: método `ExtractJsonString` agora valida início e fim de objeto JSON (`{ ... }`), avalia a profundidade de chaves (`depth == 1`) para rejeitar status falso aninhado em sub-objetos (ex: `{"data": {"status": "ALLOW"}}`), e no status `ALLOW` verifica explicitamente se `user == "Filhos"`, rejeitando imediatamente contas administrativas.
+  - Suíte de testes em `native/credential_provider_safepckids/TestPipeClient.cpp` expandida para 8 testes unitários cobrindo todos os cenários de rejeição de formato e usuário inválido.
 
 #### 4. Desinstalação completa e relatório de integridade (P0-52)
-- **Problema:** `Desinstalar-FaceKids-Nativo.ps1` não removia a tarefa `FaceKidsFilhosAgent`, nem o VBS de `$env:APPDATA`, nem encerrava o processo do agente, e emitia mensagem genérica de restauração sem verificar.
+- **Problema:** `Desinstalar-SafePCKids-Nativo.ps1` não removia a tarefa `SafePCKidsFilhosAgent`, nem o VBS de `$env:APPDATA`, nem encerrava o processo do agente, e emitia mensagem genérica de restauração sem verificar.
 - **Correção:**
-  - `scripts/Desinstalar-FaceKids-Nativo.ps1` completamente refatorado e tornado idempotente.
+  - `scripts/Desinstalar-SafePCKids-Nativo.ps1` completamente refatorado e tornado idempotente.
   - Encerra processos `auth_service` e `filhos_agent` de forma segura.
-  - Remove as tarefas agendadas `FaceKidsAuthService` e `FaceKidsFilhosAgent`.
+  - Remove as tarefas agendadas `SafePCKidsAuthService` e `SafePCKidsFilhosAgent`.
   - Remove scripts VBS do Startup do usuário e do Startup global.
   - Remove chaves do Registro para o CLSID COM e para a lista de Credential Providers.
   - Desregistra a DLL via `regsvr32 /u /s`.
-  - Limpa arquivos de execução em `C:\ProgramData\FaceKids` (`iniciar-*.bat`, `last_unlock.json`, `auth_service.pid`), preservando a base SQLite e fotos cadastradas (Regra 10).
+  - Limpa arquivos de execução em `C:\ProgramData\SafePCKids` (`iniciar-*.bat`, `last_unlock.json`, `auth_service.pid`), preservando a base SQLite e fotos cadastradas (Regra 10).
   - Emite checklist detalhado com verificação real de cada item removido.
   - Adicionado `tests/test_installer_scripts.py` que valida a sintaxe e AST dos scripts PowerShell.
 
@@ -648,8 +648,8 @@ P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico
    - Comando: `TestProviderHost.exe`
    - Resultado: **Criação de ICredentialProvider COM aprovada, 3 campos UI enumerados corretamente**.
 3. **PowerShell AST Parsing:**
-   - `scripts/Instalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
-   - `scripts/Desinstalar-FaceKids-Nativo.ps1`: 0 erros de sintaxe.
+   - `scripts/Instalar-SafePCKids-Nativo.ps1`: 0 erros de sintaxe.
+   - `scripts/Desinstalar-SafePCKids-Nativo.ps1`: 0 erros de sintaxe.
    - `scripts/Iniciar-Piloto-Filhos.ps1`: 0 erros de sintaxe.
 
 
@@ -657,14 +657,14 @@ P0(s) contempladas com resolução direta dos 5 apontamentos do Revisor Técnico
 
 ## 19. Terceira Rodada — Mitigação de Risco Operacional e Resolução dos 3 Pontos da Nova Auditoria (21/10/2026)
 
-FaceKids — Execução e Hardening [21/10/2026 19:20 BRT]  
-Branch e HEAD: `handoff/facekids-auto-unlock-stabilization-20261021`  
+SafePCKids — Execução e Hardening [21/10/2026 19:20 BRT]  
+Branch e HEAD: `handoff/safepckids-auto-unlock-stabilization-20261021`  
 P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato estrito IPC e timeout), P0-48 e P0-49 (agendamento interativo e consulta assíncrona ao pipe), P0-52 (preservação de dados na desinstalação).
 
 ### 1. Eliminação do Risco de Inicialização SYSTEM e Concorrência de Mutex (P0-45)
-- **Problema apontado:** A tarefa agendada no boot como `SYSTEM` corre o risco de não conseguir abrir a webcam USB em Sessão 0 (devido a isolamento de hardware ou privacidade no Windows 10/11), bloqueando a execução da instância interativa de contingência através do mutex global `Global\FaceKidsAuthServiceMutex`.
+- **Problema apontado:** A tarefa agendada no boot como `SYSTEM` corre o risco de não conseguir abrir a webcam USB em Sessão 0 (devido a isolamento de hardware ou privacidade no Windows 10/11), bloqueando a execução da instância interativa de contingência através do mutex global `Global\SafePCKidsAuthServiceMutex`.
 - **Mitigações implementadas:**
-  1. **Sondagem de Viabilidade (`probe_camera_access` e `is_session_zero_or_system`)**: Em `facekids/auth_service.py`, se o processo for disparado em Sessão 0 ou como `SYSTEM`, ele realiza uma sondagem de acesso à webcam antes de adquirir o mutex global. Se a webcam não responder, o processo emite log explicativo de aviso e **encerra imediatamente sem adquirir o mutex e sem criar o pipe**. Isso garante que a instância interativa jamais seja bloqueada por um processo sem webcam.
+  1. **Sondagem de Viabilidade (`probe_camera_access` e `is_session_zero_or_system`)**: Em `safepckids/auth_service.py`, se o processo for disparado em Sessão 0 ou como `SYSTEM`, ele realiza uma sondagem de acesso à webcam antes de adquirir o mutex global. Se a webcam não responder, o processo emite log explicativo de aviso e **encerra imediatamente sem adquirir o mutex e sem criar o pipe**. Isso garante que a instância interativa jamais seja bloqueada por um processo sem webcam.
   2. **Agendamento Interativo na Sessão com Câmera**: substituído na quarta rodada por um principal e gatilho explicitamente vinculados ao usuário interativo que executa o instalador. A forma anterior, apenas com `/sc onlogon /rl HIGHEST`, não demonstrava sozinha qual principal/sessão executaria a tarefa.
 
 ### 2. Validação Estrutural do Contrato IPC (P0-46, P0-47)
@@ -673,15 +673,15 @@ P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato 
   1. **Campo `user` Obrigatório**: Rejeita imediatamente se `user` for vazio ou diferente de `"Filhos"`.
   2. **Campo `child_id` Obrigatório**: Rejeita se `child_id` for ausente ou `<= 0`.
   3. **Validade Temporal Estrita**: Adicionada validação de timestamp com janela máxima de 15 segundos (`fabs(now - ts) <= 15.0`). Rejeita pacotes expirados ou de replay.
-  4. **Marcador de Protocolo**: na quarta rodada, a constante deixou de ser descrita como token de confiança e passou a ser o marcador público `"FACEKIDS_IPC_V1"`. Ela verifica compatibilidade, não autenticidade criptográfica.
+  4. **Marcador de Protocolo**: na quarta rodada, a constante deixou de ser descrita como token de confiança e passou a ser o marcador público `"SAFEPCKIDS_IPC_V1"`. Ela verifica compatibilidade, não autenticidade criptográfica.
   5. **Proteção de Timeout no LogonUI**: na quarta rodada, `RequestAuthentication()` passou a usar prazo global de 7 segundos, suficiente para o orçamento facial de 4,5 segundos mais conexão/transporte, com I/O sobreposto validado e cancelado.
-  6. **Suíte C++ Expandida**: `native/credential_provider_facekids/TestPipeClient.cpp` agora possui **12 testes unitários** automatizados cobrindo todos os casos negativos (sem user, sem child_id, token inválido, timestamp expirado, status aninhado, etc.).
+  6. **Suíte C++ Expandida**: `native/credential_provider_safepckids/TestPipeClient.cpp` agora possui **12 testes unitários** automatizados cobrindo todos os casos negativos (sem user, sem child_id, token inválido, timestamp expirado, status aninhado, etc.).
 
 ### 3. Agente Filhos Totalmente Não-Bloqueante e Tarefa Vinculada (P0-48, P0-49)
 - **Problema apontado:** A consulta ao Named Pipe após entrada por PIN era síncrona e poderia travar a contagem de tempo do agente caso o pipe ficasse lento; além disso, a tarefa do agente não possuía vinculação explícita de usuário.
 - **Mitigações implementadas:**
   1. **Consulta Assíncrona via Worker Thread (`InSessionFaceIdentifier`)**: A consulta ao Named Pipe durante o modo `UNIDENTIFIED` agora roda em uma thread dedicada em background com timeout estrito. O loop principal de quota do `filhos_agent.py` continua rodando a cada 2 segundos sem qualquer atraso ou bloqueio de I/O, garantindo atualização do tempo, avisos e toque de recolher ininterruptos.
-  2. **Vinculação Explícita e Interativa (/it) da Tarefa do Agente**: Em `scripts/Instalar-FaceKids-Nativo.ps1`, a tarefa `FaceKidsFilhosAgent` é agendada com `/sc onlogon /ru "Filhos" /rp "1" /it`, executando estritamente na sessão interativa quando a conta `Filhos` logar. O script de lote mantém a verificação de segurança `if /i "%USERNAME%" neq "Filhos" exit /b`.
+  2. **Vinculação Explícita e Interativa (/it) da Tarefa do Agente**: Em `scripts/Instalar-SafePCKids-Nativo.ps1`, a tarefa `SafePCKidsFilhosAgent` é agendada com `/sc onlogon /ru "Filhos" /rp "1" /it`, executando estritamente na sessão interativa quando a conta `Filhos` logar. O script de lote mantém a verificação de segurança `if /i "%USERNAME%" neq "Filhos" exit /b`.
 
 ### 4. Teste de Desinstalação e Preservação de Dados (P0-52)
 - **Problema apontado:** Necessidade de comprovar em teste controlado que a desinstalação não apaga fotos ou bancos de dados existentes.
@@ -710,14 +710,14 @@ P0(s) contempladas: P0-45 (boot e isolamento de mutex), P0-46 e P0-47 (contrato 
 
 Esta seção substitui as afirmações conflitantes da terceira rodada.
 
-1. **Tarefa do autenticador vinculada à sessão correta:** `FaceKidsAuthService` usa `New-ScheduledTaskTrigger -AtLogOn -User` e `New-ScheduledTaskPrincipal -LogonType Interactive -RunLevel Highest`, ambos associados à identidade Windows que executa o instalador. Após o registro, o instalador relê a tarefa e falha de forma explícita se principal ou modo de logon forem diferentes do esperado.
+1. **Tarefa do autenticador vinculada à sessão correta:** `SafePCKidsAuthService` usa `New-ScheduledTaskTrigger -AtLogOn -User` e `New-ScheduledTaskPrincipal -LogonType Interactive -RunLevel Highest`, ambos associados à identidade Windows que executa o instalador. Após o registro, o instalador relê a tarefa e falha de forma explícita se principal ou modo de logon forem diferentes do esperado.
 2. **Prazo global compatível com o reconhecimento:** o cliente C++ usa 7 segundos para conexão, escrita e leitura somadas. Esse valor acomoda os 4,5 segundos do reconhecimento facial. `GetOverlappedResult` é verificado, operações vencidas são canceladas com `CancelIoEx`, e a estrutura `OVERLAPPED` permanece válida até o cancelamento terminar.
 3. **Consulta pós-PIN realmente limitada:** `query_auth_service()` abre o pipe com `FILE_FLAG_OVERLAPPED`, aplica o mesmo prazo a conexão, escrita e leitura, cancela I/O vencido e trata `HANDLE` corretamente em 64 bits. O worker da sessão usa 6,5 segundos, mas permanece em thread daemon separada do relógio de quota.
-4. **Terminologia de segurança corrigida:** `FACEKIDS_IPC_V1` é somente marcador público de versão do protocolo. Não é segredo nem autenticação criptográfica. A barreira local é a ACL do Named Pipe; hardening adicional continua fora desta estabilização doméstica.
+4. **Terminologia de segurança corrigida:** `SAFEPCKIDS_IPC_V1` é somente marcador público de versão do protocolo. Não é segredo nem autenticação criptográfica. A barreira local é a ACL do Named Pipe; hardening adicional continua fora desta estabilização doméstica.
 5. **Testes adicionados:** a suíte Python simula leitura pendente e confirma o cancelamento; o teste nativo verifica que o orçamento total é maior que o reconhecimento e que uma consulta sem servidor retorna dentro do limite global.
-6. **Compatibilidade entre fonte e DLL:** antes de copiar o Credential Provider, o instalador verifica se o binário contém o marcador `FACEKIDS_IPC_V1`. Uma DLL antiga é recompilada e revalidada; se continuar incompatível, a instalação é interrompida em vez de registrar um provider incapaz de interpretar a resposta do serviço.
+6. **Compatibilidade entre fonte e DLL:** antes de copiar o Credential Provider, o instalador verifica se o binário contém o marcador `SAFEPCKIDS_IPC_V1`. Uma DLL antiga é recompilada e revalidada; se continuar incompatível, a instalação é interrompida em vez de registrar um provider incapaz de interpretar a resposta do serviço.
 
-**Limite operacional preservado:** a tarefa `FaceKidsAuthService` inicia no logon do administrador que executou a instalação. Portanto, esta rodada preserva o cenário doméstico já validado — administrador inicia a sessão e depois usa `Win+L` —, mas não declara desbloqueio facial disponível imediatamente apó a reinicialização, antes de qualquer logon interativo. Resolver esse segundo cenário exigiria uma arquitetura específica que consiga acessar a webcam antes do logon, fora desta correção incremental.
+**Limite operacional preservado:** a tarefa `SafePCKidsAuthService` inicia no logon do administrador que executou a instalação. Portanto, esta rodada preserva o cenário doméstico já validado — administrador inicia a sessão e depois usa `Win+L` —, mas não declara desbloqueio facial disponível imediatamente apó a reinicialização, antes de qualquer logon interativo. Resolver esse segundo cenário exigiria uma arquitetura específica que consiga acessar a webcam antes do logon, fora desta correção incremental.
 
 Validação local desta rodada: **161 testes Python aprovados**, com 1 teste de sintaxe PowerShell ignorado no Linux e reservado ao job Windows do GitHub Actions. A instalação física e o teste de webcam/Win+L continuam sendo uma etapa separada; não se declara risco operacional zero antes desse ensaio.
 
@@ -730,15 +730,15 @@ Esta rodada registrou e resolveu todos os pontos práticos encontrados após a f
 
 1. **Ligação Estática da DLL e Eliminação do Erro regsvr32 (código 3) (P0-44, P0-47):**
    - No Windows recém-formatado, `regsvr32` falhava com código de saída 3 (`ERROR_MOD_NOT_FOUND`) porque a DLL anterior dependia dinamicamente de `libgcc_s_seh-1.dll` e `libstdc++-6.dll`.
-   - O script `native/credential_provider_facekids/build.ps1` foi atualizado para compilar com `-static -static-libgcc -static-libstdc++`.
-   - A `FaceKidsCredentialProvider.dll` agora depende **exclusivamente** de DLLs nativas do sistema operacional Windows (`KERNEL32.dll`, `msvcrt.dll`, `ole32.dll`, `ADVAPI32.dll`, `credui.dll`, `Secur32.dll`), garantindo carregamento imediato tanto no registro quanto no `LogonUI.exe` do Windows.
+   - O script `native/credential_provider_safepckids/build.ps1` foi atualizado para compilar com `-static -static-libgcc -static-libstdc++`.
+   - A `SafePCKidsCredentialProvider.dll` agora depende **exclusivamente** de DLLs nativas do sistema operacional Windows (`KERNEL32.dll`, `msvcrt.dll`, `ole32.dll`, `ADVAPI32.dll`, `credui.dll`, `Secur32.dll`), garantindo carregamento imediato tanto no registro quanto no `LogonUI.exe` do Windows.
 
 2. **Centralização do Cadastro no Painel Parental (P0-51):**
-   - O atalho `abrir-facekids.bat` foi atualizado para abrir diretamente o `facekids.admin_dashboard` em vez do script legado de testes `facekids.gui`.
+   - O atalho `abrir-safepckids.bat` foi atualizado para abrir diretamente o `safepckids.admin_dashboard` em vez do script legado de testes `safepckids.gui`.
    - Agora todo o gerenciamento de perfis, cadastro guiado via webcam (12 amostras com foto de perfil recortada), fotos de arquivo, limites diários, concessão de bônus e horários permitidos ocorrem centralizadamente pelo painel gráfico, dispensando o uso de scripts `.bat` avulsos de cadastro (`cadastrar-filho-X.bat`), alinhando o Windows à arquitetura adotada na branch `main`.
 
 3. **Normalização de Nome de Usuário no Instalador (P0-52):**
-   - Em `scripts/Instalar-FaceKids-Nativo.ps1`, a verificação da tarefa agendada comparava o nome retornado pela API de identidade (`DESKTOP-1DPP7DO\MarcosMiniPC`) diretamente com o UserId do agendador (`MarcosMiniPC`), gerando falso erro de validação.
+   - Em `scripts/Instalar-SafePCKids-Nativo.ps1`, a verificação da tarefa agendada comparava o nome retornado pela API de identidade (`DESKTOP-1DPP7DO\MarcosMiniPC`) diretamente com o UserId do agendador (`MarcosMiniPC`), gerando falso erro de validação.
    - A validação agora normaliza ambos os identificadores desconsiderando prefixos de máquina/domínio.
 
 4. **Permissões NTFS para a Conta Filhos (P0-48, P0-52):**
@@ -746,7 +746,7 @@ Esta rodada registrou e resolveu todos os pontos práticos encontrados após a f
 
 5. **Isolamento Completo entre Administrador e Filhos via WTS (P0-48, P0-50):**
    - Removido do instalador o comando `Start-Process -Credential` que disparava o agente artificialmente dentro da sessão desktop do administrador. A execução agora é disparada exclusivamente pelo Windows no logon da conta `Filhos` (`/sc onlogon /ru "Filhos" /it`).
-   - Adicionada a função `is_active_console_user_filhos()` em `facekids/filhos_agent.py` e `facekids/welcome_screen.py`, consultando a API nativa `WTSGetActiveConsoleSessionId` e `WTSQuerySessionInformationW(WTSUserName)`.
+   - Adicionada a função `is_active_console_user_filhos()` em `safepckids/filhos_agent.py` e `safepckids/welcome_screen.py`, consultando a API nativa `WTSGetActiveConsoleSessionId` e `WTSQuerySessionInformationW(WTSUserName)`.
    - Se o usuário ativo no monitor físico for o administrador (`MarcosMiniPC`), o agente **não abre a tela de boas-vindas, não abre o navegador Brave / YouTube Kids e não desconta tempo**. Todo o comportamento infantil fica 100% contido na sessão da conta `Filhos`.
 
 ---
@@ -757,14 +757,14 @@ Esta rodada registrou e resolveu todos os pontos práticos encontrados após a f
 |---|---|---|---|
 | **P0-43** | Corrigir CI Python | **Concluída** | 161 testes aprovados no Windows e no Ubuntu no GitHub Actions |
 | **P0-44** | Compilar CP nativo na CI | **Concluída** | Build C++ com ligação estática e testes de host COM aprovados |
-| **P0-45** | Inicialização independente | **Concluída** | Tarefa agendada interativa no logon do admin (`FaceKidsAuthService`) com sondagem de câmera |
-| **P0-46** | Contrato do Named Pipe | **Concluída** | Parser depth-1 com validação estrita (user, child_id > 0, timestamp <= 15s, token público FACEKIDS_IPC_V1) |
+| **P0-45** | Inicialização independente | **Concluída** | Tarefa agendada interativa no logon do admin (`SafePCKidsAuthService`) com sondagem de câmera |
+| **P0-46** | Contrato do Named Pipe | **Concluída** | Parser depth-1 com validação estrita (user, child_id > 0, timestamp <= 15s, token público SAFEPCKIDS_IPC_V1) |
 | **P0-47** | Credential Provider | **Concluída** | 12 testes unitários do cliente de pipe (`TestPipeClient.exe --unit-only`), host COM validado, DLL 100% estática |
 | **P0-48** | Agente e boas-vindas | **Concluída** | Worker assíncrono para pings de pipe, sem bloqueio de quota; isolamento de console via WTS |
 | **P0-49** | Identificação individual | **Concluída** | Eliminação de fallbacks arbitrários, last_seen_ts inicializado com time.time(), sem reutilização de eventos obsoletos |
 | **P0-50** | Quotas e concorrência | **Concluída** | Storage em modo WAL, tempo monotônico, contagem de saldo independente, preservação de bônus |
-| **P0-51** | Painel e permissões | **Concluída** | Painel dos pais em `abrir-facekids.bat`, validação `is_admin_account`, cadastro webcam integrado |
-| **P0-52** | Instalador e rollback | **Concluída** | `Instalar-FaceKids-Nativo.ps1` com normalização de usuário e permissões NTFS; `Desinstalar-FaceKids-Nativo.ps1` não-destrutivo |
+| **P0-51** | Painel e permissões | **Concluída** | Painel dos pais em `abrir-safepckids.bat`, validação `is_admin_account`, cadastro webcam integrado |
+| **P0-52** | Instalador e rollback | **Concluída** | `Instalar-SafePCKids-Nativo.ps1` com normalização de usuário e permissões NTFS; `Desinstalar-SafePCKids-Nativo.ps1` não-destrutivo |
 | **P0-53** | Testes integrados | **Concluída** | 161 testes Python + 12 testes C++ todos verdes |
 | **P0-54** | Documentação | **Concluída** | Seções 17 a 22 detalhadas com rastreabilidade completa |
 | **P0-55** | Pacote final de revisão | **Concluída** | Requisitos auditados, regressões mitigadas e ambiente pronto para operação assistida |

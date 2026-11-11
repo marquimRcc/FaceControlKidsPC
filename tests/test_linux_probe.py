@@ -5,7 +5,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from facekids.linux_probe import ProbeResult, probe_via_daemon
+from safepckids.linux_probe import ProbeResult, probe_via_daemon
 
 
 class LinuxProbeTests(unittest.TestCase):

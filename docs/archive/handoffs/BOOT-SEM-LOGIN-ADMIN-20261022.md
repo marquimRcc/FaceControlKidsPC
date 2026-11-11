@@ -1,6 +1,6 @@
-# FaceKids: ligar o PC e reconhecer sem login previo do administrador
+# SafePCKids: ligar o PC e reconhecer sem login previo do administrador
 
-Branch: `feature/facekids-cold-boot-auto-unlock-20261022`.
+Branch: `feature/safepckids-cold-boot-auto-unlock-20261022`.
 Base preservada e publicada: `939bf0b6cbeb36bc86a8720fb8d0b32ee2004801`.
 
 ## Decisao do proprietario
@@ -13,10 +13,10 @@ Nao configurar AutoAdminLogon nem entrar silenciosamente na conta administrativa
 
 ## Implementacao deste lote
 
-- `FaceKidsBootAuth`: tarefa `AtStartup`, principal `SYSTEM/ServiceAccount`,
+- `SafePCKidsBootAuth`: tarefa `AtStartup`, principal `SYSTEM/ServiceAccount`,
   independente de senha/logon interativo, sem limite de duracao da tarefa e sem
   instancias paralelas. Ativacao por script separado, nao automatica no PC.
-- `facekids.boot_auth`: supervisor inicia o autenticador Python existente, tenta
+- `safepckids.boot_auth`: supervisor inicia o autenticador Python existente, tenta
   DirectShow e Media Foundation alternadamente e repete a cada 5 segundos quando
   um worker falha. Limite de inicializacao: 30 s por processo; requisicao parada:
   15 s. Um pipe ocioso nao e considerado falha.
@@ -36,8 +36,8 @@ Nao configurar AutoAdminLogon nem entrar silenciosamente na conta administrativa
   Nenhuma repeticao ignora o resultado facial nem as regras de tempo.
 - Mantem a tarefa interativa anterior e o login Windows convencional. O
   desinstalador para/remove a tarefa de boot ANTES de encerrar workers.
-- O instalador e o ativador exigem a DLL com `FACEKIDS_IPC_V1` e
-  `FACEKIDS_BOOT_RETRY_V1`, evitando usar o binario anterior sem repeticao.
+- O instalador e o ativador exigem a DLL com `SAFEPCKIDS_IPC_V1` e
+  `SAFEPCKIDS_BOOT_RETRY_V1`, evitando usar o binario anterior sem repeticao.
 - Binarios distribuidos incorporam os runtimes GCC/C++; nao dependem de
   `libgcc_s_seh-1.dll`, `libstdc++-6.dll` ou `libwinpthread-1.dll` no PATH do
   LogonUI. A CI verifica o carregamento com PATH restrito ao Windows.
@@ -48,9 +48,9 @@ Somente depois do build/testes da branch e da sincronizacao dos binarios:
 
 ```powershell
 git fetch origin
-git switch feature/facekids-cold-boot-auto-unlock-20261022
-git pull --ff-only origin feature/facekids-cold-boot-auto-unlock-20261022
-powershell -ExecutionPolicy Bypass -File .\scripts\Instalar-FaceKids-Nativo.ps1
+git switch feature/safepckids-cold-boot-auto-unlock-20261022
+git pull --ff-only origin feature/safepckids-cold-boot-auto-unlock-20261022
+powershell -ExecutionPolicy Bypass -File .\scripts\Instalar-SafePCKids-Nativo.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\Ativar-Desbloqueio-No-Boot.ps1
 ```
 
@@ -61,7 +61,7 @@ O instalador pode exigir fechar o LogonUI/reiniciar para substituir uma DLL
 carregada. Nunca interpretar falha de copia/registro como atualizacao concluida.
 
 Reiniciar MANUALMENTE. Nao entrar no administrador. Aguardar o carregamento do
-Windows/webcam, exibir a opcao FaceKids da conta Filhos se o Windows mostrar
+Windows/webcam, exibir a opcao SafePCKids da conta Filhos se o Windows mostrar
 outra opcao e apresentar o rosto cadastrado. A selecao inicial de usuario/tile
 depende do LogonUI; a CI nao comprova selecao automatica dessa opcao no PC.
 
@@ -70,9 +70,9 @@ saldo. Uma camera aberta ou uma resposta `ALLOW` sozinha NAO comprova login.
 
 ## Evidencias e verificacao
 
-- `C:\ProgramData\FaceKids\boot_status.json`: estado atual, tentativa,
+- `C:\ProgramData\SafePCKids\boot_status.json`: estado atual, tentativa,
   backend, PID do supervisor/worker, timeout/exit code quando aplicavel.
-- `C:\ProgramData\FaceKids\boot_events.jsonl`: eventos `camera_ready` e
+- `C:\ProgramData\SafePCKids\boot_events.jsonl`: eventos `camera_ready` e
   `allow`, timestamp, backend, sessao do worker e quantidade de usuarios com
   sessao WTS. `logged_on_users = 0` e `session_id = 0` registram evidencia de
   funcionamento antes de um logon interativo. `null` significa leitura WTS
@@ -116,13 +116,13 @@ interativa. O desinstalador completo tambem remove a tarefa de boot.
 
 Fonte da DLL distribuida: `7a555889eb9cf5373aff20598a53fc914e3f97a0`.
 
-- [CI Python](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39759648645):
+- [CI Python](https://github.com/marquimRcc/SafePCKids/actions/runs/39759648645):
   aprovada em Windows e Ubuntu. Suite de 172 testes; no Windows, inclui Named
   Pipe real e AST PowerShell. No Linux, esses dois testes sao ignorados.
-- [CI nativa](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/39759648671):
+- [CI nativa](https://github.com/marquimRcc/SafePCKids/actions/runs/39759648671):
   aprovada, incluindo 12 testes do parser, timeout sem servidor, host COM,
   carregamento sem MinGW no PATH e os tres cenarios de repeticao/ciclo de vida.
-- Artefato da DLL: `FaceKidsCredentialProvider-Real`, ID `12417273306`.
+- Artefato da DLL: `SafePCKidsCredentialProvider-Real`, ID `12417273306`.
   ZIP SHA-256: `ce061163d09d76b69ef9195970b1ce54e33b4fd82cebee695f76f0eac83e39fe`.
 - DLL SHA-256: `3b6b6b7b42bf583472b3c65db0dd7307abca6a78033c7711a38e6b9382c1e7f0`.
   Confirmados os marcadores IPC/retry e ausencia de imports dos runtimes MinGW.

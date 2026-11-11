@@ -1,4 +1,4 @@
-# Implementação FaceKids no Regata OS
+# Implementação SafePCKids no Regata OS
 
 ## Estado
 
@@ -15,7 +15,7 @@ logind. Esse caminho pode ser desativado com `--no-auto-unlock` para diagnóstic
 O mesmo ticket permanece disponível por até dez segundos para o helper PAM
 caso o KScreenLocker não aceite o pedido direto; o primeiro consumo o invalida.
 
-O banco e os vetores ficam em `/var/lib/facekids`, pertencem a root e não são
+O banco e os vetores ficam em `/var/lib/safepckids`, pertencem a root e não são
 graváveis pela conta compartilhada. O processo que reconhece também decide e
 contabiliza; portanto a criança não envia `child_id` por um IPC modificável.
 A conta compartilhada não conserva grupos suplementares permanentes (incluindo
@@ -29,18 +29,18 @@ e não produz login inicial sem interação no SDDM.
 
 ## Componentes
 
-- `facekids/linux_runtime.py`: captura V4L2, reconhecimento e aplicação de quota.
-- `facekids/session.py`: leitura conservadora de `Active`, `State` e
+- `safepckids/linux_runtime.py`: captura V4L2, reconhecimento e aplicação de quota.
+- `safepckids/session.py`: leitura conservadora de `Active`, `State` e
   `LockedHint` do systemd-logind.
-- `facekids/linux_admin.py`: cadastro de um ou mais perfis, limites, bônus, horário
+- `safepckids/linux_admin.py`: cadastro de um ou mais perfis, limites, bônus, horário
   e apagamento de biometria.
-- `packaging/facekids-linux.service`: isolamento do serviço e acesso restrito a
-  `/dev/video0` e `/var/lib/facekids`.
-- `facekids/linux_auth.py`: três confirmações faciais e ticket de uso único,
+- `packaging/safepckids-linux.service`: isolamento do serviço e acesso restrito a
+  `/dev/video0` e `/var/lib/safepckids`.
+- `safepckids/linux_auth.py`: três confirmações faciais e ticket de uso único,
   ligado à sessão e com validade de dez segundos.
-- `facekids/linux_pam_helper.py`: cliente mínimo aceito apenas pelo socket root.
-- `scripts/Instalar-FaceKids-RegataOS.sh`: instalação explícita pelo responsável.
-- `scripts/Desinstalar-FaceKids-RegataOS.sh`: remove programa e serviço,
+- `safepckids/linux_pam_helper.py`: cliente mínimo aceito apenas pelo socket root.
+- `scripts/Instalar-SafePCKids-RegataOS.sh`: instalação explícita pelo responsável.
+- `scripts/Desinstalar-SafePCKids-RegataOS.sh`: remove programa e serviço,
   preservando os dados até apagamento deliberado.
 
 ## Instalação preparada
@@ -50,7 +50,7 @@ Na raiz do repositório, com a conta compartilhada Linux já criada como
 
 ```bash
 sudo bash scripts/Criar-Conta-Filhos-RegataOS.sh filhos
-sudo bash scripts/Instalar-FaceKids-RegataOS.sh filhos 1
+sudo bash scripts/Instalar-SafePCKids-RegataOS.sh filhos 1
 ```
 
 O segundo argumento é a quantidade de crianças (de 1 a 20). Use, por exemplo,
@@ -60,11 +60,11 @@ O instalador copia e prepara o serviço, mas não o habilita nem inicia sem
 perfis. Com cada criança presente e consentimento do responsável:
 
 ```bash
-facekids-linux-probe --camera 0 --seconds 5
-sudo -E facekids-admin enroll 1
+safepckids-linux-probe --camera 0 --seconds 5
+sudo -E safepckids-admin enroll 1
 # repita com 2, 3... até o total configurado
-sudo facekids-admin status
-sudo systemctl enable --now facekids-linux
+sudo safepckids-admin status
+sudo systemctl enable --now safepckids-linux
 ```
 
 O runtime também recusa iniciar se qualquer perfil configurado tiver menos de
@@ -78,23 +78,23 @@ recuperação por senha, a autenticação facial no desbloqueio KDE pode ser
 habilitada explicitamente:
 
 ```bash
-sudo facekids-enable-pam
+sudo safepckids-enable-pam
 ```
 
 Para retirar a integração PAM usando os backups guardados:
 
 ```bash
-sudo facekids-disable-pam
+sudo safepckids-disable-pam
 ```
 
 Exemplos administrativos:
 
 ```bash
-sudo facekids-admin set-limit 1 120
-sudo facekids-admin bonus 1 30
-sudo facekids-admin curfew 08:00 20:00
-sudo facekids-admin disable-curfew
-sudo facekids-admin erase-face 1
+sudo safepckids-admin set-limit 1 120
+sudo safepckids-admin bonus 1 30
+sudo safepckids-admin curfew 08:00 20:00
+sudo safepckids-admin disable-curfew
+sudo safepckids-admin erase-face 1
 ```
 
 ## Recuperação
@@ -103,13 +103,13 @@ O serviço não modifica PAM nem remove senha. Em caso de problema, entre na con
 do responsável e execute:
 
 ```bash
-sudo systemctl disable --now facekids-linux
+sudo systemctl disable --now safepckids-linux
 ```
 
 Para remover o programa e preservar quotas/cadastros:
 
 ```bash
-sudo bash scripts/Desinstalar-FaceKids-RegataOS.sh
+sudo bash scripts/Desinstalar-SafePCKids-RegataOS.sh
 ```
 
 ## Limites ainda existentes

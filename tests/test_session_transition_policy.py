@@ -1,7 +1,7 @@
 """Deterministic main behavior, including adversarial candidate metadata."""
 import unittest
-from facekids.session_transition_policy import decide_child_transition as decide
-from facekids.session_transition_policy import TransitionDecision as D
+from safepckids.session_transition_policy import decide_child_transition as decide
+from safepckids.session_transition_policy import TransitionDecision as D
 
 
 class SessionTransitionTests(unittest.TestCase):

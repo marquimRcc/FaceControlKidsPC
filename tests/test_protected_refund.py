@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 class ProtectedRefundTests(unittest.TestCase):

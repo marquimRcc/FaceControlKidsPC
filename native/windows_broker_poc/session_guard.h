@@ -8,7 +8,7 @@
 #include <string>
 #include <cstring>
 
-namespace facekids_guard {
+namespace safepckids_guard {
 
 enum class Verdict {
     ReadyForPolicyCheck,  // NOT a grant, only WTS identity/state prerequisites
@@ -36,7 +36,7 @@ inline const char* label(Verdict value) {
 struct Snapshot {
     DWORD requested_id = 0;
     DWORD actual_id = 0;
-    facekids_wts::LockView state = facekids_wts::LockView::Unknown;
+    safepckids_wts::LockView state = safepckids_wts::LockView::Unknown;
     // This string may ONLY come from OS WTSQueryUserToken -> TokenUser.
     std::wstring token_sid;
     bool token_from_os = false;
@@ -67,9 +67,9 @@ inline Verdict check_snapshot(const Snapshot& record, const std::wstring& target
     if (record.requested_id == 0 || record.requested_id == 0xffffffff ||
         record.requested_id != record.actual_id) return Verdict::InvalidSession;
     if (!valid_local_account_sid(target_sid)) return Verdict::InvalidTargetSid;
-    if (record.state == facekids_wts::LockView::Unknown)
+    if (record.state == safepckids_wts::LockView::Unknown)
         return Verdict::UnknownSessionState;
-    if (record.state != facekids_wts::LockView::Locked)
+    if (record.state != safepckids_wts::LockView::Locked)
         return Verdict::NotLocked;
     if (!record.token_from_os || !valid_local_account_sid(record.token_sid))
         return Verdict::UnverifiedToken;
@@ -85,17 +85,17 @@ inline Verdict inspect_real_session(DWORD session_id, const std::wstring& target
     Snapshot snapshot;
     snapshot.requested_id = session_id;
     snapshot.actual_id = session_id;
-    snapshot.state = facekids_wts::read_state(session_id);
-    snapshot.token_sid = facekids_wts::read_token_sid(session_id);
+    snapshot.state = safepckids_wts::read_state(session_id);
+    snapshot.token_sid = safepckids_wts::read_token_sid(session_id);
     snapshot.token_from_os = !snapshot.token_sid.empty();
     return check_snapshot(snapshot, target_sid);
 }
 
 inline bool self_test() {
-    constexpr auto Locked = facekids_wts::LockView::Locked;
-    constexpr auto Unlocked = facekids_wts::LockView::Unlocked;
-    constexpr auto Unknown = facekids_wts::LockView::Unknown;
-    constexpr auto Inactive = facekids_wts::LockView::Inactive;
+    constexpr auto Locked = safepckids_wts::LockView::Locked;
+    constexpr auto Unlocked = safepckids_wts::LockView::Unlocked;
+    constexpr auto Unknown = safepckids_wts::LockView::Unknown;
+    constexpr auto Inactive = safepckids_wts::LockView::Inactive;
     const std::wstring child = L"S-1-5-21-100-200-300-1005";
     const std::wstring parent = L"S-1-5-21-100-200-300-1001";
     Snapshot s = {7, 7, Locked, child, true};
@@ -128,4 +128,4 @@ inline bool self_test() {
     return true;
 }
 
-} // namespace facekids_guard
+} // namespace safepckids_guard

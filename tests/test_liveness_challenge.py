@@ -1,5 +1,5 @@
 import unittest
-from facekids.liveness_challenge import HeadMotionDiagnostic, Step
+from safepckids.liveness_challenge import HeadMotionDiagnostic, Step
 
 
 class MotionChallengeTests(unittest.TestCase):

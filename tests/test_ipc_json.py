@@ -1,6 +1,6 @@
 import unittest
 
-from facekids.ipc_json import parse_local_json
+from safepckids.ipc_json import parse_local_json
 
 
 class StrictLocalJsonTests(unittest.TestCase):

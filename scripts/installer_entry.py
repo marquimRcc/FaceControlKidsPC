@@ -1,4 +1,4 @@
-"""FaceControlKidsPC - Ponto de Entrada do Executavel de Instalacao Unificado.
+"""SafePCKids - Ponto de Entrada do Executavel de Instalacao Unificado.
 
 Garante a resolucao de caminhos tanto no ambiente de desenvolvimento
 quanto quando extraido em sys._MEIPASS pelo PyInstaller.
@@ -17,7 +17,7 @@ else:
 if str(base_dir) not in sys.path:
     sys.path.insert(0, str(base_dir))
 
-from facekids.app_window import open_app_window
+from safepckids.app_window import open_app_window
 
 
 if __name__ == "__main__":

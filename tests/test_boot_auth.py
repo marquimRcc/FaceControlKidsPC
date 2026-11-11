@@ -10,9 +10,9 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-from facekids import boot_auth
-from facekids import auth_service
-from facekids.windows_pipe_api import configure_kernel32
+from safepckids import boot_auth
+from safepckids import auth_service
+from safepckids.windows_pipe_api import configure_kernel32
 
 
 class BootAuthTests(unittest.TestCase):
@@ -146,11 +146,11 @@ class BootAuthTests(unittest.TestCase):
 
     @unittest.skipUnless(auth_service.sys.platform == "win32", "Requires real Win32 named pipe")
     def test_real_pipe_once_without_webcam_or_login_changes(self):
-        import facekids.filhos_agent as filhos_agent
-        from facekids.filhos_agent import query_auth_service
+        import safepckids.filhos_agent as filhos_agent
+        from safepckids.filhos_agent import query_auth_service
         failures = []
-        test_pipe = rf"\\.\pipe\FaceKidsAuthPipe_Test_{os.getpid()}"
-        test_mutex = rf"Global\FaceKidsAuthServiceMutex_Test_{os.getpid()}"
+        test_pipe = rf"\\.\pipe\SafePCKidsAuthPipe_Test_{os.getpid()}"
+        test_mutex = rf"Global\SafePCKidsAuthServiceMutex_Test_{os.getpid()}"
 
         def serve():
             try:

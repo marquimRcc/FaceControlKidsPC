@@ -3,11 +3,11 @@ import inspect
 import unittest
 from unittest.mock import Mock
 
-from facekids.quota_broker_bound_protocol import BoundBalance
-from facekids.quota_vm_shadow_integration import (
+from safepckids.quota_broker_bound_protocol import BoundBalance
+from safepckids.quota_vm_shadow_integration import (
     VmBoundShadow, shadow_enabled_for_vm,
 )
-from facekids import filhos_agent
+from safepckids import filhos_agent
 
 
 class Clock:
@@ -36,13 +36,13 @@ class ShadowVmIntegrationTests(unittest.TestCase):
     def test_default_off_even_in_windows_and_unrecognized_optin(self):
         self.assertFalse(shadow_enabled_for_vm({}, windows=True))
         self.assertFalse(shadow_enabled_for_vm(
-            {"FACEKIDS_VM_SHADOW": "1"}, windows=True))
+            {"SAFEPCKIDS_VM_SHADOW": "1"}, windows=True))
         self.assertFalse(shadow_enabled_for_vm({
-            "FACEKIDS_VM_SHADOW": "1",
-            "FACEKIDS_VM_SHADOW_ACK": "DISPOSABLE_VM_ONLY"}, windows=False))
+            "SAFEPCKIDS_VM_SHADOW": "1",
+            "SAFEPCKIDS_VM_SHADOW_ACK": "DISPOSABLE_VM_ONLY"}, windows=False))
         self.assertTrue(shadow_enabled_for_vm({
-            "FACEKIDS_VM_SHADOW": "1",
-            "FACEKIDS_VM_SHADOW_ACK": "DISPOSABLE_VM_ONLY"}, windows=True))
+            "SAFEPCKIDS_VM_SHADOW": "1",
+            "SAFEPCKIDS_VM_SHADOW_ACK": "DISPOSABLE_VM_ONLY"}, windows=True))
 
     def test_same_child_same_context_compared_only_telemetrically(self):
         p, _ = self.make(BoundBalance(4, 100.5, True))

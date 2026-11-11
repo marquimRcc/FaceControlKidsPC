@@ -8,18 +8,18 @@ import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
-from facekids.quota_broker_writer_scm_win import (
+from safepckids.quota_broker_writer_scm_win import (
     LAB_MARKER_KEY, LAB_MARKER_VALUE, VM_WRITER_SERVICE_NAME,
-    VM_WRITER_REGISTRY_PATH, FaceKidsQuotaWriterVmService,
+    VM_WRITER_REGISTRY_PATH, SafePCKidsQuotaWriterVmService,
     validate_vm_writer_config,
 )
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 class WriterVmConfigTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = TemporaryDirectory(prefix="facekids-vm-writer-config-")
-        root = Path(self.tmp.name) / "facekids-quota-lab"
+        self.tmp = TemporaryDirectory(prefix="safepckids-vm-writer-config-")
+        root = Path(self.tmp.name) / "safepckids-quota-lab"
         root.mkdir()
         self.db = root / "writer-fixture.sqlite3"
         self.models = root / "models"
@@ -54,7 +54,7 @@ class WriterVmConfigTests(unittest.TestCase):
         unrecognized = dict(self.config, ClientCanCharge=1)
         with self.assertRaises(ValueError):
             validate_vm_writer_config(unrecognized)
-        self.assertEqual(VM_WRITER_SERVICE_NAME, "FaceKidsQuotaWriterVmOnly")
+        self.assertEqual(VM_WRITER_SERVICE_NAME, "SafePCKidsQuotaWriterVmOnly")
 
     def test_unmarked_or_non_sqlite_fixture_fails_closed(self):
         with closing(sqlite3.connect(self.db)) as db:
@@ -74,19 +74,19 @@ class WriterVmConfigTests(unittest.TestCase):
         self.assertEqual(self.db.stat().st_size, before)
 
     def test_service_class_never_auto_registers(self):
-        self.assertEqual(FaceKidsQuotaWriterVmService._svc_name_, VM_WRITER_SERVICE_NAME)
+        self.assertEqual(SafePCKidsQuotaWriterVmService._svc_name_, VM_WRITER_SERVICE_NAME)
 
 
 @unittest.skipUnless(os.name == "nt", "pywin32 lifecycle applies to Windows")
 class WriterVmScmLifecycleTests(unittest.TestCase):
     def setUp(self):
-        from facekids import quota_broker_writer_scm_win as service_mod
+        from safepckids import quota_broker_writer_scm_win as service_mod
         if service_mod._ServiceBase is object:
             self.skipTest("pywin32 not installed")
         self.mod = service_mod
 
     def fake(self):
-        instance = object.__new__(self.mod.FaceKidsQuotaWriterVmService)
+        instance = object.__new__(self.mod.SafePCKidsQuotaWriterVmService)
         instance._stop_signal = threading.Event()
         instance._host = None
         status = []

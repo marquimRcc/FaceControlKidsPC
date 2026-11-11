@@ -4,8 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_broker_policy import ServiceOwnedQuotaBroker
-from facekids.storage import Storage
+from safepckids.quota_broker_policy import ServiceOwnedQuotaBroker
+from safepckids.storage import Storage
 
 
 class Clock:

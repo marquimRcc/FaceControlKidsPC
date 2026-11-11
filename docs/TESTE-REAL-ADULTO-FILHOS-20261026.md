@@ -1,6 +1,6 @@
 # Piloto presencial: rosto adulto como perfil fictício na conta Filhos (26/10/2026)
 
-Branch exclusiva: `fix/facekids-ipc-security-hardening-20261024`, PR #4 draft. **Não instalar** o Credential Provider,
+Branch exclusiva: `fix/safepckids-ipc-security-hardening-20261024`, PR #4 draft. **Não instalar** o Credential Provider,
 serviço SYSTEM ou novo broker no computador familiar nesta etapa.
 
 ## Escopo
@@ -14,15 +14,15 @@ Para teste presencial, o responsável voluntário pode usar **o próprio rosto**
 como **um único perfil fictício**, sem requisitar fotos/rostos de crianças.
 O teste salva 12 vetores numéricos **biométricos do adulto** somente na conta
 Windows `Filhos`, em
-`%LOCALAPPDATA%\FaceKids\laboratorio-adulto-filhos\adulto-teste.sqlite3`.
+`%LOCALAPPDATA%\SafePCKids\laboratorio-adulto-filhos\adulto-teste.sqlite3`.
 Não armazena foto/vídeo persistente nem altera o cadastro da conta adulta ou o
-banco real `C:\ProgramData\FaceKids\criancas.sqlite3`. Esse banco de
+banco real `C:\ProgramData\SafePCKids\criancas.sqlite3`. Esse banco de
 laboratório **não tem ACL de serviço SYSTEM**: deve ser apagado após o ensaio.
 
 ## Um comando — executar em PowerShell NÃO elevado na conta Windows Filhos
 
 ```powershell
-& { $b='fix/facekids-ipc-security-hardening-20261024'; $p=Join-Path $env:LOCALAPPDATA 'FaceKids\codigo-laboratorio-adulto'; if (!(Test-Path "$p\.git")) { git clone --depth 1 --branch $b https://github.com/marquimRcc/FaceControlKidsPC.git $p } else { git -C $p pull --ff-only origin $b }; if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar branch de seguranca' }; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$p\scripts\Iniciar-Teste-Adulto-Filhos.ps1" -WinL }
+& { $b='fix/safepckids-ipc-security-hardening-20261024'; $p=Join-Path $env:LOCALAPPDATA 'SafePCKids\codigo-laboratorio-adulto'; if (!(Test-Path "$p\.git")) { git clone --depth 1 --branch $b https://github.com/marquimRcc/SafePCKids.git $p } else { git -C $p pull --ff-only origin $b }; if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar branch de seguranca' }; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$p\scripts\Iniciar-Teste-Adulto-Filhos.ps1" -WinL }
 ```
 
 Requer Git e Python 3.11–3.13 (`py.exe`). O script prepara `.venv`, instala
@@ -58,14 +58,14 @@ Para testar apenas cadastro/reconhecimento sem Win+L, repita o comando sem
 - O serviço protegido de cobrança SCM/IPC do PR #4 continua VM-only;
   não será ativado na instalação familiar por esse teste. Quotas reais
   permanecem intocadas.
-- Se o FaceKids instalado já estiver usando a câmera ou realizar login
+- Se o SafePCKids instalado já estiver usando a câmera ou realizar login
   automático por outro componente existente, resultados Win+L podem ser
   inconclusivos; **não force a remoção de login/serviços para este teste**.
 
 Para descartar apenas biometria do **piloto do adulto na conta Filhos**,
 depois de fechar câmera/teste:
 ```powershell
-Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'FaceKids\laboratorio-adulto-filhos') -Recurse -Force
+Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'SafePCKids\laboratorio-adulto-filhos') -Recurse -Force
 ```
 Esse comando de descarte é **opcional e manual**; nunca limpa o banco familiar.
 

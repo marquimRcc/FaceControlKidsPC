@@ -3,13 +3,13 @@ from pathlib import Path
 import threading
 import unittest
 
-from facekids.quota_broker_supervisor import QuotaLabSupervisor
+from safepckids.quota_broker_supervisor import QuotaLabSupervisor
 
 
 class SupervisorTests(unittest.TestCase):
     def make_supervisor(self, worker, **kwargs):
         return QuotaLabSupervisor(
-            pipe_name=r"\\.\pipe\FaceKidsQuotaBrokerLab-" + "a" * 32,
+            pipe_name=r"\\.\pipe\SafePCKidsQuotaBrokerLab-" + "a" * 32,
             data_path=Path("synthetic"), enrolled_child_by_sid={"S-1-5-18": 1},
             serve_one=worker, **kwargs,
         )

@@ -5,10 +5,10 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from facekids.vm_lab_paths import vm_lab_root
-from facekids.platform_paths import application_data_dir
-from facekids.children_pilot import child_pilot_database
-from facekids.storage import default_data_path
+from safepckids.vm_lab_paths import vm_lab_root
+from safepckids.platform_paths import application_data_dir
+from safepckids.children_pilot import child_pilot_database
+from safepckids.storage import default_data_path
 
 
 class VmLabPathTests(unittest.TestCase):
@@ -16,16 +16,16 @@ class VmLabPathTests(unittest.TestCase):
         # Keep Windows HOMEDRIVE/HOMEPATH/LOCALAPPDATA intact; removing them
         # breaks pathlib's user-home lookup independently of VM isolation.
         with patch.dict(os.environ, {
-            "FACEKIDS_VM_LAB_DIR": "", "FACEKIDS_VM_LAB_ACK": ""}):
+            "SAFEPCKIDS_VM_LAB_DIR": "", "SAFEPCKIDS_VM_LAB_ACK": ""}):
             self.assertIsNone(vm_lab_root())
             self.assertNotIn("dados-isolados", str(child_pilot_database()))
 
     def test_optin_routes_both_database_and_avatar_data(self):
         with TemporaryDirectory() as td:
-            root = Path(td) / "FaceKids-VM-Lab" / "dados-isolados"
+            root = Path(td) / "SafePCKids-VM-Lab" / "dados-isolados"
             env = {"LOCALAPPDATA": td,
-                   "FACEKIDS_VM_LAB_DIR": str(root),
-                   "FACEKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}
+                   "SAFEPCKIDS_VM_LAB_DIR": str(root),
+                   "SAFEPCKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}
             with patch.dict(os.environ, env, clear=True):
                 self.assertEqual(vm_lab_root(), root.resolve())
                 self.assertEqual(
@@ -35,12 +35,12 @@ class VmLabPathTests(unittest.TestCase):
                 self.assertEqual(application_data_dir(), root.resolve() / "appdata")
 
     def test_auth_logs_and_unlock_metadata_stay_inside_vm_workspace(self):
-        from facekids.auth_service import authentication_log_dir, unlock_metadata_path
+        from safepckids.auth_service import authentication_log_dir, unlock_metadata_path
         with TemporaryDirectory() as td:
-            root = Path(td) / "FaceKids-VM-Lab" / "dados-isolados"
+            root = Path(td) / "SafePCKids-VM-Lab" / "dados-isolados"
             env = {"LOCALAPPDATA": td,
-                   "FACEKIDS_VM_LAB_DIR": str(root),
-                   "FACEKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}
+                   "SAFEPCKIDS_VM_LAB_DIR": str(root),
+                   "SAFEPCKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}
             with patch.dict(os.environ, env, clear=True):
                 self.assertEqual(authentication_log_dir(),
                                  root.resolve() / "appdata")
@@ -51,14 +51,14 @@ class VmLabPathTests(unittest.TestCase):
         with TemporaryDirectory() as td:
             with patch.dict(os.environ, {
                 "LOCALAPPDATA": td,
-                "FACEKIDS_VM_LAB_DIR": str(Path(td) / "FaceKids-VM-Lab"),
-                "FACEKIDS_VM_LAB_ACK": "wrong"}, clear=True):
+                "SAFEPCKIDS_VM_LAB_DIR": str(Path(td) / "SafePCKids-VM-Lab"),
+                "SAFEPCKIDS_VM_LAB_ACK": "wrong"}, clear=True):
                 with self.assertRaises(RuntimeError):
                     vm_lab_root()
             with patch.dict(os.environ, {
                 "LOCALAPPDATA": td,
-                "FACEKIDS_VM_LAB_DIR": str(Path(td).parent / "FaceKids-VM-Lab"),
-                "FACEKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}, clear=True):
+                "SAFEPCKIDS_VM_LAB_DIR": str(Path(td).parent / "SafePCKids-VM-Lab"),
+                "SAFEPCKIDS_VM_LAB_ACK": "ISOLATED_VM_ONLY"}, clear=True):
                 with self.assertRaises(RuntimeError):
                     vm_lab_root()
 

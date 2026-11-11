@@ -4,14 +4,14 @@ import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_migration_lab import prepare_lab_cutover, restore_lab_snapshot
-from facekids.storage import Storage
+from safepckids.quota_migration_lab import prepare_lab_cutover, restore_lab_snapshot
+from safepckids.storage import Storage
 
 
 class LabCutoverTests(unittest.TestCase):
     def setUp(self):
         self.tmp = TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "facekids-quota-lab"
+        self.root = Path(self.tmp.name) / "safepckids-quota-lab"
         self.legacy = self.root / "legacy"
         self.secure = self.root / "protected"
         self.backups = self.root / "backups"

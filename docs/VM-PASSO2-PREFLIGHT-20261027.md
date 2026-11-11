@@ -1,4 +1,4 @@
-# FaceKids VM — Passo 2: preparo do login facial (somente laboratorio)
+# SafePCKids VM — Passo 2: preparo do login facial (somente laboratorio)
 
 **Branch:** developer. Este passo NAO registra DLL, altera senha, cria servicos
 ou inicia automaticamente um login Windows.
@@ -9,7 +9,7 @@ ou inicia automaticamente um login Windows.
 - Conta administrativa Marcos; conta de teste Filhos habilitada.
 - Cadastro facial de adulto com 12 amostras no banco isolado da VM.
 - Autenticador interativo iniciado sem console visivel (ultimo PID informado: 8060).
-- FaceKidsAuthPipe respondeu PONG e AUTH_QUERY identificou perfil 1 com ALLOW.
+- SafePCKidsAuthPipe respondeu PONG e AUTH_QUERY identificou perfil 1 com ALLOW.
 - Credential Provider ainda nao registrado.
 
 ## 1. Validacao automatica somente leitura
@@ -17,7 +17,7 @@ ou inicia automaticamente um login Windows.
 Na conta Marcos, abra PowerShell e execute:
 
 ~~~powershell
-irm 'https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/Validar-Passo2-FaceKids-VM.ps1' | iex
+irm 'https://raw.githubusercontent.com/marquimRcc/SafePCKids/developer/scripts/Validar-Passo2-SafePCKids-VM.ps1' | iex
 ~~~
 
 Verifica: ambiente VirtualBox, contas habilitadas, privilegios da conta
@@ -30,7 +30,7 @@ que o instalador do proximo passo NAO deve ser executado ainda.
 ## 2. Confirmacoes manuais antes de mexer no LogonUI
 
 1. Verifique que consegue entrar na conta administrativa Marcos por
-   senha/PIN comum, sem depender do FaceKids.
+   senha/PIN comum, sem depender do SafePCKids.
 2. Verifique que a conta Filhos faz login usando a senha do Windows,
    e nao somente o PIN. A DLL legada atual usa senha de teste fixa 1.
    Se Filhos possuir outra senha, NAO ative a DLL ainda.
@@ -41,7 +41,7 @@ que o instalador do proximo passo NAO deve ser executado ainda.
 ## 3. Teste atual sem instalar nada
 
 ~~~powershell
-$p="$env:LOCALAPPDATA\FaceKids-VM-Lab\scripts\FaceKids-VM-Autenticacao.ps1"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action Ping; if ($LASTEXITCODE -eq 0) { powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action FaceProbe }
+$p="$env:LOCALAPPDATA\SafePCKids-VM-Lab\scripts\SafePCKids-VM-Autenticacao.ps1"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action Ping; if ($LASTEXITCODE -eq 0) { powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action FaceProbe }
 ~~~
 
 Esperado: PONG, seguido de ALLOW e quota positiva.
@@ -57,7 +57,7 @@ do registro e manter o metodo tradicional de login do Windows.
 Rollback direcionado da instalacao de laboratorio:
 
 ~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\FaceKids-VM-Lab\scripts\FaceKids-VM-Autenticacao.ps1" -Action Rollback
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\SafePCKids-VM-Lab\scripts\SafePCKids-VM-Autenticacao.ps1" -Action Rollback
 ~~~
 
 A DLL nativa depende de um worker interativo enquanto a sessao

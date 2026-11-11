@@ -6,7 +6,7 @@
 #include "precheck_client.h"
 
 int wmain() {
-    constexpr wchar_t pipeName[]=LR"(\\.\pipe\FaceKidsBrokerPoc-v1)";
+    constexpr wchar_t pipeName[]=LR"(\\.\pipe\SafePCKidsBrokerPoc-v1)";
     HANDLE server=CreateNamedPipeW(pipeName, PIPE_ACCESS_DUPLEX,
         PIPE_TYPE_MESSAGE|PIPE_READMODE_MESSAGE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,
         1, 256, 256, 0, nullptr);
@@ -25,10 +25,10 @@ int wmain() {
     });
     Sleep(50);
     const ULONGLONG start=GetTickCount64();
-    const auto result=facekids_cp_client::request(7,1);
+    const auto result=safepckids_cp_client::request(7,1);
     const ULONGLONG elapsed=GetTickCount64()-start;
     worker.join();
-    if (result!=facekids_cp_client::Precheck::Denied || elapsed>2000) {
+    if (result!=safepckids_cp_client::Precheck::Denied || elapsed>2000) {
         std::printf("FAIL: stalled server took %llu ms\n",
                     static_cast<unsigned long long>(elapsed));
         return 3;

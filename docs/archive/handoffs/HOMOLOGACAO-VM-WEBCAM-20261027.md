@@ -7,7 +7,7 @@
 - VM descartável: `Windows 10 Pro`, usuário administrativo `Marcos`.
 - Webcam USB: XWF-1080P, VID `1bcf`, PID `2281`.
 - Código: branch `developer`; a branch `main` não foi alterada.
-- Dados faciais e SQLite: `%LOCALAPPDATA%\FaceKids-VM-Lab\dados-isolados`.
+- Dados faciais e SQLite: `%LOCALAPPDATA%\SafePCKids-VM-Lab\dados-isolados`.
 
 O ensaio usou o rosto consentido de um adulto como perfil fictício. Nenhuma
 foto ou vídeo foi incluído no repositório.
@@ -40,8 +40,8 @@ desbloqueio nativo do Windows.
 ## Isolamento corrigido na `developer`
 
 O preview de webcam usava `storage.default_data_path()` e podia ignorar o
-opt-in `FACEKIDS_VM_LAB_DIR`, enquanto o painel usava o banco isolado. A função
-agora respeita o mesmo diretório quando `FACEKIDS_VM_LAB_ACK=ISOLATED_VM_ONLY`.
+opt-in `SAFEPCKIDS_VM_LAB_DIR`, enquanto o painel usava o banco isolado. A função
+agora respeita o mesmo diretório quando `SAFEPCKIDS_VM_LAB_ACK=ISOLATED_VM_ONLY`.
 Um teste impede regressão desse caminho.
 
 Também foi removida a suposição ativa de exatamente três crianças no piloto:

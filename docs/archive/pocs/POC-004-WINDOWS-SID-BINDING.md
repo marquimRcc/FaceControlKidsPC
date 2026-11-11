@@ -6,13 +6,13 @@ Nenhum componente foi instalado na tela de login.
 A DLL implementa as interfaces ICredentialProviderSetUserArray e
 ICredentialProviderCredential2, enumerando uma opcao somente quando
 um SID da lista de contas do Windows coincide com o TargetUserSid
-configurado em HKLM\SOFTWARE\FaceControlKidsPC\CredentialProvider.
+configurado em HKLM\SOFTWARE\SafePCKids\CredentialProvider.
 
 Sem SID em HKLM, ou com SID invalido, o provider retorna zero tiles.
 A DLL nao escreve no registro e nao faz autenticacao ou desbloqueio:
 GetSerialization continua retornando NO_CREDENTIAL_NOT_FINISHED.
 
-O build FACEKIDS_DIAGNOSTIC_HOST_TEST injeta um SID ficticio somente
+O build SAFEPCKIDS_DIAGNOSTIC_HOST_TEST injeta um SID ficticio somente
 no processo de teste COM; o binario normal nao contem esse recurso.
 O CI testa lista so com administrador, lista com administrador e
 crianca, e nova lista so com administrador (retirada imediata do tile).

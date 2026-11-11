@@ -13,10 +13,10 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from facekids.storage import Storage
-from facekids.quota_broker_client_win import query_lab_balance
-from facekids.quota_broker_peer_win import require_system_pipe_server
-from facekids.quota_broker_transport_win import LAB_PIPE_PREFIX, serve_one_lab_request
+from safepckids.storage import Storage
+from safepckids.quota_broker_client_win import query_lab_balance
+from safepckids.quota_broker_peer_win import require_system_pipe_server
+from safepckids.quota_broker_transport_win import LAB_PIPE_PREFIX, serve_one_lab_request
 
 
 @unittest.skipUnless(os.name == "nt", "Windows local pipe API only")
@@ -29,7 +29,7 @@ class LabBrokerWindowsTests(unittest.TestCase):
 
     def _exercise_pipe(self, sid_to_child, *, via_client=False):
         with TemporaryDirectory() as td:
-            root = Path(td) / "facekids-quota-lab"
+            root = Path(td) / "safepckids-quota-lab"
             root.mkdir()
             db = root / "ledger.sqlite3"
             storage = Storage(db)
@@ -88,7 +88,7 @@ class LabBrokerWindowsTests(unittest.TestCase):
                     # could be accepted for screen-time enforcement.
                     with self.assertRaises(PermissionError):
                         require_system_pipe_server(int(handle))
-                    request = b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}'
+                    request = b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"GET_BALANCE"}'
                     sent = wintypes.DWORD()
                     buf = ctypes.create_string_buffer(request)
                     self.assertTrue(k.WriteFile(
@@ -118,20 +118,20 @@ class LabBrokerWindowsTests(unittest.TestCase):
         # Bypass ONLY the peer attestation here to exercise wire encoding;
         # the actual SYSTEM token check is exercised end-to-end by the
         # disposable real Windows SCM service smoke.
-        with patch("facekids.quota_broker_client_win.require_registered_system_service_pipe",
+        with patch("safepckids.quota_broker_client_win.require_registered_system_service_pipe",
                    return_value=1234) as peer:
             self.assertEqual(
                 self._exercise_pipe({self._current_sid(): 1}, via_client=True)["remaining_seconds"], 60,
             )
-            peer.assert_called_once_with(peer.call_args.args[0], "FaceKidsQuotaLabOnly")
+            peer.assert_called_once_with(peer.call_args.args[0], "SafePCKidsQuotaLabOnly")
 
     def test_sid_not_in_protected_mapping_is_denied(self):
         self.assertEqual(self._exercise_pipe({"S-1-5-18": 1}), {"status": "DENY"})
 
     def test_no_client_timeout_releases_pipe_without_hanging(self):
-        from facekids.quota_broker_transport_win import serve_one_lab_request
+        from safepckids.quota_broker_transport_win import serve_one_lab_request
         with TemporaryDirectory() as td:
-            root = Path(td) / "facekids-quota-lab"
+            root = Path(td) / "safepckids-quota-lab"
             root.mkdir()
             db = root / "fixture.sqlite3"
             storage = Storage(db)
@@ -148,9 +148,9 @@ class LabBrokerWindowsTests(unittest.TestCase):
             self.assertLess(time.monotonic() - start, 4.0)
 
     def test_stop_event_interrupts_pending_connect_and_closes_handle(self):
-        from facekids.quota_broker_transport_win import serve_one_lab_request
+        from safepckids.quota_broker_transport_win import serve_one_lab_request
         with TemporaryDirectory() as td:
-            root = Path(td) / "facekids-quota-lab"
+            root = Path(td) / "safepckids-quota-lab"
             root.mkdir()
             db = root / "fixture.sqlite3"
             storage = Storage(db)
@@ -184,7 +184,7 @@ class LabBrokerWindowsTests(unittest.TestCase):
         # Pure preflight runs before any OS resource is opened.
         with self.assertRaises(ValueError):
             serve_one_lab_request(
-                pipe_name=r"\\.\pipe\FaceKidsAuthPipe", data_path=Path("unknown"),
+                pipe_name=r"\\.\pipe\SafePCKidsAuthPipe", data_path=Path("unknown"),
                 enrolled_child_by_sid={"S-1-5-18": 1},
             )
 

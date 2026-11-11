@@ -29,8 +29,8 @@
 
 #pragma comment(lib, "advapi32.lib")
 
-static constexpr wchar_t kService[] = L"FaceKidsBrokerPoc";
-static constexpr wchar_t kPipe[] = LR"(\\.\pipe\FaceKidsBrokerPoc-v1)";
+static constexpr wchar_t kService[] = L"SafePCKidsBrokerPoc";
+static constexpr wchar_t kPipe[] = LR"(\\.\pipe\SafePCKidsBrokerPoc-v1)";
 static constexpr wchar_t kAcl[] = L"D:P(A;;GA;;;SY)(A;;GA;;;BA)";
 static HANDLE g_stop = nullptr;
 static SERVICE_STATUS_HANDLE g_handler = nullptr;
@@ -104,11 +104,11 @@ static std::wstring configured_target_sid() {
     wchar_t sid[256]={};
     DWORD bytes=sizeof(sid);
     LONG status=RegGetValueW(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\FaceControlKidsPC\\CredentialProvider",
+        L"SOFTWARE\\SafePCKids\\CredentialProvider",
         L"TargetUserSid", RRF_RT_REG_SZ, nullptr, sid, &bytes);
     if (status!=ERROR_SUCCESS) return {};
     const std::wstring result(sid);
-    return facekids_guard::valid_local_account_sid(result) ? result : std::wstring{};
+    return safepckids_guard::valid_local_account_sid(result) ? result : std::wstring{};
 }
 
 static void local_service_day(char (&day)[11]) {
@@ -163,9 +163,9 @@ static bool transfer(HANDLE pipe, bool read, void* buffer, DWORD size, DWORD* by
     return success;
 }
 
-static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
+static bool run_pipe(bool oneShot, safepckids_quota::Store* quotas = nullptr,
                      const std::wstring& target_sid = L"",
-                     const facekids_camera::DeviceInventory* camera = nullptr) {
+                     const safepckids_camera::DeviceInventory* camera = nullptr) {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!security_descriptor(&sd)) {
         g_error = GetLastError();
@@ -200,32 +200,32 @@ static bool run_pipe(bool oneShot, facekids_quota::Store* quotas = nullptr,
                     answer="PONG";
                 } else if (askCamera && role != CallerRole::None && camera) {
                     switch (camera->capability) {
-                        case facekids_camera::Capability::NoCamera:
+                        case safepckids_camera::Capability::NoCamera:
                             answer="CAMERA_NONE"; break;
-                        case facekids_camera::Capability::EnumeratedOnly:
+                        case safepckids_camera::Capability::EnumeratedOnly:
                             answer="CAMERA_ENUMERATED"; break;
                         default: answer="CAMERA_UNAVAILABLE"; break;
                     }
                 } else {
-                    facekids_ipc::Request parsed={};
-                    const bool valid=facekids_ipc::parse(
-                        request, length, &parsed)==facekids_ipc::ParseResult::Valid;
+                    safepckids_ipc::Request parsed={};
+                    const bool valid=safepckids_ipc::parse(
+                        request, length, &parsed)==safepckids_ipc::ParseResult::Valid;
                     // Precheck is protected by the SYSTEM *user token*,
                     // not by an untrusted SID/identity supplied over IPC.
                     if (valid && role == CallerRole::Administrator &&
-                        quotas && parsed.command == facekids_ipc::kEraseTemplates) {
+                        quotas && parsed.command == safepckids_ipc::kEraseTemplates) {
                         int erased=0;
                         if (quotas->erase_templates(static_cast<int>(parsed.child_id),&erased))
                             answer="ERASED"; // never send face template bytes
                     } else if (valid && role == CallerRole::LocalSystem &&
-                        parsed.command == facekids_ipc::kPrecheck &&
+                        parsed.command == safepckids_ipc::kPrecheck &&
                         quotas && !target_sid.empty()) {
                         char day[11]={};
                         local_service_day(day);
-                        auto gate=facekids_gate::check_live_wts(
+                        auto gate=safepckids_gate::check_live_wts(
                             parsed.session_id, target_sid, *quotas,
                             static_cast<int>(parsed.child_id), day);
-                        if (gate==facekids_gate::GatePrerequisite::ReadyForFacialPolicy)
+                        if (gate==safepckids_gate::GatePrerequisite::ReadyForFacialPolicy)
                             answer="PRECHECK_ONLY"; // NEVER a logon ticket
                     }
                 }
@@ -260,8 +260,8 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     report(SERVICE_START_PENDING);
     // A misconfigured SCM account must never expose the protected broker.
     // Elevated Administrators are NOT equivalent to LocalSystem.
-    if (facekids_service_identity::current_process_identity() !=
-        facekids_service_identity::ServiceIdentity::LocalSystem) {
+    if (safepckids_service_identity::current_process_identity() !=
+        safepckids_service_identity::ServiceIdentity::LocalSystem) {
         report(SERVICE_STOPPED, ERROR_ACCESS_DENIED);
         CloseHandle(g_stop);
         g_stop = nullptr;
@@ -269,8 +269,8 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     }
     // Service-only persistent quota DB. This path is NEVER touched by tests,
     // --sessions or any unprivileged client operation.
-    facekids_quota::Store quotas;
-    const std::wstring root = facekids_quota::program_data_root();
+    safepckids_quota::Store quotas;
+    const std::wstring root = safepckids_quota::program_data_root();
     if (root.empty() || !quotas.open(root)) {
         report(SERVICE_STOPPED, ERROR_ACCESS_DENIED);
         CloseHandle(g_stop);
@@ -280,7 +280,7 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
     // Device enumeration is performed in the actual LocalSystem process.
     // Presence is informational ONLY: it is NOT liveness, face identity
     // or evidence valid for the internal facial authorization model.
-    const auto worker = facekids_protected_camera::inspect_local_system();
+    const auto worker = safepckids_protected_camera::inspect_local_system();
     // OS token is checked at service startup and again inside this worker.
     // Its enumeration status is informational, never an auth grant.
     const auto camera = worker.inventory;
@@ -297,7 +297,7 @@ static void WINAPI service_main(DWORD, LPWSTR*) {
 // Real ACL regression against the file created by the LocalSystem
 // service on an EPHEMERAL Windows test runner. No child accounts created.
 static int restricted_token_database_client() {
-    const std::wstring db=facekids_quota::program_data_root()+L"\\quota.sqlite3";
+    const std::wstring db=safepckids_quota::program_data_root()+L"\\quota.sqlite3";
     if (GetFileAttributesW(db.c_str())==INVALID_FILE_ATTRIBUTES) {
         std::puts("FAIL: protected quota DB not present");
         return 4;
@@ -386,8 +386,8 @@ static int erase_templates_admin_client(int child) {
     HANDLE pipe=CreateFileW(kPipe,GENERIC_READ|GENERIC_WRITE,0,nullptr,
         OPEN_EXISTING,SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION,nullptr);
     if(pipe==INVALID_HANDLE_VALUE) return 5;
-    facekids_ipc::Request request={};
-    request.command=facekids_ipc::kEraseTemplates;
+    safepckids_ipc::Request request={};
+    request.command=safepckids_ipc::kEraseTemplates;
     request.session_id=0;
     request.child_id=static_cast<uint32_t>(child);
     DWORD written=0,received=0;
@@ -465,7 +465,7 @@ static int oversized_request_client() {
         OPEN_EXISTING, SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
     if (pipe==INVALID_HANDLE_VALUE) return 5;
     BYTE message[128]={};
-    facekids_ipc::Request request={};
+    safepckids_ipc::Request request={};
     request.session_id=7;
     request.child_id=1;
     std::memcpy(message, &request, sizeof(request));
@@ -492,7 +492,7 @@ static int malformed_request_client() {
                             OPEN_EXISTING,
                             SECURITY_SQOS_PRESENT|SECURITY_IMPERSONATION, nullptr);
     if (pipe==INVALID_HANDLE_VALUE) return 5;
-    facekids_ipc::Request request={};
+    safepckids_ipc::Request request={};
     request.magic=0; // invalid even though the remaining fields are plausible
     request.session_id=7;
     request.child_id=1;
@@ -518,7 +518,7 @@ static int negative_precheck_client() {
     DWORD session=0, written=0, read=0;
     char response[32]={};
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    facekids_ipc::Request request={};
+    safepckids_ipc::Request request={};
     request.session_id=session ? session : 1;
     request.child_id=1;
     const bool sent=WriteFile(pipe,&request,sizeof(request),&written,nullptr) &&
@@ -541,11 +541,11 @@ static bool facial_policy_self_test() {
         !GetTempFileNameW(temporary, L"FPL", 0, unique) ||
         !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if (!facekids_quota::make_secure_directory(root)) return false;
+    if (!safepckids_quota::make_secure_directory(root)) return false;
     bool passed=false;
     {
-        facekids_quota::Store database;
-        passed=database.open(root) && facekids_face::self_test(database);
+        safepckids_quota::Store database;
+        passed=database.open(root) && safepckids_face::self_test(database);
     }
     DeleteFileW((root + L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -558,11 +558,11 @@ static bool one_use_preflight_self_test() {
        !GetTempFileNameW(temporary,L"FOT",0,unique) ||
        !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if(!facekids_quota::make_secure_directory(root)) return false;
+    if(!safepckids_quota::make_secure_directory(root)) return false;
     bool ok=false;
     {
-        facekids_quota::Store quota;
-        ok=quota.open(root) && facekids_ticket::self_test(quota);
+        safepckids_quota::Store quota;
+        ok=quota.open(root) && safepckids_ticket::self_test(quota);
     }
     DeleteFileW((root+L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -575,11 +575,11 @@ static bool face_quota_bridge_self_test() {
        !GetTempFileNameW(temporary,L"FQB",0,unique) ||
        !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if(!facekids_quota::make_secure_directory(root)) return false;
+    if(!safepckids_quota::make_secure_directory(root)) return false;
     bool valid=false;
     {
-        facekids_quota::Store quota;
-        valid=quota.open(root) && facekids_bridge::self_test(quota);
+        safepckids_quota::Store quota;
+        valid=quota.open(root) && safepckids_bridge::self_test(quota);
     }
     DeleteFileW((root+L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -592,11 +592,11 @@ static bool matcher_self_test() {
        !GetTempFileNameW(temporary,L"FMC",0,unique) ||
        !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if(!facekids_quota::make_secure_directory(root)) return false;
+    if(!safepckids_quota::make_secure_directory(root)) return false;
     bool ok=false;
     {
-        facekids_quota::Store quota;
-        ok=quota.open(root) && facekids_matcher::self_test(quota);
+        safepckids_quota::Store quota;
+        ok=quota.open(root) && safepckids_matcher::self_test(quota);
     }
     DeleteFileW((root+L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -611,11 +611,11 @@ static bool usage_meter_self_test() {
        !GetTempFileNameW(temporary,L"FUM",0,unique) ||
        !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if(!facekids_quota::make_secure_directory(root)) return false;
+    if(!safepckids_quota::make_secure_directory(root)) return false;
     bool passed=false;
     {
-        facekids_quota::Store quota;
-        passed=quota.open(root) && facekids_usage::self_test(quota);
+        safepckids_quota::Store quota;
+        passed=quota.open(root) && safepckids_usage::self_test(quota);
     }
     DeleteFileW((root+L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -629,11 +629,11 @@ static bool quota_gate_self_test() {
         !GetTempFileNameW(temporary, L"FQP", 0, unique) ||
         !DeleteFileW(unique)) return false;
     const std::wstring root(unique);
-    if (!facekids_quota::make_secure_directory(root)) return false;
+    if (!safepckids_quota::make_secure_directory(root)) return false;
     bool passed = false;
     {
-        facekids_quota::Store database;
-        passed = database.open(root) && facekids_gate::self_test(database);
+        safepckids_quota::Store database;
+        passed = database.open(root) && safepckids_gate::self_test(database);
     }
     DeleteFileW((root + L"\\quota.sqlite3").c_str());
     RemoveDirectoryW(root.c_str());
@@ -647,57 +647,57 @@ int wmain(int argc, wchar_t** argv) {
         return erase_templates_admin_client(int(argv[2][0]-L'0'));
     }
     if (argc != 2) {
-        std::puts("Usage: FaceKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --restricted-db-test | --erase-templates 1..3 | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
+        std::puts("Usage: SafePCKidsBrokerPoc.exe --self-test | --service-identity | --camera-capability | --frame-probe | --sessions | --console-once | --ping | --restricted-token-test | --restricted-db-test | --erase-templates 1..3 | --camera-status | --precheck-as-admin | --malformed-request | --oversized-request | --service");
         return 2;
     }
     if (std::wcscmp(argv[1], L"--service-identity") == 0) {
-        const auto id=facekids_service_identity::current_process_identity();
-        if (id==facekids_service_identity::ServiceIdentity::LocalSystem)
+        const auto id=safepckids_service_identity::current_process_identity();
+        if (id==safepckids_service_identity::ServiceIdentity::LocalSystem)
             std::puts("SYSTEM");
-        else if (id==facekids_service_identity::ServiceIdentity::NotLocalSystem)
+        else if (id==safepckids_service_identity::ServiceIdentity::NotLocalSystem)
             std::puts("NOT_SYSTEM");
         else std::puts("IDENTITY_UNAVAILABLE");
-        return id==facekids_service_identity::ServiceIdentity::Unavailable ? 4 : 0;
+        return id==safepckids_service_identity::ServiceIdentity::Unavailable ? 4 : 0;
     }
     if (std::wcscmp(argv[1], L"--frame-probe") == 0) {
         // Opt-in physical-camera diagnostic ONLY; never entered from service.
-        const auto measured=facekids_frame::capture_one_frame();
-        const char* label=measured.status==facekids_frame::Status::FrameMeasured
+        const auto measured=safepckids_frame::capture_one_frame();
+        const char* label=measured.status==safepckids_frame::Status::FrameMeasured
           ? (measured.nonuniform ? "FRAME_OK_NONUNIFORM" : "FRAME_OK_UNIFORM")
-          : measured.status==facekids_frame::Status::NoCamera
+          : measured.status==safepckids_frame::Status::NoCamera
             ? "NO_CAMERA" : "CAPTURE_UNAVAILABLE";
-        std::printf("FaceKids opt-in frame check: %s | hr=0x%08lx\\n",
+        std::printf("SafePCKids opt-in frame check: %s | hr=0x%08lx\\n",
                     label, static_cast<unsigned long>(measured.hr));
         std::puts("Diagnostic only. No frames saved and NO facial authentication.");
         return 0;
     }
     if (std::wcscmp(argv[1], L"--camera-capability") == 0) {
-        const auto inventory=facekids_camera::enumerate();
-        std::printf("FaceKids Windows camera capability: %s | devices=%u | hr=0x%08lx\n",
-                    facekids_camera::describe(inventory.capability),
+        const auto inventory=safepckids_camera::enumerate();
+        std::printf("SafePCKids Windows camera capability: %s | devices=%u | hr=0x%08lx\n",
+                    safepckids_camera::describe(inventory.capability),
                     inventory.device_count, static_cast<unsigned long>(inventory.code));
         std::puts("No image sampled, no face recognition, no login authorization.");
         return inventory.usable_for_authentication() ? 3 : 0;
     }
     if (std::wcscmp(argv[1], L"--sessions") == 0)
-        return facekids_wts::dump_local_sessions();
+        return safepckids_wts::dump_local_sessions();
     if (std::wcscmp(argv[1], L"--self-test") == 0) {
         PSECURITY_DESCRIPTOR sd = nullptr;
         bool valid = security_descriptor(&sd) && IsValidSecurityDescriptor(sd);
         if (sd) LocalFree(sd);
-        if (!valid || !facekids_wts::self_test() || !facekids_guard::self_test() ||
-            !facekids_quota::self_test() || !quota_gate_self_test() ||
-            !facekids_ipc::self_test() || !facial_policy_self_test() ||
-            !facekids_camera::self_test() ||
-            !facekids_frame::self_test() ||
+        if (!valid || !safepckids_wts::self_test() || !safepckids_guard::self_test() ||
+            !safepckids_quota::self_test() || !quota_gate_self_test() ||
+            !safepckids_ipc::self_test() || !facial_policy_self_test() ||
+            !safepckids_camera::self_test() ||
+            !safepckids_frame::self_test() ||
             !usage_meter_self_test() ||
             !matcher_self_test() ||
             !face_quota_bridge_self_test() ||
             !one_use_preflight_self_test() ||
-            !facekids_consensus::self_test() ||
-            !facekids_lock_policy::self_test() ||
-            !facekids_protected_camera::self_test() ||
-            !facekids_service_identity::self_test()) return 3;
+            !safepckids_consensus::self_test() ||
+            !safepckids_lock_policy::self_test() ||
+            !safepckids_protected_camera::self_test() ||
+            !safepckids_service_identity::self_test()) return 3;
         std::puts("PASS: SCM, ACL-restricted pipe and SQLite, WTS, facial readiness internal simulation");
         return 0;
     }
@@ -711,7 +711,7 @@ int wmain(int argc, wchar_t** argv) {
     if (std::wcscmp(argv[1], L"--console-once") == 0) {
         g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stop) return 3;
-        const auto camera=facekids_camera::enumerate();
+        const auto camera=safepckids_camera::enumerate();
         bool success = run_pipe(true, nullptr, L"", &camera);
         CloseHandle(g_stop);
         g_stop = nullptr;

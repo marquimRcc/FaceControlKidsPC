@@ -76,7 +76,7 @@ export const cameraProbeSchema = z.object({
 });
 export type CameraProbe = z.infer<typeof cameraProbeSchema>;
 
-export interface FaceKidsDesktopApi {
+export interface SafePCKidsDesktopApi {
   getContext(): Promise<DesktopContext>;
   getAdminState(): Promise<AdminState>;
   enrollChild(input: { name: string; minutes: number }): Promise<{ childId: number }>;

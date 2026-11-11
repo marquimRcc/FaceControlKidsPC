@@ -1,8 +1,8 @@
-# ADR-002 — Plataforma Linux / Regata OS (FaceControlKidsPC)
+# ADR-002 — Plataforma Linux / Regata OS (SafePCKids)
 
 **Status:** Decisões de arquitetura registradas; nenhuma integração Linux instalada ou implementada.  
 **Data:** 2026-10-20  
-**Projeto de origem:** https://github.com/marquimRcc/FaceControlKidsPC  
+**Projeto de origem:** https://github.com/marquimRcc/SafePCKids  
 **Autor original:** Marcos Queiroz Gomes (@marquimRcc)  
 **Derivada de:** docs/RFC-001-FACE-ACCESS-GATE.md  
 **Alcance:** Regata OS baseado em openSUSE, KDE Plasma 6, com atenção especial ao Wayland.
@@ -11,7 +11,7 @@
 
 O cenário principal é **uma conta Linux de usuário comum compartilhada pelos três filhos**. A webcam reconhece individualmente o filho presente e um controlador local verifica **saldo por criança**, mesmo que todos estejam conectados ao mesmo usuário do sistema operacional. O responsável utiliza outra conta com privilégios administrativos.
 
-O projeto NÃO pretende fazer o login nativo do Linux automaticamente em nome de várias crianças na mesma conta. A liberação facial inicial será uma autorização de uso da interface do FaceControlKidsPC dentro da sessão já aberta. Uma sobreposição visual não é equivalente a um bloqueio seguro do KDE ou a autenticação do PAM.
+O projeto NÃO pretende fazer o login nativo do Linux automaticamente em nome de várias crianças na mesma conta. A liberação facial inicial será uma autorização de uso da interface do SafePCKids dentro da sessão já aberta. Uma sobreposição visual não é equivalente a um bloqueio seguro do KDE ou a autenticação do PAM.
 
 ## Decisões adotadas para a primeira implementação Linux
 
@@ -24,7 +24,7 @@ O projeto NÃO pretende fazer o login nativo do Linux automaticamente em nome de
 | L-05 | Executor da sessão dos filhos | Agente na sessão gráfica KDE, iniciado e supervisionado pelo systemd do usuário e/or autostart XDG | Integração com ciclo de vida do desktop; um usuário comum ainda pode encerrar o próprio agente |
 | L-06 | Controlador privilegiado | Daemon de sistema gerenciado por systemd | Persiste limites e contabilização; não abre webcam nem desenha interface |
 | L-07 | Comunicação local | Socket Unix autenticado por credenciais do SO (ex.: SO_PEERCRED), com política administrativa e validação de UID | Não confiar em nome de conta, UID, id da criança ou segundos declarados em JSON |
-| L-08 | Banco | SQLite em diretório de serviço sob /var/lib/facecontrolkidspc/ e controle de permissões | A conta dos filhos não poderá alterar diretamente o saldo |
+| L-08 | Banco | SQLite em diretório de serviço sob /var/lib/safepckids/ e controle de permissões | A conta dos filhos não poderá alterar diretamente o saldo |
 | L-09 | Estado da sessão | systemd-logind via D-Bus | Detectar sessão ativa, bloqueio, mudança de usuário, suspensão e retomada; contabilizar só quando autorizado |
 | L-10 | Interface de bloqueio visual | **Qt 6 / PySide6** como opção prioritária a validar no KDE Plasma 6; avaliar LayerShellQt sob Wayland | Melhor alinhamento com o desktop KDE do que depender apenas do Tkinter/XWayland. Não é barreira de segurança |
 | L-11 | Recuperação | Conta do responsável, senha tradicional e procedimento de desinstalação/reparação | Evitar bloqueio permanente, inclusive após falha de câmera ou serviço |
@@ -45,7 +45,7 @@ Utilizar somente se houver ganho mensurável em detecção de ausência, orienta
 
 ### InsightFace / ArcFace — ALTERNATIVA, NÃO PADRÃO
 
-Tem reconhecimento e vivacidade opcionais atuais, mas seus pesos pré-treinados são declarados para pesquisa não comercial. Como o FaceControlKidsPC é aberto e permite redistribuição, NÃO incorporar os pacotes padrão de modelos à distribuição sem uma licença específica válida e verificação dos termos. Pode ficar como referência para benchmarking e estudo.
+Tem reconhecimento e vivacidade opcionais atuais, mas seus pesos pré-treinados são declarados para pesquisa não comercial. Como o SafePCKids é aberto e permite redistribuição, NÃO incorporar os pacotes padrão de modelos à distribuição sem uma licença específica válida e verificação dos termos. Pode ficar como referência para benchmarking e estudo.
 
 ### Howdy — REFERÊNCIA DE AUTENTICAÇÃO NATIVA LINUX, **NÃO** O GATE PRINCIPAL
 
@@ -71,7 +71,7 @@ Não substituem vantajosamente a combinação existente; várias referências de
 
 ## Licença dos modelos e open source
 
-- Código do FaceControlKidsPC: MIT, com preservação de copyright e LICENSE.
+- Código do SafePCKids: MIT, com preservação de copyright e LICENSE.
 - OpenCV: Apache-2.0.
 - Modelo YuNet 2023mar no OpenCV Zoo: diretório do modelo com licença **MIT**.
 - Modelo SFace 2021dec no OpenCV Zoo: diretório do modelo com licença **Apache-2.0**, sujeito à checagem da procedência/termos dos pesos treinados e a eventuais obrigações associadas ao conjunto de treinamento.

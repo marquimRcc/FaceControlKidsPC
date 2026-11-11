@@ -4,7 +4,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCHER = ROOT / "scripts" / "Iniciar-FaceKids-VM-Developer.ps1"
+LAUNCHER = ROOT / "scripts" / "Iniciar-SafePCKids-VM-Developer.ps1"
 
 
 class VmPythonBootstrapTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class VmPythonBootstrapTests(unittest.TestCase):
         self.assertIn("Include_pip=1", text)
         self.assertIn("InstallAllUsers=0", text)
         self.assertIn("PrependPath=0", text)
-        self.assertIn("FaceKids-VM-Lab", text)
+        self.assertIn("SafePCKids-VM-Lab", text)
         self.assertIn("'runtime\\python311'", text)
         self.assertNotIn("winget.exe install", text)
         self.assertNotIn("regsvr32.exe", text)
@@ -35,17 +35,17 @@ class VmPythonBootstrapTests(unittest.TestCase):
 
     def test_vm_launcher_avoids_powershell_native_python_quote_fragility(self):
         launcher = LAUNCHER.read_text(encoding="utf-8")
-        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
+        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-SafePCKids.ps1").read_text(
             encoding="utf-8")
-        self.assertIn("-m facekids.vm_guest_diagnostics dependencies", launcher)
-        self.assertIn("-m facekids.vm_guest_diagnostics camera", preflight)
+        self.assertIn("-m safepckids.vm_guest_diagnostics dependencies", launcher)
+        self.assertIn("-m safepckids.vm_guest_diagnostics camera", preflight)
         self.assertNotIn("-c 'import tkinter,cv2,numpy;print(", launcher)
         self.assertNotIn("-c $code", preflight)
         self.assertIn("Push-Location $repo", launcher)
         self.assertIn("Push-Location $root", preflight)
 
     def test_p6_finds_same_workspace_venv_before_global_python(self):
-        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-FaceKids.ps1").read_text(
+        preflight = (ROOT / "scripts" / "Testar-P5-P6-VM-SafePCKids.ps1").read_text(
             encoding="utf-8")
         self.assertIn("$labVenv = Join-Path (Split-Path $root -Parent)", preflight)
         self.assertIn("if (Test-Path -LiteralPath $labVenv -PathType Leaf)", preflight)

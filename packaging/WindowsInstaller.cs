@@ -35,15 +35,15 @@ internal static class WindowsInstaller
             }
 
             string installRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "FaceKids");
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "SafePCKids");
             Directory.CreateDirectory(installRoot);
             if ((File.GetAttributes(installRoot) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("A pasta FaceKids em Arquivos de Programas e um link.");
+                throw new IOException("A pasta SafePCKids em Arquivos de Programas e um link.");
 
             // A new directory leaves any currently running installation intact.
             string release = Path.Combine(installRoot, "app-" + Guid.NewGuid().ToString("N"));
             Extract(release);
-            using (Process wizard = StartPython(release, "pythonw.exe", "-E -s -m facekids.launcher --setup"))
+            using (Process wizard = StartPython(release, "pythonw.exe", "-E -s -m safepckids.launcher --setup"))
             {
                 wizard.WaitForExit();
                 return wizard.ExitCode;
@@ -64,7 +64,7 @@ internal static class WindowsInstaller
     private static int Fail(Exception error, bool selfTest)
     {
         if (!selfTest)
-            MessageBox.Show(error.Message, "Instalador FaceKids", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(error.Message, "Instalador SafePCKids", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return 1;
     }
 
@@ -73,24 +73,24 @@ internal static class WindowsInstaller
         ProcessStartInfo start = new ProcessStartInfo(Path.Combine(directory, "runtime", executable), arguments) {
             WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true
         };
-        start.EnvironmentVariables["FACEKIDS_ROOT"] = directory;
+        start.EnvironmentVariables["SAFEPCKIDS_ROOT"] = directory;
         return Process.Start(start);
     }
 
     private static void Extract(string destination)
     {
-        using (Stream payload = Assembly.GetExecutingAssembly().GetManifestResourceStream("FaceKidsPayload"))
+        using (Stream payload = Assembly.GetExecutingAssembly().GetManifestResourceStream("SafePCKidsPayload"))
         using (ZipArchive archive = new ZipArchive(payload, ZipArchiveMode.Read))
             archive.ExtractToDirectory(destination);
     }
 
     private static int TestPackage()
     {
-        string temporary = Path.Combine(Path.GetTempPath(), "FaceKids-test-" + Guid.NewGuid().ToString("N"));
+        string temporary = Path.Combine(Path.GetTempPath(), "SafePCKids-test-" + Guid.NewGuid().ToString("N"));
         try
         {
             Extract(temporary);
-            using (Process test = StartPython(temporary, "python.exe", "-E -s -m facekids.package_check"))
+            using (Process test = StartPython(temporary, "python.exe", "-E -s -m safepckids.package_check"))
             {
                 test.WaitForExit();
                 return test.ExitCode;

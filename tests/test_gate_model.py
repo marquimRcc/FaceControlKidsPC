@@ -1,6 +1,6 @@
 import unittest
 
-from facekids.gate_model import GateModel, GateState
+from safepckids.gate_model import GateModel, GateState
 
 
 class GateModelTest(unittest.TestCase):

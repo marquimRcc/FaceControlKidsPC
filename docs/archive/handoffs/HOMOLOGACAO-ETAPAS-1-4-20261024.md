@@ -1,6 +1,6 @@
-# FaceControlKidsPC — homologação incremental das etapas 1–4
+# SafePCKids — homologação incremental das etapas 1–4
 
-**Data:** 24/10/2026. **Branch:** `fix/facekids-ipc-security-hardening-20261024`. **PR:** #4 (draft, base handoff).
+**Data:** 24/10/2026. **Branch:** `fix/safepckids-ipc-security-hardening-20261024`. **PR:** #4 (draft, base handoff).
 
 ## 1. Vínculo facial confiável no serviço — integração em código, não homologação física
 
@@ -20,7 +20,7 @@
 
 ## 3. Migração e rollback — prova reversível real com objetos SINTÉTICOS
 
-- `quota_migration_lab.py` aceita somente diretórios `facekids-quota-lab` não vinculados por symlink. Snapshot consistente usa a API `sqlite3.Connection.backup`; nova cópia é preparada e promovida por `os.replace`.
+- `quota_migration_lab.py` aceita somente diretórios `safepckids-quota-lab` não vinculados por symlink. Snapshot consistente usa a API `sqlite3.Connection.backup`; nova cópia é preparada e promovida por `os.replace`.
 - Falha injetada não promove o arquivo; o backup permanece íntegro. Restauração substitui somente o destino de laboratório, sem alterar a base legado.
 - `ci_quota_migration_windows.py` utiliza conta local infantil temporária no runner GitHub-hosted Windows, ACLs reais NTFS e banco de três perfis fictícios. Confere que o token infantil **não consegue abrir, gravar ou substituir** banco e snapshot protegidos, mas escreve no cache.
 - Serviço/admin debita o arquivo sintético; rollback restaura as três quotas originais. A conta e a pasta temporárias são removidas com `finally`.
@@ -29,7 +29,7 @@
 ## 4. Homologação Windows/VM — alcance exato
 
 - GitHub Actions Windows Server descartável executa: SCM real de laboratório sob SYSTEM, comparação de SIDs, Named Pipe de laboratório, token infantil sintético, ACL NTFS, integração do banco, rollback e compilação real do CP em host sem registrá-lo no Winlogon.
-- `Testar-Preflight-VM-FaceKids.ps1` é **somente leitura**, relata características do host e mantém `ReadyForFamilyInstallation=false`, independentemente de o modelo parecer uma VM.
+- `Testar-Preflight-VM-SafePCKids.ps1` é **somente leitura**, relata características do host e mantém `ReadyForFamilyInstallation=false`, independentemente de o modelo parecer uma VM.
 - **Não há evidência ainda de snapshot externo restaurado, recuperação real do Winlogon, registro do CP numa VM com interface de login, nem webcam/liveness/Win+L físicos**. Um runner descartável não substitui essa VM restaurável.
 
 ## Decisão / portões para implantação
@@ -43,4 +43,4 @@
 | Snapshot VM e recuperação do login convencional testados | **Bloqueada** |
 | Atualização da instalação doméstica e merge na main | **Não realizados** |
 
-Até liberar todos os portões, não modificar `main`, registro COM/HKLM do Credential Provider, credenciais Windows, tarefas, `ProgramData\FaceKids` ou banco/fotos reais.
+Até liberar todos os portões, não modificar `main`, registro COM/HKLM do Credential Provider, credenciais Windows, tarefas, `ProgramData\SafePCKids` ou banco/fotos reais.

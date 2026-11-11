@@ -1,7 +1,7 @@
-# FaceKids - read-only Windows SID check from the parent's account.
+# SafePCKids - read-only Windows SID check from the parent's account.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-Write-Host '=== FaceKids: Diagnostico Windows ===' -ForegroundColor Cyan
+Write-Host '=== SafePCKids: Diagnostico Windows ===' -ForegroundColor Cyan
 $branchName = (& git -C $root branch --show-current).Trim()
 if ($LASTEXITCODE -ne 0 -or $branchName -ne 'feature/windows-native-unlock-poc') {
     throw "Branch incorreta: $branchName"
@@ -16,7 +16,7 @@ Write-Host "Conta Filhos: $($child.Name)"
 Write-Host "SID Filhos: $($child.SID.Value)"
 Write-Host "Conta Filhos habilitada: $($child.Enabled)"
 if ($me.User.Value -eq $child.SID.Value) { throw 'Execute na conta principal, nao em Filhos.' }
-$regPath = 'HKLM:\SOFTWARE\FaceControlKidsPC\CredentialProvider'
+$regPath = 'HKLM:\SOFTWARE\SafePCKids\CredentialProvider'
 $cfg = Get-ItemProperty -Path $regPath -Name TargetUserSid -ErrorAction SilentlyContinue
 if ($null -eq $cfg) {
     Write-Host 'Provider: SID nao configurado no registro (comportamento esperado).'
@@ -33,7 +33,7 @@ try {
     & $py -m unittest discover -s tests -q
     if ($LASTEXITCODE -ne 0) { throw "Testes falharam: $LASTEXITCODE" }
     Write-Host 'Consultando sessoes reais do Windows (WTS) sem alterar nada...'
-    & $py -m facekids.windows_session_diagnostic
+    & $py -m safepckids.windows_session_diagnostic
     if ($LASTEXITCODE -ne 0) { throw "Diagnostico WTS falhou: $LASTEXITCODE" }
 
 } finally {

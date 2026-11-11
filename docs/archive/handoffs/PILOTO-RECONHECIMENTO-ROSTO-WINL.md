@@ -1,7 +1,7 @@
 # Diagnostico: rosto do responsavel durante Win+L
 
 Ensaio opcional, com camera XWF-1080P e cadastro adulto previamente
-feito em \`%LOCALAPPDATA%\FaceKids\piloto-responsavel\piloto.sqlite3\`.
+feito em \`%LOCALAPPDATA%\SafePCKids\piloto-responsavel\piloto.sqlite3\`.
 
 - A webcam continua no processo do usuario quando a sessao e bloqueada
   (nao existe captura autenticada pela interface LogonUI)

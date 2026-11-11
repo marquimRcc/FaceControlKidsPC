@@ -16,7 +16,7 @@ static const CLSID kProviderId={0xfac0d041,0x3dd0,0x4a8c,
 
 int wmain(int argc, wchar_t** argv) {
     if(argc!=2) {
-        std::puts("Usage: FaceKidsProductionDenyTest.exe FaceKidsDiagnosticProvider.dll");
+        std::puts("Usage: SafePCKidsProductionDenyTest.exe SafePCKidsDiagnosticProvider.dll");
         return 2;
     }
     const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
@@ -28,8 +28,8 @@ int wmain(int argc, wchar_t** argv) {
         return 4;
     }
     // Host-test injection exports must NEVER occur in the production DLL.
-    if(GetProcAddress(module,"FaceKidsSetDiagnosticSidForHost") ||
-       GetProcAddress(module,"FaceKidsDiagnosticPrecheckForHost")) {
+    if(GetProcAddress(module,"SafePCKidsSetDiagnosticSidForHost") ||
+       GetProcAddress(module,"SafePCKidsDiagnosticPrecheckForHost")) {
         exitCode=5;
     }
     auto factoryFunction=reinterpret_cast<GetFactory>(

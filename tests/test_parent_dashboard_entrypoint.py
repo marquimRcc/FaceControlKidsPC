@@ -3,18 +3,18 @@ import inspect
 from pathlib import Path
 import unittest
 
-from facekids import admin_dashboard
-from facekids.parent_ui_state import filter_children, load_overview, validate_schedule
+from safepckids import admin_dashboard
+from safepckids.parent_ui_state import filter_children, load_overview, validate_schedule
 
 
 class ParentDashboardEntrypointTests(unittest.TestCase):
     def test_bat_launches_the_modernized_parent_dashboard(self):
         root = Path(__file__).resolve().parents[1]
-        launcher_file = root / "scripts" / "legacy" / "abrir-facekids.bat"
+        launcher_file = root / "scripts" / "legacy" / "abrir-safepckids.bat"
         if not launcher_file.exists():
-            launcher_file = root / "abrir-facekids.bat"
+            launcher_file = root / "abrir-safepckids.bat"
         launcher = launcher_file.read_text(encoding="utf-8")
-        self.assertIn("-m facekids.admin_dashboard", launcher)
+        self.assertIn("-m safepckids.admin_dashboard", launcher)
         self.assertTrue(callable(admin_dashboard.main))
         self.assertTrue(issubclass(admin_dashboard.AdminDashboard, admin_dashboard.tk.Tk))
 
@@ -32,7 +32,7 @@ class ParentDashboardEntrypointTests(unittest.TestCase):
     def test_import_smoke_does_not_require_a_display(self):
         # Only inspect class and module; do not instantiate a Tk root.
         self.assertEqual(admin_dashboard.AdminDashboard.__module__,
-                         "facekids.admin_dashboard")
+                         "safepckids.admin_dashboard")
         self.assertTrue(callable(filter_children))
         self.assertTrue(callable(load_overview))
 

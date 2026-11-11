@@ -13,10 +13,10 @@ from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 
-from facekids.quota_broker_policy import ServiceOwnedQuotaBroker
-from facekids.quota_broker_protocol import VerifiedClient, handle_broker_read
-from facekids.quota_broker_wts import WtsLockTracker, WtsSnapshot, VerifiedWtsQuotaWorker
-from facekids.storage import Storage
+from safepckids.quota_broker_policy import ServiceOwnedQuotaBroker
+from safepckids.quota_broker_protocol import VerifiedClient, handle_broker_read
+from safepckids.quota_broker_wts import WtsLockTracker, WtsSnapshot, VerifiedWtsQuotaWorker
+from safepckids.storage import Storage
 
 DAY = "2026-10-24"
 SID = "S-1-5-21-90-80-70-1001"
@@ -32,8 +32,8 @@ class DeterministicClock:
 
 def run_synthetic_acceptance() -> dict[str, object]:
     # All file paths are allocated inside a disposable tempfile; never read
-    # C:\ProgramData\FaceKids or any path from child-supplied IPC.
-    with TemporaryDirectory(prefix="facekids-quota-accept-") as root:
+    # C:\ProgramData\SafePCKids or any path from child-supplied IPC.
+    with TemporaryDirectory(prefix="safepckids-quota-accept-") as root:
         directory = Path(root)
         database = directory / "synthetic-only.sqlite3"
         backup_path = directory / "snapshot-only.sqlite3"
@@ -101,7 +101,7 @@ def run_synthetic_acceptance() -> dict[str, object]:
             # what fields an untrusted child invents.
             identity = VerifiedClient(SID, SID, child_ids[2])
             forged = json.dumps({
-                "version": "FACEKIDS_QUOTA_V1",
+                "version": "SAFEPCKIDS_QUOTA_V1",
                 "action": "CHARGE", "seconds": 9000,
                 "child_id": child_ids[0], "session_id": 42,
             }).encode()

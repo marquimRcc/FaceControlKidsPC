@@ -13,7 +13,7 @@ requer CallerRole::Administrator (grupo efetivamente habilitado).
 - Clientes da conta Filhos nao conseguem abrir o pipe protegido
 - O Credential Provider nunca envia operacao de exclusao, nem recebe senha
 - A unica maneira de disparar a manutencao neste PoC e um admin elevado
-  executar explicitamente FaceKidsBrokerPoc.exe --erase-templates 1..3
+  executar explicitamente SafePCKidsBrokerPoc.exe --erase-templates 1..3
 
 GitHub Actions valida em Windows runner descartavel:
 - parser recusa child_id errado ou session_id incoerente

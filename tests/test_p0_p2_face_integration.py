@@ -7,10 +7,10 @@ import unittest
 
 import numpy as np
 
-from facekids.auth_service import FaceAuthenticator
-from facekids.ipc_reply import validated_face_observation
-from facekids.pipe_protocol import decode_pipe_command
-from facekids.storage import Storage
+from safepckids.auth_service import FaceAuthenticator
+from safepckids.ipc_reply import validated_face_observation
+from safepckids.pipe_protocol import decode_pipe_command
+from safepckids.storage import Storage
 
 
 class IntegratedFacePolicies(unittest.TestCase):
@@ -33,9 +33,9 @@ class IntegratedFacePolicies(unittest.TestCase):
             path, pid, rec, video = self.build(folder)
             rec.faces.return_value = [[5, 5, 80, 80]]
             rec.identify.return_value = (pid, 0.95)
-            with patch("facekids.auth_service.cv2.VideoCapture", return_value=video), \
+            with patch("safepckids.auth_service.cv2.VideoCapture", return_value=video), \
                  patch("pathlib.Path.write_text") as write_event, \
-                 patch("facekids.auth_service.save_child_photo") as save:
+                 patch("safepckids.auth_service.save_child_photo") as save:
                 status, data = FaceAuthenticator(Path("models"), path, recognizer=rec).evaluate(
                     publish_unlock_event=False)
             self.assertEqual(status, "ALLOW")
@@ -50,9 +50,9 @@ class IntegratedFacePolicies(unittest.TestCase):
             small = [40, 40, 45, 45]
             rec.faces.return_value = [big, small]
             rec.identify.side_effect = [(None, 0.1), (pid, 0.95)] * 2
-            with patch("facekids.auth_service.cv2.VideoCapture", return_value=video), \
-                 patch("facekids.avatar_utils.get_child_avatar_path", return_value=None), \
-                 patch("facekids.auth_service.save_child_photo") as save:
+            with patch("safepckids.auth_service.cv2.VideoCapture", return_value=video), \
+                 patch("safepckids.avatar_utils.get_child_avatar_path", return_value=None), \
+                 patch("safepckids.auth_service.save_child_photo") as save:
                 status, data = FaceAuthenticator(Path("models"), path, recognizer=rec).evaluate()
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["child_id"], pid)
@@ -61,7 +61,7 @@ class IntegratedFacePolicies(unittest.TestCase):
 
     def test_deny_is_strictly_validated_before_lock(self):
         now = time.time()
-        reply = dict(status="DENY_QUOTA", protocol_marker="FACEKIDS_IPC_V1",
+        reply = dict(status="DENY_QUOTA", protocol_marker="SAFEPCKIDS_IPC_V1",
                      child_id=2, child_name="Demo", remaining=0, timestamp=now,
                      data=dict(child_id=2, child_name="Demo", remaining=0,
                                detected_ids=[2], face_count=1))

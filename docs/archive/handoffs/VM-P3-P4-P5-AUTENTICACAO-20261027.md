@@ -1,19 +1,19 @@
-# FaceKids - P3/P4/P5: autenticacao controlada na VM
+# SafePCKids - P3/P4/P5: autenticacao controlada na VM
 
 Branch: developer. Nao foi instalado nada pelo ChatGPT dentro da sua VirtualBox.
-O script esta em scripts/FaceKids-VM-Autenticacao.ps1.
+O script esta em scripts/SafePCKids-VM-Autenticacao.ps1.
 
 ## Ambiente e dados ja homologados
 
 - VM VirtualBox Windows 10 Pro; XWF-1080P funcional em xHCI.
 - Conta Filhos ativa e separada da conta administrativa Marcos.
 - Cadastro de rosto adulto como perfil ficticio (12 amostras), reconhecimento no preview.
-- Base VM: %LOCALAPPDATA%\FaceKids-VM-Lab\dados-isolados\data\criancas.sqlite3.
+- Base VM: %LOCALAPPDATA%\SafePCKids-VM-Lab\dados-isolados\data\criancas.sqlite3.
 - Nenhum servico, tarefa, DLL ou Credential Provider instalado no diagnostico anterior.
 
 ## Limite da arquitetura
 
-A fase StartAuth inicia o Python facekids.auth_service na sessao administrativa interativa.
+A fase StartAuth inicia o Python safepckids.auth_service na sessao administrativa interativa.
 NAO e servico SCM, nao persiste antes do primeiro login e nao comprova camera em Session 0.
 O modulo quota_broker_writer_scm_win.py e um OUTRO servico, exclusivo de fixtures sinteticas.
 A DLL legada usa a senha fixa Windows "1" de Filhos; este script nao altera a senha nem tenta verifica-la por login.
@@ -25,29 +25,29 @@ Feche primeiro o Painel dos Pais e o aplicativo Camera do Windows.
 Na conta administrativa da VM, abra PowerShell e execute:
 
 ~~~powershell
-irm https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/Preparar-FaceKids-Autenticacao-VM.ps1 | iex
+irm https://raw.githubusercontent.com/marquimRcc/SafePCKids/developer/scripts/Preparar-SafePCKids-Autenticacao-VM.ps1 | iex
 ~~~
 
 Este wrapper baixa os scripts mais novos, sincroniza codigo developer sem abrir
 o Painel, reutiliza o Python e a base existentes e executa StartAuth, Ping e
 FaceProbe em ordem. Ele NAO registra Credential Provider, nao instala SCM,
 nao cria tarefas nem faz Win+L. Se FaceProbe falhar, pare antes de ActivateCP.
-Os scripts persistentes ficam na pasta FaceKids-VM-Lab\scripts.
+Os scripts persistentes ficam na pasta SafePCKids-VM-Lab\scripts.
 
 ## Comandos em ordem, na conta administrativa da VM
 
 Obter script e ver estado (sem alterar o login):
 
 ~~~powershell
-$p=Join-Path $env:TEMP 'FaceKids-VM-Autenticacao.ps1'; Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/marquimRcc/FaceControlKidsPC/developer/scripts/FaceKids-VM-Autenticacao.ps1' -OutFile $p; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action Status
+$p=Join-Path $env:TEMP 'SafePCKids-VM-Autenticacao.ps1'; Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/marquimRcc/SafePCKids/developer/scripts/SafePCKids-VM-Autenticacao.ps1' -OutFile $p; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Action Status
 ~~~
 
 Iniciar worker, testar IPC e reconhecimento facial:
 
 ~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action StartAuth
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action Ping
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action FaceProbe
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\SafePCKids-VM-Autenticacao.ps1" -Action StartAuth
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\SafePCKids-VM-Autenticacao.ps1" -Action Ping
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\SafePCKids-VM-Autenticacao.ps1" -Action FaceProbe
 ~~~
 
 Esperado: listening, PONG, ALLOW com saldo positivo. O FaceProbe oculta a senha do protocolo.
@@ -57,25 +57,25 @@ Deixe somente o rosto cadastrado na webcam, e nao abra simultaneamente o aplicat
 ## Ativacao opt-in do Credential Provider
 
 Somente depois de:
-1. Confirmar acesso administrativo por senha/PIN convencional, mesmo sem o FaceKids.
+1. Confirmar acesso administrativo por senha/PIN convencional, mesmo sem o SafePCKids.
 2. Confirmar que Filhos possui de fato a senha Windows "1" usada pela DLL atual.
 3. Ter Ping e FaceProbe aprovados, com o worker da conta administrativa ativo.
 4. Abrir PowerShell x64 COMO ADMINISTRADOR dentro da VM.
 
 ~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action ActivateCP -RecoveryConfirmed -FixedPasswordConfirmed
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\SafePCKids-VM-Autenticacao.ps1" -Action ActivateCP -RecoveryConfirmed -FixedPasswordConfirmed
 ~~~
 
 O script revalida rosto ALLOW, registra o CP somente se o CLSID estiver ausente, e
-impõe correspondencia do SID do worker via HKLM. Copia DLL para ProgramData\FaceKids-VM-CP-Lab,
-nunca para ProgramData\FaceKids. Nao bloqueia nem faz logout automaticamente.
+impõe correspondencia do SID do worker via HKLM. Copia DLL para ProgramData\SafePCKids-VM-CP-Lab,
+nunca para ProgramData\SafePCKids. Nao bloqueia nem faz logout automaticamente.
 Depois testar Win+L na conta Filhos mantendo a sessao administrativa logada,
 com login convencional disponivel para emergencia. Se o worker cair, CP deve negar.
 
 ## Rollback direcionado na VM
 
 ~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\FaceKids-VM-Autenticacao.ps1" -Action Rollback
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\SafePCKids-VM-Autenticacao.ps1" -Action Rollback
 ~~~
 
 Remove APENAS registro CP marcado como pertencente ao laboratorio e encerra

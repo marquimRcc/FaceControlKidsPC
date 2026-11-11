@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 
-from facekids import vm_guest_diagnostics as diag
+from safepckids import vm_guest_diagnostics as diag
 
 
 class VmGuestDiagnosticsTests(unittest.TestCase):

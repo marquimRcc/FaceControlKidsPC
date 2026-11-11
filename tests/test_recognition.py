@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from facekids.recognition import Recognizer
+from safepckids.recognition import Recognizer
 
 
 class RecognitionTest(unittest.TestCase):

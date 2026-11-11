@@ -32,14 +32,14 @@ Não foram capturadas imagens nem cadastradas biometrias.
 
 | Referência | Avaliação para este projeto |
 |---|---|
-| [OpenCV Zoo / YuNet e SFace](https://github.com/opencv/opencv_zoo) | Manter como primeira opção. Já usados no código e adequados para identificação 1:N. Medir desempenho real. O README atual de YuNet distingue o modelo 2026may para OpenCV 5; o FaceKids usa 2023mar e exige OpenCV menor que 5. Não atualizar modelo e motor sem validação conjunta. |
+| [OpenCV Zoo / YuNet e SFace](https://github.com/opencv/opencv_zoo) | Manter como primeira opção. Já usados no código e adequados para identificação 1:N. Medir desempenho real. O README atual de YuNet distingue o modelo 2026may para OpenCV 5; o SafePCKids usa 2023mar e exige OpenCV menor que 5. Não atualizar modelo e motor sem validação conjunta. |
 | [DeepFace](https://github.com/serengil/deepface) | Referência para experimentos e antifraude; não adicionar toda a pilha como requisito inicial. |
 | [Silent-Face-Anti-Spoofing / MiniFASNet](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing) | Candidato opcional para teste de fotos e vídeo. Confirmar licenças dos pesos e medir falsos aceites/rejeições neste notebook. Não confundir score com garantia de vivacidade. |
 | [MediaPipe](https://github.com/google-ai-edge/mediapipe) | Reserva para presença, orientação e movimento; não substitui identificação e quotas. |
 | [InsightFace / ArcFace](https://github.com/deepinsight/insightface) | Alternativa de comparação; verificar termos de cada peso. Não justifica migração imediata do SFace. |
 | [Howdy](https://github.com/boltgolt/howdy) | Referência PAM com instruções openSUSE. Autentica conta; sozinho não aplica quota por rosto. O projeto reconhece limitações contra fotos e pessoas semelhantes. |
 | [Timekpr-nExT](https://github.com/polesapart/timekpr-next) | Boa referência de daemon, limites e acompanhamento por conta. Pode ser teto global opcional ou alternativa com contas separadas. Não separa três rostos na mesma conta. |
-| [KScreenLocker](https://github.com/KDE/kscreenlocker) | Referência de bloqueio nativo. Janela fullscreen do FaceKids não oferece a mesma proteção. |
+| [KScreenLocker](https://github.com/KDE/kscreenlocker) | Referência de bloqueio nativo. Janela fullscreen do SafePCKids não oferece a mesma proteção. |
 | [LayerShellQt](https://github.com/KDE/layer-shell-qt) | Relevante para Wayland; não é dependência prioritária na sessão X11 atual e não cria uma barreira de autenticação. |
 | [systemd](https://github.com/systemd/systemd) e [logind](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html) | Base de supervisão e observação de sessão. Conferir APIs disponíveis na versão local 254; documentação latest pode descrever APIs posteriores. Solicitar desbloqueio por D-Bus não comprova autenticação PAM. |
 | [dlib](https://github.com/davisking/dlib) | Biblioteca válida, mas acrescenta outra cadeia de reconhecimento/compilação. Sem ganho demonstrado para substituir o motor atual. |
@@ -52,14 +52,14 @@ Não foram capturadas imagens nem cadastradas biometrias.
 
 | Projeto | Potencial e limite |
 |---|---|
-| [Gaze](https://github.com/GunduLabs/gaze) | Primeiro candidato externo para investigar integração KDE/PAM: documenta gaze-kde e pacotes openSUSE Tumbleweed. Isso não confirma suporte ao Regata OS. O RPM pode alterar PAM compartilhado no pós-instalação; examinar pacote antes de instalar. Não fornece as quotas faciais do FaceKids. |
+| [Gaze](https://github.com/GunduLabs/gaze) | Primeiro candidato externo para investigar integração KDE/PAM: documenta gaze-kde e pacotes openSUSE Tumbleweed. Isso não confirma suporte ao Regata OS. O RPM pode alterar PAM compartilhado no pós-instalação; examinar pacote antes de instalar. Não fornece as quotas faciais do SafePCKids. |
 | [LinuxCamPAM](https://github.com/Vladush/LinuxCamPAM) | Segundo candidato: utiliza YuNet/SFace, aceita webcam V4L2 e documenta aproximação/login e KDE. Distribuição principal Debian/Ubuntu; instalador ativa PAM automaticamente. Exige estudo de build/empacotamento para Regata. |
 | [Facelock](https://github.com/tyvsmith/facelock) | PAM e inferência local; exige captura IR segundo README. Adiar até confirmar câmera IR e compatibilidade de runtime/CPU. |
 | [Visage](https://github.com/sovren-software/visage) | Arquitetura Rust, daemon e PAM via D-Bus útil como referência. README registra falha em ensaio de vivacidade com foto em celular; não escolher por alegação genérica de antifraude. |
 | [MrCodeEU/face-auth](https://github.com/MrCodeEU/face-auth) | Alternativa PAM centrada em IR; triagem inicial apenas, sem auditoria de código ou validação neste hardware. |
 | [dax-auth](https://github.com/daxrpm/dax-auth) | Outra implementação PAM em Rust; triagem inicial apenas. Não há evidência local para preferi-la ao motor já existente. |
 
-## O que reaproveitar do FaceKids
+## O que reaproveitar do SafePCKids
 recognition.py já encapsula YuNet/SFace; identify faz comparação por pessoa, limiar e margem entre candidatos.
 policy.py contém regras puras e relógio monotônico, facilitando reaproveitamento.
 storage.py contém saldo e configurações, mas precisa de propriedade e permissões apropriadas no Linux.

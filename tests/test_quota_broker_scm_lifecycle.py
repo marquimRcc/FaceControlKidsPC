@@ -13,7 +13,7 @@ from unittest.mock import patch
 @unittest.skipUnless(os.name == "nt", "SCM Windows API only")
 class QuotaScmLifecycleTests(unittest.TestCase):
     def setUp(self):
-        from facekids import quota_broker_scm_win as service_mod
+        from safepckids import quota_broker_scm_win as service_mod
         if service_mod._ServiceBase is object:
             self.skipTest("pywin32 dependency not installed")
         self.mod = service_mod
@@ -21,7 +21,7 @@ class QuotaScmLifecycleTests(unittest.TestCase):
     def make_fake_instance(self):
         # Directly instantiate the class WITHOUT registering service
         # controls or calling ServiceFramework.__init__.
-        instance = object.__new__(self.mod.FaceKidsQuotaLabService)
+        instance = object.__new__(self.mod.SafePCKidsQuotaLabService)
         instance._stop_signal = threading.Event()
         instance._supervisor = None
         status = []
@@ -31,7 +31,7 @@ class QuotaScmLifecycleTests(unittest.TestCase):
     def test_start_uses_only_protected_configuration_and_stop_signal(self):
         instance, status = self.make_fake_instance()
         fake_config = (
-            r"\\.\pipe\FaceKidsQuotaBrokerLab-" + "a" * 32,
+            r"\\.\pipe\SafePCKidsQuotaBrokerLab-" + "a" * 32,
             Path("synthetic-lab.sqlite3"),
             {"S-1-5-21-1-2-3-1001": 1},
         )

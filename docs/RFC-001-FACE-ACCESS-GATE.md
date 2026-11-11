@@ -3,7 +3,7 @@
 **Status:** Proposta de arquitetura; protótipo visual da etapa 1 implementado, sem webcam ou bloqueio real.  
 **Branch:** `feature/face-access-gate`  
 **Origem:** `main`, MVP 0.4  
-**Autor/projeto:** Marcos Queiroz Gomes — [FaceControlKidsPC](https://github.com/marquimRcc/FaceControlKidsPC)  
+**Autor/projeto:** Marcos Queiroz Gomes — [SafePCKids](https://github.com/marquimRcc/SafePCKids)  
 **Data:** 2026-10-20
 
 ## 1. Objetivo

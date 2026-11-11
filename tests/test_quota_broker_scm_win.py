@@ -5,8 +5,8 @@ import os
 import unittest
 from unittest.mock import patch
 
-from facekids.quota_broker_scm_win import (
-    SERVICE_NAME, FaceKidsQuotaLabService, validate_service_registry_config,
+from safepckids.quota_broker_scm_win import (
+    SERVICE_NAME, SafePCKidsQuotaLabService, validate_service_registry_config,
     _validate_service_user_sid,
 )
 
@@ -23,7 +23,7 @@ class ServiceLabConfigTests(unittest.TestCase):
 
     def test_valid_protected_registry_fixture_is_only_read_only_lab(self):
         with TemporaryDirectory() as td:
-            directory = Path(td) / "facekids-quota-lab"
+            directory = Path(td) / "safepckids-quota-lab"
             directory.mkdir()
             database = directory / "ledger.sqlite3"
             database.write_bytes(b"synthetic")
@@ -32,7 +32,7 @@ class ServiceLabConfigTests(unittest.TestCase):
             self.assertEqual(target, database.resolve())
             self.assertEqual(mapping, {"S-1-5-21-1-2-3-1001": 1})
             self.assertEqual(database.read_bytes(), b"synthetic")
-            self.assertEqual(SERVICE_NAME, "FaceKidsQuotaLabOnly")
+            self.assertEqual(SERVICE_NAME, "SafePCKidsQuotaLabOnly")
 
     def test_service_process_sid_is_strictly_required(self):
         _validate_service_user_sid("S-1-5-18", "S-1-5-18")
@@ -49,7 +49,7 @@ class ServiceLabConfigTests(unittest.TestCase):
 
     def test_missing_or_forged_policy_is_rejected(self):
         with TemporaryDirectory() as td:
-            d = Path(td) / "facekids-quota-lab"
+            d = Path(td) / "safepckids-quota-lab"
             d.mkdir()
             db = d / "ledger.sqlite3"
             db.write_bytes(b"fixture")
@@ -75,7 +75,7 @@ class ServiceLabConfigTests(unittest.TestCase):
     def test_reject_data_inside_production_programdata_even_if_named_lab(self):
         with TemporaryDirectory() as td:
             fake_programdata = Path(td) / "ProgramData"
-            nested = fake_programdata / "FaceKids" / "facekids-quota-lab"
+            nested = fake_programdata / "SafePCKids" / "safepckids-quota-lab"
             nested.mkdir(parents=True)
             target = nested / "ledger.sqlite3"
             target.write_bytes(b"fixture")
@@ -86,10 +86,10 @@ class ServiceLabConfigTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows registry API only")
     def test_hklm_policy_enforces_actual_winreg_types(self):
         import winreg
-        from facekids.quota_broker_scm_win import read_hklm_lab_configuration
+        from safepckids.quota_broker_scm_win import read_hklm_lab_configuration
 
         with TemporaryDirectory() as td:
-            root = Path(td) / "facekids-quota-lab"
+            root = Path(td) / "safepckids-quota-lab"
             root.mkdir()
             db = root / "ledger.sqlite3"
             db.write_bytes(b"synthetic")
@@ -128,7 +128,7 @@ class ServiceLabConfigTests(unittest.TestCase):
                     read_hklm_lab_configuration()
 
     def test_scm_module_never_auto_installs_or_starts_on_import(self):
-        self.assertEqual(FaceKidsQuotaLabService._svc_name_, "FaceKidsQuotaLabOnly")
+        self.assertEqual(SafePCKidsQuotaLabService._svc_name_, "SafePCKidsQuotaLabOnly")
 
 
 if __name__ == "__main__":

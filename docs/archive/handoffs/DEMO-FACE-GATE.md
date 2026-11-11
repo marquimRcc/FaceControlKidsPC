@@ -7,7 +7,7 @@
 
 Na branch feature/face-access-gate, com Python 3.11 ou 3.12:
 
-    py -3.11 -m facekids.gate_preview
+    py -3.11 -m safepckids.gate_preview
 
 Ou dê dois cliques no arquivo demonstrar-gate.bat. Para esta demonstração, não precisa de OpenCV, downloads de modelos ou webcam; usa somente Tkinter, da biblioteca padrão do Python.
 
@@ -30,4 +30,4 @@ A demonstração **não grava no SQLite, não acessa a webcam, não instala serv
 
 Na próxima etapa técnica poderemos conectar observações reais do YuNet/SFace, mantendo um modo de simulação selecionável e o botão de emergência do pai. Somente depois devem ser considerados IPC seguro, watchdog e eventual tela de restrição persistente.
 
-Código principal: facekids/gate_model.py (testável sem interface) e facekids/gate_preview.py (Tkinter).
+Código principal: safepckids/gate_model.py (testável sem interface) e safepckids/gate_preview.py (Tkinter).

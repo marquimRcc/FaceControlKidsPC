@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import type { CameraProbe, ChildStatus, EnrollmentStatus, ProfilePhoto, SystemSnapshot } from "@facekids/contracts";
-import { ChildStatusCard, formatTime, StatusPill } from "@facekids/ui";
+import type { CameraProbe, ChildStatus, EnrollmentStatus, ProfilePhoto, SystemSnapshot } from "@safepckids/contracts";
+import { ChildStatusCard, formatTime, StatusPill } from "@safepckids/ui";
 import { Activity, CalendarClock, Camera, ChevronRight, CircleHelp, Clock3, Database, LayoutDashboard, LockKeyhole, Plus, RefreshCw, Settings, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { EnrollmentWizard } from "./EnrollmentWizard";
 import { ProfilePhotoManager } from "./ProfilePhotoManager";
@@ -66,7 +66,7 @@ export function AdminDashboard({ snapshot, enrollment, backendError, onEnrollChi
   else content = <section className="settings-list"><InfoCard icon={<Users />} title="Perfis infantis" value={`${snapshot.children.length} configurado${snapshot.children.length === 1 ? "" : "s"}`} text="Cada perfil possui fotos e limite próprios." action={<button className="text-button" onClick={() => setActiveSection("children")}>Gerenciar <ChevronRight size={16} /></button>} /><InfoCard icon={<CalendarClock />} title="Horário compartilhado" value={snapshot.curfew.enabled ? `${snapshot.curfew.start} – ${snapshot.curfew.end}` : "Desativado"} text="Aplicado à conta filhos." action={<button className="text-button" onClick={() => setScheduleOpen(true)}>Editar <ChevronRight size={16} /></button>} /><InfoCard icon={<ShieldCheck />} title="Privacidade" value="Processamento local" text="Fotos e vetores faciais não são enviados para a nuvem." /></section>;
 
   return <div className="admin-shell"><aside className="sidebar">
-    <div className="brand"><div className="brand__mark"><Sparkles size={21} /></div><div><strong>FaceKids</strong><span>Painel dos pais</span></div></div>
+    <div className="brand"><div className="brand__mark"><Sparkles size={21} /></div><div><strong>SafePCKids</strong><span>Painel dos pais</span></div></div>
     <nav aria-label="Seções do painel">{nav.map(([id, Icon, label]) => <button key={id} className={activeSection === id ? "active" : ""} aria-current={activeSection === id ? "page" : undefined} onClick={() => setActiveSection(id)}><Icon size={19} /><span>{label}</span>{id === "children" && <b>{snapshot.children.length}</b>}</button>)}</nav>
     <button className="sidebar__help" onClick={() => setActiveSection("diagnostics")}><CircleHelp size={20} /><div><strong>Precisa de ajuda?</strong><span>Confira o diagnóstico</span></div><ChevronRight size={18} /></button>
     <div className="parent-chip"><div className="parent-chip__avatar">R</div><div><strong>Responsável</strong><span>Administrador</span></div></div>

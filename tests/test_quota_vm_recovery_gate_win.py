@@ -5,13 +5,13 @@ import os
 import unittest
 from unittest.mock import patch
 
-from facekids import quota_vm_recovery_gate_win as gate
+from safepckids import quota_vm_recovery_gate_win as gate
 
 
 class VmRecoveryPreflightTests(unittest.TestCase):
     def setUp(self):
-        self.db = Path("tmp") / "facekids-quota-lab" / "writer-fixture.sqlite3"
-        self.models = Path("tmp") / "facekids-quota-lab" / "models"
+        self.db = Path("tmp") / "safepckids-quota-lab" / "writer-fixture.sqlite3"
+        self.models = Path("tmp") / "safepckids-quota-lab" / "models"
         self.sid = "S-1-5-21-100-200-300-1001"
 
     def test_stopped_service_with_matching_paths_and_acl_is_required(self):

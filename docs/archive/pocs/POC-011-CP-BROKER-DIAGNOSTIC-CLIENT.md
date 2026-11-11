@@ -6,7 +6,7 @@ reconhece a resposta PRECHECK_ONLY (nao e uma autorizacao de login).
 
 Por seguranca, **a DLL normal nao usa esse cliente para efetuar
 login**. O cliente e invocado por uma exportacao somente do build
-FACEKIDS_DIAGNOSTIC_HOST_TEST, carregado em um processo COM isolado
+SAFEPCKIDS_DIAGNOSTIC_HOST_TEST, carregado em um processo COM isolado
 de teste. A DLL de producao continua devolvendo
 CPGSR_NO_CREDENTIAL_NOT_FINISHED, mesmo com rosto/quota positivos.
 

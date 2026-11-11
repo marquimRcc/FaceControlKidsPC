@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from facekids.child_quota_pilot import PilotEvent
-from facekids.linux_auth import FaceApproval
-from facekids.linux_runtime import (
+from safepckids.child_quota_pilot import PilotEvent
+from safepckids.linux_auth import FaceApproval
+from safepckids.linux_runtime import (
     LinuxFaceQuotaRuntime,
     LinuxRuntimeConfig,
     determine_lock_state,
@@ -20,13 +20,13 @@ from facekids.linux_runtime import (
     uid_is_monitored_user,
     warm_up_camera,
 )
-from facekids.locker import unlock_linux_session
-from facekids.session import (
+from safepckids.locker import unlock_linux_session
+from safepckids.session import (
     SessionState,
     current_linux_session_state,
     parse_loginctl_properties,
 )
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 class LinuxSessionTests(unittest.TestCase):
@@ -52,7 +52,7 @@ class LinuxSessionTests(unittest.TestCase):
             SessionState.LOCKED,
         )
 
-    @patch("facekids.session.subprocess.run")
+    @patch("safepckids.session.subprocess.run")
     def test_loginctl_failure_is_unknown(self, run):
         run.side_effect = subprocess.CalledProcessError(1, ["loginctl"])
         self.assertEqual(current_linux_session_state("4"), SessionState.UNKNOWN)
@@ -68,14 +68,14 @@ class LinuxSessionTests(unittest.TestCase):
                 with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                     LinuxRuntimeConfig(**base, **kwargs).validate()
 
-    @patch.dict("os.environ", {"FACEKIDS_DATA_DIR": "/tmp/facekids-test"})
+    @patch.dict("os.environ", {"SAFEPCKIDS_DATA_DIR": "/tmp/safepckids-test"})
     def test_protected_path_can_be_redirected_for_tests(self):
         self.assertEqual(
-            protected_data_path(), Path("/tmp/facekids-test/criancas.sqlite3")
+            protected_data_path(), Path("/tmp/safepckids-test/criancas.sqlite3")
         )
 
-    @patch("facekids.linux_runtime.grp", None)
-    @patch("facekids.linux_runtime.pwd", None)
+    @patch("safepckids.linux_runtime.grp", None)
+    @patch("safepckids.linux_runtime.pwd", None)
     def test_admin_check_fails_closed_without_posix_modules(self):
         self.assertTrue(uid_is_admin(0, "wheel"))
         self.assertFalse(uid_is_admin(1000, "wheel"))
@@ -152,8 +152,8 @@ class LinuxSessionTests(unittest.TestCase):
         runtime.engine.policy.pause.assert_called_once_with()
         self.assertEqual(runtime.references, revoked)
 
-    @patch("facekids.locker.os.name", "posix")
-    @patch("facekids.locker.subprocess.run")
+    @patch("safepckids.locker.os.name", "posix")
+    @patch("safepckids.locker.subprocess.run")
     def test_linux_unlock_is_session_bound(self, run):
         unlock_linux_session("session_4")
         run.assert_called_once_with(
@@ -162,8 +162,8 @@ class LinuxSessionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             unlock_linux_session("4;shutdown")
 
-    @patch("facekids.linux_runtime.approval_still_allowed", return_value=True)
-    @patch("facekids.linux_runtime.unlock_linux_session")
+    @patch("safepckids.linux_runtime.approval_still_allowed", return_value=True)
+    @patch("safepckids.linux_runtime.unlock_linux_session")
     def test_auto_unlock_rechecks_policy_and_rate_limits(self, unlock, allowed):
         runtime = object.__new__(LinuxFaceQuotaRuntime)
         runtime.config = LinuxRuntimeConfig(Path("db"), Path("models"))
@@ -183,7 +183,7 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertFalse(runtime._maybe_unlock(approval, 20.0, "2026-10-22"))
         self.assertEqual(unlock.call_count, 1)
 
-    @patch("facekids.linux_runtime.lock_current_session")
+    @patch("safepckids.linux_runtime.lock_current_session")
     def test_lock_failure_is_rate_limited_without_stopping_runtime(self, lock):
         runtime = object.__new__(LinuxFaceQuotaRuntime)
         runtime._last_lock_request = float("-inf")
@@ -199,8 +199,8 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertTrue(runtime._maybe_lock("4", "quota encerrada", 20.0))
         runtime.engine.policy.pause.assert_called_once_with()
 
-    @patch("facekids.linux_runtime.approval_still_allowed", return_value=True)
-    @patch("facekids.linux_runtime.unlock_linux_session")
+    @patch("safepckids.linux_runtime.approval_still_allowed", return_value=True)
+    @patch("safepckids.linux_runtime.unlock_linux_session")
     def test_unlock_failure_is_rate_limited(self, unlock, _allowed):
         runtime = object.__new__(LinuxFaceQuotaRuntime)
         runtime.config = LinuxRuntimeConfig(Path("db"), Path("models"))
@@ -478,7 +478,7 @@ class LinuxSessionTests(unittest.TestCase):
         self.assertFalse(uid_is_admin(99999, "nonexistent_group"))
 
     def test_sanitize_child_name_strips_control_characters_and_validates(self):
-        from facekids.linux_runtime import sanitize_child_name
+        from safepckids.linux_runtime import sanitize_child_name
         self.assertEqual(sanitize_child_name("  Lucas  "), "Lucas")
         self.assertEqual(sanitize_child_name("João Pedro"), "João Pedro")
         self.assertEqual(sanitize_child_name("Lucas\x1b[31m\n"), "Lucas[31m")

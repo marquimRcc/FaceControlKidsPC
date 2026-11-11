@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FaceKids — Family Hub (Conceito C)</title>
+  <title>SafePCKids — Family Hub (Conceito C)</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
@@ -146,7 +146,7 @@
         </div>
         <div>
           <span class="font-extrabold text-lg tracking-tight flex items-center gap-1.5">
-            FaceKids 
+            SafePCKids 
             <span class="text-xs px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-medium">Family Hub</span>
           </span>
           <p class="text-xs text-[var(--muted-foreground)]">Controle Parental Amigável &bull; Windows</p>
@@ -190,7 +190,7 @@
               <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[var(--card)] rounded-full"></span>
             </div>
             <div>
-              <h2 class="font-bold text-base md:text-lg">Assistente FaceKids</h2>
+              <h2 class="font-bold text-base md:text-lg">Assistente SafePCKids</h2>
               <p class="text-xs text-[var(--muted-foreground)]">Configuração conversacional simples e segura</p>
             </div>
           </div>
@@ -939,7 +939,7 @@
 
           <!-- Top Positive Apps Used -->
           <div>
-            <h3 class="font-bold text-sm mb-3">Aplicativos Mais Utilizados com FaceKids</h3>
+            <h3 class="font-bold text-sm mb-3">Aplicativos Mais Utilizados com SafePCKids</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div class="p-3.5 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -982,7 +982,7 @@
       <!-- ===================================================================== -->
       <div id="content-config" class="tab-content hidden space-y-6">
         <div class="bg-[var(--card)] rounded-3xl p-6 shadow-sm border border-[var(--border)]">
-          <h2 class="text-xl font-bold tracking-tight mb-2">Configurações do FaceKids</h2>
+          <h2 class="text-xl font-bold tracking-tight mb-2">Configurações do SafePCKids</h2>
           <p class="text-sm text-[var(--muted-foreground)] mb-6">Ajustes da câmera, notificações, segurança e proteção do sistema.</p>
 
           <div class="space-y-4 max-w-2xl">
@@ -1263,7 +1263,7 @@
 
       switch (step) {
         case 0:
-          addBotMessage("Olá! Sou o <strong>FaceKids</strong>. Vou proteger o computador dos seus filhos com muito carinho e reconhecimento facial. Vamos configurar juntos? 😊", () => {
+          addBotMessage("Olá! Sou o <strong>SafePCKids</strong>. Vou proteger o computador dos seus filhos com muito carinho e reconhecimento facial. Vamos configurar juntos? 😊", () => {
             inputArea.innerHTML = `
               <div class="flex flex-wrap items-center justify-center gap-3">
                 <button onclick="handleOnboardingAnswer(0, 'Vamos lá!')" class="px-5 py-2.5 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm shadow-md bouncy-btn">
@@ -1307,7 +1307,7 @@
           break;
 
         case 3:
-          addBotMessage(`Legal! Vamos tirar uma foto do(a) <strong>${state.onboarding.childName || 'Lucas'}</strong>? 📸 Assim o FaceKids reconhece automaticamente quando ele(a) sentar no computador:`, () => {
+          addBotMessage(`Legal! Vamos tirar uma foto do(a) <strong>${state.onboarding.childName || 'Lucas'}</strong>? 📸 Assim o SafePCKids reconhece automaticamente quando ele(a) sentar no computador:`, () => {
             inputArea.innerHTML = `
               <div class="flex flex-col items-center gap-2">
                 <button id="onboardCaptureBtn" onclick="handleOnboardingCamera()" class="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-sm shadow-md bouncy-btn">
@@ -1335,7 +1335,7 @@
           break;
 
         case 5:
-          addBotMessage(`Tudo pronto! ✅ O <strong>FaceKids</strong> já está ativo e protegendo a máquina. Quer abrir o painel principal da família agora?`, () => {
+          addBotMessage(`Tudo pronto! ✅ O <strong>SafePCKids</strong> já está ativo e protegendo a máquina. Quer abrir o painel principal da família agora?`, () => {
             inputArea.innerHTML = `
               <div class="flex items-center justify-center gap-3">
                 <button onclick="switchToView('dashboard')" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-sm shadow-lg shadow-orange-500/25 bouncy-btn flex items-center gap-2">
@@ -1352,7 +1352,7 @@
       addUserMessage(answer);
       if (answer === 'Como funciona?') {
         setTimeout(() => {
-          addBotMessage("O FaceKids usa a câmera comum do Windows para reconhecer o rosto das crianças. Quando o tempo acaba ou é hora de dormir, a tela pausa suavemente sem estresse!", () => {
+          addBotMessage("O SafePCKids usa a câmera comum do Windows para reconhecer o rosto das crianças. Quando o tempo acaba ou é hora de dormir, a tela pausa suavemente sem estresse!", () => {
             const inputArea = document.getElementById('chatInputArea');
             inputArea.innerHTML = `
               <button onclick="handleOnboardingAnswer(0, 'Entendi, vamos começar!')" class="px-5 py-2.5 rounded-2xl bg-orange-500 text-white font-bold text-sm shadow-md bouncy-btn">
@@ -1622,7 +1622,7 @@
     function finishAddChild() {
       const name = document.getElementById('newChildNameInput').value || 'Novo Filho';
       closeAddChildModal();
-      alert(`🎉 Perfil de ${name} adicionado com sucesso ao FaceKids!`);
+      alert(`🎉 Perfil de ${name} adicionado com sucesso ao SafePCKids!`);
     }
   </script>
 </body>

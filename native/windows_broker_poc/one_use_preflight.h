@@ -6,7 +6,7 @@
 #include <mutex>
 #include <type_traits>
 
-namespace facekids_ticket {
+namespace safepckids_ticket {
 enum class Result {
     Denied, ArmedSyntheticOnly, ReadyForFurtherVerification,
     ExpiredOrMismatched, ConsumedOrMissing, QuotaOrSessionDenied
@@ -18,33 +18,33 @@ class OneUse {
     int child_=0;
     DWORD session_=0;
     ULONGLONG created_=0;
-    friend bool self_test(facekids_quota::Store&);
+    friend bool self_test(safepckids_quota::Store&);
     explicit OneUse(bool synthetic):synthetic_(synthetic){}
     void reset(){child_=0;session_=0;created_=0;}
 public:
     OneUse()=default;
     OneUse(const OneUse&)=delete;
     OneUse& operator=(const OneUse&)=delete;
-    Result arm(const facekids_bridge::Assessment& assessment,
-               const facekids_guard::Snapshot& locked_session,
+    Result arm(const safepckids_bridge::Assessment& assessment,
+               const safepckids_guard::Snapshot& locked_session,
                ULONGLONG monotonic_ms) {
         std::lock_guard<std::mutex> guard(mutex_);
         reset();
         if(!synthetic_ ||
-           assessment.verdict!=facekids_bridge::Verdict::NeedsTrustedCameraAndLiveness ||
+           assessment.verdict!=safepckids_bridge::Verdict::NeedsTrustedCameraAndLiveness ||
            assessment.child<1||assessment.child>3 ||
            locked_session.requested_id==0 ||
            locked_session.requested_id!=locked_session.actual_id ||
-           locked_session.state!=facekids_wts::LockView::Locked)
+           locked_session.state!=safepckids_wts::LockView::Locked)
             return Result::Denied;
         child_=assessment.child;
         session_=locked_session.actual_id;
         created_=monotonic_ms;
         return Result::ArmedSyntheticOnly;
     }
-    Result use(const facekids_guard::Snapshot& current,
+    Result use(const safepckids_guard::Snapshot& current,
                const std::wstring& expected_sid,
-               facekids_quota::Store& db,
+               safepckids_quota::Store& db,
                const char* trusted_day, ULONGLONG monotonic_ms) {
         std::lock_guard<std::mutex> guard(mutex_);
         int child=child_;
@@ -55,8 +55,8 @@ public:
         if(monotonic_ms<created || monotonic_ms-created>8000 ||
            current.requested_id!=session || current.actual_id!=session)
            return Result::ExpiredOrMismatched;
-        if(facekids_gate::check(current,expected_sid,db,child,trusted_day)!=
-           facekids_gate::GatePrerequisite::ReadyForFacialPolicy)
+        if(safepckids_gate::check(current,expected_sid,db,child,trusted_day)!=
+           safepckids_gate::GatePrerequisite::ReadyForFacialPolicy)
            return Result::QuotaOrSessionDenied;
         return Result::ReadyForFurtherVerification;
     }
@@ -66,15 +66,15 @@ public:
 static_assert(!std::is_constructible_v<OneUse,bool>,
               "Synthetic ticket must not be constructible from production code");
 
-inline bool self_test(facekids_quota::Store& db) {
+inline bool self_test(safepckids_quota::Store& db) {
     const std::wstring sid=L"S-1-5-21-100-200-300-1005";
     const char* day="2026-10-20";
-    facekids_guard::Snapshot os={7,7,facekids_wts::LockView::Locked,sid,true};
+    safepckids_guard::Snapshot os={7,7,safepckids_wts::LockView::Locked,sid,true};
     std::array<float,128> a={};
     a[0]=1;
     if(!db.add_template(1,a))return false;
-    const auto assessment=facekids_bridge::assess(db,a,os,sid,day);
-    if(assessment.verdict!=facekids_bridge::Verdict::NeedsTrustedCameraAndLiveness)
+    const auto assessment=safepckids_bridge::assess(db,a,os,sid,day);
+    if(assessment.verdict!=safepckids_bridge::Verdict::NeedsTrustedCameraAndLiveness)
         return false;
     OneUse production;
     if(production.arm(assessment,os,1000)!=Result::Denied ||
@@ -106,4 +106,4 @@ inline bool self_test(facekids_quota::Store& db) {
     return true;
 }
 
-} // namespace facekids_ticket
+} // namespace safepckids_ticket

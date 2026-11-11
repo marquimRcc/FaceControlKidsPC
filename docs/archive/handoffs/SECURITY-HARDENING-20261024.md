@@ -1,13 +1,13 @@
-# FaceKids — Segurança incremental (24/10/2026)
+# SafePCKids — Segurança incremental (24/10/2026)
 
 ## Escopo e origem
-- Base: handoff/facekids-auto-unlock-stabilization-20261021.
-- Branch exclusiva: fix/facekids-ipc-security-hardening-20261024.
+- Base: handoff/safepckids-auto-unlock-stabilization-20261021.
+- Branch exclusiva: fix/safepckids-ipc-security-hardening-20261024.
 - Main e branch de origem nao alteradas.
 - Preservar fluxo de desbloqueio facial informado pelo proprietario como funcional; nao instalar/testar Credential Provider no PC familiar.
 
 ## Entregas deste ciclo
-1. cb02de5212b3bb0cc0ffcfeecaa4affdcf691999 — FaceKidsPipeClient.h: rejeicao de lixo apos numeros de child_id/timestamp e protecao da conversao de saldo fora da faixa int.
+1. cb02de5212b3bb0cc0ffcfeecaa4affdcf691999 — SafePCKidsPipeClient.h: rejeicao de lixo apos numeros de child_id/timestamp e protecao da conversao de saldo fora da faixa int.
 2. b1af4e064b0fdc58e6a132a78d944b870ea9c622 — TestPipeClient.cpp: casos negativos adicionais para IDs adulterados, timestamp com sufixo e saldo excessivo.
 
 ## Verificacao
@@ -108,7 +108,7 @@
   do auth-service; **nao prova identidade de servidor Named Pipe**.
 - `c30b4140`, `9f82ccd5`, `f314954d`: CI Windows cobre os
   tres diagnosticos somente leitura, corrigindo a suposicao de que
-  ProgramData/FaceKids estaria ausente no runner (testes Python criam logs).
+  ProgramData/SafePCKids estaria ausente no runner (testes Python criam logs).
 
 ### CI verificado
 No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
@@ -134,16 +134,16 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
 
 ### Implementacao publicada
 - `d8df0156`, `90d04dca`, `67c00d67`, `1b52148d`, `622656a7`:
-  novo `FaceKidsPipePeerIdentity.h` e `TestPipePeerIdentity.cpp` usam
+  novo `SafePCKidsPipePeerIdentity.h` e `TestPipePeerIdentity.cpp` usam
   `GetNamedPipeServerProcessId`, token de processo e SID em pipe **sintetico**
   do runner. O helper e **apenas diagnostico** e NAO e invocado pelo
-  `FaceKidsPipeClient::RequestAuthentication` em producao. Um SID igual
+  `SafePCKidsPipeClient::RequestAuthentication` em producao. Um SID igual
   tambem nao comprova a integridade do executavel do servidor.
 - `08027907`, `636390e0`, `4f5115a8`: o agente usa decodificacao local
   JSON limitada a 2047 bytes que rejeita chaves duplicadas, NaN,
   Infinity, UTF-8 invalido e dados malformados.
 - `d8f3177f`, `93b17c44`: plano de **migracao somente leitura** em
-  `scripts/Planejar-Isolamento-FaceKids.ps1`, com teste Windows sintetico.
+  `scripts/Planejar-Isolamento-SafePCKids.ps1`, com teste Windows sintetico.
   Nenhuma ACL, tarefa, DLL, SQLite ou pasta do Windows real foi alterada.
 - `dfac74a7`, `dea6a8ea`, `b12260d3`: servidor usa os bytes efetivos
   recebidos de `ReadFile`, aceita apenas comandos ASCII esperados com
@@ -162,7 +162,7 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
 - O PR #4 permanece em rascunho, baseado em handoff e sem merge.
 
 ### Bloqueios e criterio de migracao
-1. `C:\ProgramData\FaceKids` permanece legado com riscos: scripts/
+1. `C:\ProgramData\SafePCKids` permanece legado com riscos: scripts/
    DLL e banco no mesmo diretorio historicamente gravavel por Filhos.
    Mudar isso exige separacao do codigo para pasta com ACL privilegiada
    e servico/broker que grave o ledger em vez de Filhos. O novo
@@ -180,9 +180,9 @@ No commit de codigo `f314954d41b6064031f1870d70f449d972c5b57d`:
 ## Continuacao de seguranca: politica SID opt-in (24/10/2026)
 
 - `5c89b908`, `848752e4`, `03425fa2`, `038a25ec`:
-  `FaceKidsPipeClient` consulta `FaceKidsPipePeerIdentity::AuthorizeIfConfigured`
+  `SafePCKidsPipeClient` consulta `SafePCKidsPipePeerIdentity::AuthorizeIfConfigured`
   apos abrir o Named Pipe, ANTES de transmitir `AUTH_QUERY`.
-  A politica opcional e lida de `HKLM\\SOFTWARE\\FaceControlKidsPC\\CredentialProvider`:
+  A politica opcional e lida de `HKLM\\SOFTWARE\\SafePCKids\\CredentialProvider`:
   `EnforceAuthServiceSid` (DWORD=1) exige `AuthServiceSid` (REG_SZ).
   Valores malformados ou SID divergente falham fechados quando a politica
   estiver ativada. Sem valor de enforcement, mantem a baseline legada.
@@ -217,8 +217,8 @@ Commits adicionais (branch somente, PR #4 permanece draft):
 
 ### CI da ultima alteracao funcional/teste
 - Commit `c8e7485f2c1bf2ce7e3cafc69378c68de2feed5e`:
-  - Unit tests Windows/Ubuntu: `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40143973936` — 2 jobs SUCCESS.
-  - Credential Provider compile and host checks: `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40143973929` — 2 jobs SUCCESS.
+  - Unit tests Windows/Ubuntu: `https://github.com/marquimRcc/SafePCKids/actions/runs/40143973936` — 2 jobs SUCCESS.
+  - Credential Provider compile and host checks: `https://github.com/marquimRcc/SafePCKids/actions/runs/40143973929` — 2 jobs SUCCESS.
 - O checkpoint em si cria novo commit, portanto o status do HEAD novo deve ser consultado separadamente.
 - Nao houve instalacao, alteracao de ACLs ou teste fisico no computador familiar.
 
@@ -236,7 +236,7 @@ Commits adicionais (branch somente, PR #4 permanece draft):
   da crianca pelo SQLite, nao pela resposta do pipe. Isso nao prova a
   autenticidade do servidor do pipe nem impede um ID de perfil valido falsificado.
 - `3c3be6ef` e `64705cc4`: modulo **isolado e nao integrado**
-  `facekids/quota_broker_clock.py`, com contrato de tempo monotônico medido
+  `safepckids/quota_broker_clock.py`, com contrato de tempo monotônico medido
   pelo servidor, vinculado ao ID de crianca e sessao WTS, e testes negativos de
   clock NaN/Inf, saltos de tempo, troca de sessao e independencia de perfis.
   O argumento `observed_wts_active` DEVE vir de WTS consultado por processo
@@ -273,7 +273,7 @@ Commits adicionais (branch somente, PR #4 permanece draft):
 ### Resultados e limites de confianca
 
 - `Unit tests` no commit `4fae4014`:
-  `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40144458857`
+  `https://github.com/marquimRcc/SafePCKids/actions/runs/40144458857`
   — Windows e Ubuntu SUCCESS.
 - Para a API de recibos de replay (`9bb588fe`), consultar o novo CI antes
   de considerar a implementacao validada.
@@ -297,11 +297,11 @@ Commits adicionais (branch somente, PR #4 permanece draft):
 | Etapa | Codigo / status |
 | --- | --- |
 | 1. Windows Service | Host Windows experimental de UMA requisicao criado, mas NAO registrado no SCM nem instalado; servico privilegiado permanente fica bloqueado ate VM |
-| 2. IPC | Contrato `FACEKIDS_QUOTA_V1` estritamente read-only; host de pipe local com SDDL explicita, sem clientes remotos e primeira instancia protegida |
+| 2. IPC | Contrato `SAFEPCKIDS_QUOTA_V1` estritamente read-only; host de pipe local com SDDL explicita, sem clientes remotos e primeira instancia protegida |
 | 3. Tokens/SID | Servidor de lab extrai SID por `ImpersonateNamedPipeClient` e compara com mapeamento de teste; negacao de SID estranho coberta em CI Windows |
 | 4. SQLite | `ReadOnlyQuotaView` em `mode=ro`; snapshot WAL-consistente, preserva bonus e perfis, so permite arquivos NOVOS no laboratorio |
 | 5. ACLs | Planejador e auditoria read-only ja existentes; migracao NTFS efetiva AINDA NAO executada; falta service-owned ledger/VM |
-| 6. FilhosAgent | Opt-in `FACEKIDS_QUOTA_BROKER_SHADOW=1` e `FACEKIDS_QUOTA_LAB_SUFFIX` (apenas telemetry); debito/lock seguem legacy |
+| 6. FilhosAgent | Opt-in `SAFEPCKIDS_QUOTA_BROKER_SHADOW=1` e `SAFEPCKIDS_QUOTA_LAB_SUFFIX` (apenas telemetry); debito/lock seguem legacy |
 | 7. Recuperacao | Restauracao de snapshot sintetico e verificacao de saldos anteriores; rollback COM/tarefas/Winlogon AINDA NAO validado |
 | 11. CI | Python Windows/Ubuntu, pipe Windows sintetico, build nativo CP/host e C++ completo executados sem alterar login |
 
@@ -355,9 +355,9 @@ Para o ultimo commit funcional `d42aaa4cb61a802c7593a7618321303cd7b0403e`:
 
 ### CI verificado
 - Commit de codigo/workflow `d986a70d314e251726565daeef1d990b50476eb3`:
-  - Unit tests `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40147534359`
+  - Unit tests `https://github.com/marquimRcc/SafePCKids/actions/runs/40147534359`
     — Windows SUCCESS e Ubuntu SUCCESS.
-  - Credential Provider `https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40147534306`
+  - Credential Provider `https://github.com/marquimRcc/SafePCKids/actions/runs/40147534306`
     — compilacao real SUCCESS e suite diagnostica SUCCESS.
 - Commits de documentacao posteriores geram novas execucoes; consultar
   HEAD exato se necessario.

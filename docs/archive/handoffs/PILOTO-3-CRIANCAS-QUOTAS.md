@@ -29,7 +29,7 @@ As amostras sao feitas com 12 frames por perfil, com coleta completa
 antes de qualquer gravacao no SQLite; cancelamento nao substitui
 cadastro anterior. As fotos/video nunca vao para disco. Vetores
 SFace **sao dados biometricos sensiveis** e ficam apenas no
-\`%LOCALAPPDATA%\FaceKids\piloto-filhos\criancas.sqlite3\` do
+\`%LOCALAPPDATA%\SafePCKids\piloto-filhos\criancas.sqlite3\` do
 usuario Windows que executou o menu.
 
 NAO enviar o SQLite ao GitHub, nem capturas da webcam ou material
@@ -46,7 +46,7 @@ e cronometro na webcam. Depois, com os resultados, definiremos
 armazenamento protegido e transferencias seguras sem copiar bases
 biometricas entre perfis manualmente.
 
-\`python -m facekids.children_pilot monitor --real-lock --confirm-real-lock\`
+\`python -m safepckids.children_pilot monitor --real-lock --confirm-real-lock\`
 so solicita Win+L no Windows quando o token Windows e da conta
 \`Filhos\`. Sem os dois argumentos, bloqueio e **apenas simulado**.
 Nao executar a opcao real antes dos testes de identidade, WTS e

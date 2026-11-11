@@ -6,7 +6,7 @@
 #include <cstring>
 #include "../windows_broker_poc/ipc_contract.h"
 
-namespace facekids_cp_client {
+namespace safepckids_cp_client {
 
 enum class Precheck { Denied, ReadyForFacialAssessment };
 
@@ -36,15 +36,15 @@ inline bool bounded_transfer(HANDLE pipe, bool read, void* buffer, DWORD size,
 }
 
 inline Precheck request(DWORD session_id, DWORD child_id) {
-    facekids_ipc::Request wire={};
+    safepckids_ipc::Request wire={};
     wire.session_id=session_id;
     wire.child_id=child_id;
-    if (facekids_ipc::parse(&wire, sizeof(wire), &wire)
-        != facekids_ipc::ParseResult::Valid)
+    if (safepckids_ipc::parse(&wire, sizeof(wire), &wire)
+        != safepckids_ipc::ParseResult::Valid)
         return Precheck::Denied;
     // The reader must never authenticate users on the strength of this
     // response, and no application in the Filhos session receives a token.
-    constexpr wchar_t pipe[] = LR"(\\.\pipe\FaceKidsBrokerPoc-v1)";
+    constexpr wchar_t pipe[] = LR"(\\.\pipe\SafePCKidsBrokerPoc-v1)";
     if (!WaitNamedPipeW(pipe, 250)) return Precheck::Denied;
     HANDLE h=CreateFileW(pipe, GENERIC_READ|GENERIC_WRITE, 0, nullptr,
                          OPEN_EXISTING,
@@ -70,4 +70,4 @@ inline bool self_test() {
            request(7,4)==Precheck::Denied;
 }
 
-} // namespace facekids_cp_client
+} // namespace safepckids_cp_client

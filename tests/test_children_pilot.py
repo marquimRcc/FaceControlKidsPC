@@ -3,11 +3,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from facekids.children_pilot import (
+from safepckids.children_pilot import (
     validate_real_lock, _child_id, child_pilot_database, _status,
 )
-from facekids.child_quota_pilot import ChildQuotaEngine, provision_three_children
-from facekids.storage import Storage
+from safepckids.child_quota_pilot import ChildQuotaEngine, provision_three_children
+from safepckids.storage import Storage
 
 
 class ChildrenPilotCliTests(unittest.TestCase):

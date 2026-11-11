@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace facekids_ipc {
+namespace safepckids_ipc {
 
 constexpr uint32_t kMagic = 0x31434b46; // "FKC1" little-endian
 constexpr uint16_t kVersion = 1;
@@ -97,4 +97,4 @@ inline bool self_test() {
     return true;
 }
 
-} // namespace facekids_ipc
+} // namespace safepckids_ipc

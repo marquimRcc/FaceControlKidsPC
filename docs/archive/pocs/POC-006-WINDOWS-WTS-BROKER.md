@@ -3,7 +3,7 @@
 **Status:** diagnostico no executavel do broker P0-5, sem instalar servico
 ou alterar a configuracao de login.
 
-O novo comando FaceKidsBrokerPoc.exe --sessions usa as APIs oficiais do
+O novo comando SafePCKidsBrokerPoc.exe --sessions usa as APIs oficiais do
 Windows Terminal Services:
 
 - WTSEnumerateSessionsW descobre as sessoes locais

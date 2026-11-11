@@ -7,7 +7,7 @@ instalacao do servico no PC, acesso por criancas ou desbloqueio real.
 
 - SQLite que vem no Windows 10/11 (WinSQLite). Nenhum driver/pacote instalado
 - Tres perfis independentes preconfigurados com 7.200 segundos (120 min)
-- Banco persistente planejado em ProgramData\FaceControlKidsPC\quota.sqlite3
+- Banco persistente planejado em ProgramData\SafePCKids\quota.sqlite3
 - Pasta criada com DACL protegida, concedendo acesso exclusivamente
   a SYSTEM e ao grupo Administradores. Acesso por usuarios comuns nao e
   permitido. Se a pasta ja existe com DACL permissiva, o servico recusa

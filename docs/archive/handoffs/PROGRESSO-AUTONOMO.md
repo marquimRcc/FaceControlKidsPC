@@ -1,4 +1,4 @@
-# FaceControlKidsPC — Checkpoint de desenvolvimento autonomo
+# SafePCKids — Checkpoint de desenvolvimento autonomo
 
 > Documento de retomada da branch `feature/windows-native-unlock-poc`.
 > Atualizar apos cada ciclo. Nao confundir testes sinteticos com login facial real.
@@ -204,7 +204,7 @@ Virtualizacao detectada nao e evidencia de snapshot utilizavel.
   A base da demonstracao continua editavel pelo proprio usuario:
   NAO usa-la para autenticacao protegida.
 - **P0-28 — roteiro de teste real Win+L:** criado
-  facekids/hardware_camera_probe.py com contadores somente em memoria,
+  safepckids/hardware_camera_probe.py com contadores somente em memoria,
   consulta WTS pela sessao de processo do Windows e saida que distingue
   falta de amostras, camera sem frames e frames preliminares durante
   bloqueio. Nao salva imagens, nao altera login.

@@ -7,8 +7,8 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-import facekids.welcome_screen as welcome_screen
-from facekids.welcome_screen import (
+import safepckids.welcome_screen as welcome_screen
+from safepckids.welcome_screen import (
     default_programs_config,
     format_remaining_time,
     get_current_child_info,
@@ -44,7 +44,7 @@ class TestWelcomeScreen(unittest.TestCase):
         self.assertEqual(program["arguments"], "")
 
     def test_launch_configured_programs_skips_running_process(self):
-        with patch.dict(os.environ, {"USERNAME": "Filhos", "FACEKIDS_TEST_ACTIVE_USER": "filhos"}), \
+        with patch.dict(os.environ, {"USERNAME": "Filhos", "SAFEPCKIDS_TEST_ACTIVE_USER": "filhos"}), \
              patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
              patch.object(welcome_screen, "load_programs_config", return_value={
                  "enabled": True,
@@ -58,7 +58,7 @@ class TestWelcomeScreen(unittest.TestCase):
             mock_popen.assert_not_called()
 
     def test_launch_configured_programs_runs_when_not_in_session(self):
-        with patch.dict(os.environ, {"USERNAME": "Filhos", "FACEKIDS_TEST_ACTIVE_USER": "filhos"}), \
+        with patch.dict(os.environ, {"USERNAME": "Filhos", "SAFEPCKIDS_TEST_ACTIVE_USER": "filhos"}), \
              patch.object(welcome_screen, "is_active_console_user_filhos", return_value=True), \
              patch.object(welcome_screen, "load_programs_config", return_value={
                  "enabled": True,
@@ -112,8 +112,8 @@ class TestWelcomeScreen(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
-            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
-                 patch("facekids.welcome_screen.child_pilot_database", return_value=Path(td) / "inexistente.sqlite3"):
+            with patch("safepckids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
+                 patch("safepckids.welcome_screen.child_pilot_database", return_value=Path(td) / "inexistente.sqlite3"):
                 cid, name, rem = get_current_child_info()
                 self.assertEqual(cid, 3)
                 self.assertEqual(name, "Crianca 3")
@@ -132,7 +132,7 @@ class TestWelcomeScreen(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
-            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file):
+            with patch("safepckids.welcome_screen.LAST_UNLOCK_FILE", unlock_file):
                 cid, name, rem = get_current_child_info()
                 self.assertIsNone(cid)
                 self.assertEqual(name, "Filho(a)")
@@ -141,7 +141,7 @@ class TestWelcomeScreen(unittest.TestCase):
     def test_get_current_child_info_missing_returns_unidentified(self):
         with tempfile.TemporaryDirectory() as td:
             unlock_file = Path(td) / "nonexistent_last_unlock.json"
-            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file):
+            with patch("safepckids.welcome_screen.LAST_UNLOCK_FILE", unlock_file):
                 cid, name, rem = get_current_child_info()
                 self.assertIsNone(cid)
                 self.assertEqual(name, "Filho(a)")
@@ -215,7 +215,7 @@ class TestWelcomeScreen(unittest.TestCase):
             app.child_name = "Crianca 2"
             app.remaining_seconds = 1000
             app._last_seen_ts = now
-            with patch("facekids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
+            with patch("safepckids.welcome_screen.LAST_UNLOCK_FILE", unlock_file), \
                  patch.object(app, "switch_child") as mock_switch:
                 app._check_for_child_switch()
                 mock_switch.assert_called_once_with(4, "Ana", 5400)

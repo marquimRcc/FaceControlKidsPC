@@ -1,6 +1,6 @@
 import unittest
 
-from facekids.pipe_protocol import decode_pipe_command
+from safepckids.pipe_protocol import decode_pipe_command
 
 
 class PipeCommandProtocolTests(unittest.TestCase):

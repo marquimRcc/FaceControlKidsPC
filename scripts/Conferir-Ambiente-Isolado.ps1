@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Read-only environment preflight for FaceKids Windows SCM experiments.
+  Read-only environment preflight for SafePCKids Windows SCM experiments.
 .DESCRIPTION
   Never registers services, modifies Winlogon, changes a password,
   writes a registry key or installs any DLL. Recognition of a
@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($RequireGitHubHosted) {
     if ($env:GITHUB_ACTIONS -ne 'true' -or
-        $env:FACEKIDS_RUNNER_ENVIRONMENT -ne 'github-hosted') {
+        $env:SAFEPCKIDS_RUNNER_ENVIRONMENT -ne 'github-hosted') {
         throw 'REFUSED: service lifecycle tests require GitHub-hosted Windows runner.'
     }
 }

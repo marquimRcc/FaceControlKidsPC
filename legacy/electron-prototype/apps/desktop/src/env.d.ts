@@ -1,8 +1,8 @@
-import type { FaceKidsDesktopApi } from "@facekids/contracts";
+import type { SafePCKidsDesktopApi } from "@safepckids/contracts";
 
 declare global {
   interface Window {
-    facekids?: FaceKidsDesktopApi;
+    safepckids?: SafePCKidsDesktopApi;
   }
 }
 

@@ -1,11 +1,11 @@
-# FaceKids — broker de quotas: laboratorio Windows (sem instalacao)
+# SafePCKids — broker de quotas: laboratorio Windows (sem instalacao)
 
 **Status:** prototipo de laboratorio, nao e um Windows Service registrado e
 NAO substitui o controle de quotas atualmente em uso pela conta Filhos.
 
 ## Entrega tecnica desta rodada
 
-1. `quota_broker_protocol.py` — `FACEKIDS_QUOTA_V1`, apenas `PING` e
+1. `quota_broker_protocol.py` — `SAFEPCKIDS_QUOTA_V1`, apenas `PING` e
    `GET_BALANCE`. Campos de identidade, data, debito, bonus e perfil
    enviados por clientes sao recusados. A identidade entra exclusivamente
    pelo adaptador Windows que conhece o token da conexao.
@@ -21,7 +21,7 @@ NAO substitui o controle de quotas atualmente em uso pela conta Filhos.
    servidor remoto e suas respostas nao podem controlar Winlogon, quotas
    ou LockWorkStation.**
 5. `quota_broker_lab.py` — comando `--vm-lab-only`, exige caminho
-   especifico `facekids-quota-lab`, SID e ID de cadastro de testes.
+   especifico `safepckids-quota-lab`, SID e ID de cadastro de testes.
 6. `quota_broker_migration.py` — backup WAL-consistente via
    `sqlite3.Connection.backup`, checagem de integridade e publicacao
    em arquivo NOVO dentro do diretorio de laboratorio, sem sobrescrever.
@@ -34,15 +34,15 @@ NAO substitui o controle de quotas atualmente em uso pela conta Filhos.
 
 Em uma VM Windows com clone do repositorio, usando somente perfis ficticios:
 
-- Criar uma pasta dedicada `facekids-quota-lab` em um diretorio temporario.
+- Criar uma pasta dedicada `safepckids-quota-lab` em um diretorio temporario.
 - Criar nela um banco SQLite **sintetico** usando o CLI de cadastros de teste;
   nunca copiar fotos, embeddings ou bases reais sem consentimento especifico.
 - Verificar o SID da conta de teste com `whoami /user`.
 - Iniciar o host SOMENTE de diagnostico com:
-  `python -m facekids.quota_broker_lab --vm-lab-only --database "<fixture>" --client-sid "<SID-de-teste>" --child-id 1 --pipe-suffix 0123456789abcdef0123456789abcdef`
+  `python -m safepckids.quota_broker_lab --vm-lab-only --database "<fixture>" --client-sid "<SID-de-teste>" --child-id 1 --pipe-suffix 0123456789abcdef0123456789abcdef`
 - Em outro terminal da MESMA VM, efetuar UMA consulta somente leitura
-  usando `facekids.quota_broker_client_win.query_lab_balance` no pipe
-  `\\.\pipe\FaceKidsQuotaBrokerLab-0123456789abcdef0123456789abcdef`.
+  usando `safepckids.quota_broker_client_win.query_lab_balance` no pipe
+  `\\.\pipe\SafePCKidsQuotaBrokerLab-0123456789abcdef0123456789abcdef`.
 - Repetir com SID nao autorizado e verificar `DENY`.
 - Testar snapshot/rollback apenas copiando dados no proprio laboratorio;
   nao executar `icacls`, `regsvr32` nem scripts de instalacao.
@@ -79,8 +79,8 @@ familiar, credenciais e rostos nao foram alterados.
 
 A conta Filhos pode, exclusivamente em VM com broker lab, iniciar o agente
 com as variaveis de ambiente de teste:
-- `FACEKIDS_QUOTA_BROKER_SHADOW=1`
-- `FACEKIDS_QUOTA_LAB_SUFFIX=0123456789abcdef0123456789abcdef`
+- `SAFEPCKIDS_QUOTA_BROKER_SHADOW=1`
+- `SAFEPCKIDS_QUOTA_LAB_SUFFIX=0123456789abcdef0123456789abcdef`
 
 O sampler roda numa thread daemon e compara periodicamente apenas os
 saldos, registrando `matched`, `diverged` ou `broker-unavailable`.

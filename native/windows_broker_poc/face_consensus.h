@@ -6,7 +6,7 @@
 #include <windows.h>
 #include <cstdint>
 
-namespace facekids_consensus {
+namespace safepckids_consensus {
 enum class State { Reset, Collecting, StableCandidateOnly };
 class Window {
     DWORD session_=0;
@@ -15,10 +15,10 @@ class Window {
     ULONGLONG first_=0, last_=0;
 public:
     void revoke(){session_=0;child_=0;count_=0;first_=last_=0;}
-    State observe(const facekids_matcher::Match& match, DWORD session,
+    State observe(const safepckids_matcher::Match& match, DWORD session,
                   ULONGLONG monotonic_ms, unsigned int face_count) {
         if(face_count!=1 || session==0 || session==0xffffffff ||
-           match.status!=facekids_matcher::Status::CandidateOnly ||
+           match.status!=safepckids_matcher::Status::CandidateOnly ||
            match.child_id<1 || match.child_id>3) {
             revoke();
             return State::Reset;
@@ -48,9 +48,9 @@ public:
 };
 inline bool self_test() {
     Window w;
-    facekids_matcher::Match one={facekids_matcher::Status::CandidateOnly,1,0.99};
-    facekids_matcher::Match two={facekids_matcher::Status::CandidateOnly,2,0.99};
-    facekids_matcher::Match ambiguous={facekids_matcher::Status::Ambiguous,0,0.99};
+    safepckids_matcher::Match one={safepckids_matcher::Status::CandidateOnly,1,0.99};
+    safepckids_matcher::Match two={safepckids_matcher::Status::CandidateOnly,2,0.99};
+    safepckids_matcher::Match ambiguous={safepckids_matcher::Status::Ambiguous,0,0.99};
     if(w.observe(one,7,1000,1)!=State::Collecting ||
        w.observe(one,7,1500,1)!=State::Collecting ||
        w.observe(one,7,1800,1)!=State::StableCandidateOnly ||
@@ -75,4 +75,4 @@ inline bool self_test() {
        w.observe(one,7,6000,1)!=State::StableCandidateOnly) return false;
     return true;
 }
-} // namespace facekids_consensus
+} // namespace safepckids_consensus

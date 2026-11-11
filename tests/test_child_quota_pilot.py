@@ -2,12 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from facekids.child_quota_pilot import (
+from safepckids.child_quota_pilot import (
     ChildQuotaEngine, CHILD_LABELS, LIMIT_MINUTES,
     PilotEvent, provision_three_children
 )
-from facekids.session import SessionState
-from facekids.storage import Storage
+from safepckids.session import SessionState
+from safepckids.storage import Storage
 
 
 class ChildQuotaPilotTests(unittest.TestCase):

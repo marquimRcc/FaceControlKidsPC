@@ -1,8 +1,8 @@
-# FaceControlKidsPC — Roadmap de produto e homologação
+# SafePCKids — Roadmap de produto e homologação
 
 **Referência:** 27/10/2026. **Projeto:** Windows primeiro; Linux/Regata OS
-em trilha separada. **Branch de segurança:** `fix/facekids-ipc-security-hardening-20261024`;
-[PR #4](https://github.com/marquimRcc/FaceControlKidsPC/pull/4) em **draft**.
+em trilha separada. **Branch de segurança:** `fix/safepckids-ipc-security-hardening-20261024`;
+[PR #4](https://github.com/marquimRcc/SafePCKids/pull/4) em **draft**.
 Esta página consolida os checkpoints anteriores; não certifica hardware
 nem substitui relatórios de homologação detalhados.
 
@@ -31,8 +31,8 @@ No **ensaio físico inicial**, o rosto de um adulto voluntário é um
 | Diagnóstico voluntário de rosto adulto na conta `Filhos` | Script pronto em `scripts/Iniciar-Teste-Adulto-Filhos.ps1` | Sem resultados da webcam física deste piloto |
 | CI no SHA `96a9630b` | **339 unitários por plataforma e workflows nativos aprovados** | CI não captura webcam real nem valida LogonUI |
 
-**Evidências de CI:** [Windows + Ubuntu](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40264109787)
-e [Credential Provider nativo](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40264109763).
+**Evidências de CI:** [Windows + Ubuntu](https://github.com/marquimRcc/SafePCKids/actions/runs/40264109787)
+e [Credential Provider nativo](https://github.com/marquimRcc/SafePCKids/actions/runs/40264109763).
 
 ## Roadmap prioritário (sem estimativas artificiais)
 

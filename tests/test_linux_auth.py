@@ -6,11 +6,11 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from facekids import linux_pam_helper
-from facekids.child_quota_pilot import provision_three_children
-from facekids.linux_auth import FaceApproval, FaceApprovalBroker, approval_still_allowed
-from facekids.session import SessionState
-from facekids.storage import Storage
+from safepckids import linux_pam_helper
+from safepckids.child_quota_pilot import provision_three_children
+from safepckids.linux_auth import FaceApproval, FaceApprovalBroker, approval_still_allowed
+from safepckids.session import SessionState
+from safepckids.storage import Storage
 
 
 class LinuxAuthTests(unittest.TestCase):
@@ -73,13 +73,13 @@ class LinuxAuthTests(unittest.TestCase):
         {
             "PAM_TYPE": "auth",
             "PAM_USER": "filhos",
-            "FACEKIDS_AUTH_SOCKET": "/tmp/untrusted.sock",
+            "SAFEPCKIDS_AUTH_SOCKET": "/tmp/untrusted.sock",
         },
         clear=True,
     )
-    @patch("facekids.linux_pam_helper.socket.AF_UNIX", 1, create=True)
-    @patch("facekids.linux_pam_helper.socket.socket")
-    @patch("facekids.linux_pam_helper.linux_display_session", return_value="4")
+    @patch("safepckids.linux_pam_helper.socket.AF_UNIX", 1, create=True)
+    @patch("safepckids.linux_pam_helper.socket.socket")
+    @patch("safepckids.linux_pam_helper.linux_display_session", return_value="4")
     def test_pam_helper_accepts_only_daemon_allow(self, _session, socket_factory):
         client = MagicMock()
         socket_factory.return_value = client

@@ -1,6 +1,6 @@
 import unittest
 
-from facekids.unlock_policy import (
+from safepckids.unlock_policy import (
     FacialEvidence, OneUseTicketRegistry, UnlockReason, evaluate_unlock,
 )
 

@@ -13,7 +13,7 @@ Quatro classificacoes internas: NO_CAMERA, CAMERA_ENUMERATED_NOT_VERIFIED,
 MF_UNAVAILABLE e UNKNOWN. Nenhuma habilita autenticacao: a API
 usable_for_authentication() devolve falso em todos os estados.
 
-O diagnostico FaceKidsBrokerPoc.exe --camera-capability apenas informa
+O diagnostico SafePCKidsBrokerPoc.exe --camera-capability apenas informa
 o estado atual do dispositivo e nunca consulta informacoes biometricas.
 
 ## P0-14: inventario consultado no servico LocalSystem
@@ -24,7 +24,7 @@ CAMERA_ENUMERATED ou CAMERA_UNAVAILABLE. O pipe exige usuario SYSTEM
 ou administrador elevado (DACL do broker) e nao permite fornecer
 SID, camera index, comandos de captura, caminho de arquivo ou rosto.
 
-O executavel FaceKidsBrokerPoc.exe --camera-status consulta o broker,
+O executavel SafePCKidsBrokerPoc.exe --camera-status consulta o broker,
 e o CI Windows exercita essa operacao tanto no host isolado quanto
 no SCM LocalSystem, antes de remover o servico descartavel.
 

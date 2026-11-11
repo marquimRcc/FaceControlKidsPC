@@ -1,4 +1,4 @@
-// FaceKids diagnostic Credential Provider, for isolated COM testing only.
+// SafePCKids diagnostic Credential Provider, for isolated COM testing only.
 // Not an authenticator: it NEVER returns Windows logon credentials.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -9,7 +9,7 @@
 #include <cstring>
 #include <string>
 #include <sddl.h>
-#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+#ifdef SAFEPCKIDS_DIAGNOSTIC_HOST_TEST
 #include "precheck_client.h"
 #endif
 static volatile LONG objects=0, locks=0;
@@ -74,7 +74,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetStringValue(DWORD id,PWSTR* output) override {
         if (!output) return E_POINTER;
         *output=nullptr;
-        if (id==0) return clone_text(L"FaceKids - DIAGNOSTICO",output);
+        if (id==0) return clone_text(L"SafePCKids - DIAGNOSTICO",output);
         if (id==1) return clone_text(L"Somente teste. Nenhuma senha utilizada.",output);
         return E_INVALIDARG;
     }
@@ -107,17 +107,17 @@ public:
 
 // Never enumerate a tile without matching the administratively provisioned SID.
 // The isolated COM test build can inject a fake SID, but never authenticates.
-#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
-extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsDiagnosticPrecheckForHost(
+#ifdef SAFEPCKIDS_DIAGNOSTIC_HOST_TEST
+extern "C" __declspec(dllexport) HRESULT __stdcall SafePCKidsDiagnosticPrecheckForHost(
     DWORD session, DWORD child) {
-    if (!facekids_cp_client::self_test()) return E_FAIL;
+    if (!safepckids_cp_client::self_test()) return E_FAIL;
     // In an isolated COM host running as an administrator, PRECHECK must
     // always be denied. The diagnostic DLL never calls GetSerialization.
-    return facekids_cp_client::request(session, child) ==
-        facekids_cp_client::Precheck::Denied ? S_OK : E_ACCESSDENIED;
+    return safepckids_cp_client::request(session, child) ==
+        safepckids_cp_client::Precheck::Denied ? S_OK : E_ACCESSDENIED;
 }
 static std::wstring g_host_test_sid;
-extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsSetDiagnosticSidForHost(PCWSTR sid) {
+extern "C" __declspec(dllexport) HRESULT __stdcall SafePCKidsSetDiagnosticSidForHost(PCWSTR sid) {
     if (!sid) return E_POINTER;
     PSID binary=nullptr;
     if (!ConvertStringSidToSidW(sid,&binary)) return E_INVALIDARG;
@@ -127,13 +127,13 @@ extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsSetDiagnosticSidForHo
 }
 #endif
 static std::wstring load_target_sid() {
-#ifdef FACEKIDS_DIAGNOSTIC_HOST_TEST
+#ifdef SAFEPCKIDS_DIAGNOSTIC_HOST_TEST
     return g_host_test_sid;
 #else
     WCHAR sid[256]={};
     DWORD bytes=sizeof(sid);
     LONG rc=RegGetValueW(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\FaceControlKidsPC\\CredentialProvider",
+        L"SOFTWARE\\SafePCKids\\CredentialProvider",
         L"TargetUserSid",RRF_RT_REG_SZ,nullptr,sid,&bytes);
     if (rc!=ERROR_SUCCESS || !sid[0]) return {};
     PSID binary=nullptr;
@@ -222,7 +222,7 @@ public:
         *desc={};
         desc->dwFieldID=id;
         desc->cpft=id==0 ? CPFT_LARGE_TEXT : CPFT_SMALL_TEXT;
-        HRESULT hr=clone_text(id==0 ? L"FaceKids" : L"Status",&desc->pszLabel);
+        HRESULT hr=clone_text(id==0 ? L"SafePCKids" : L"Status",&desc->pszLabel);
         if (FAILED(hr)) { CoTaskMemFree(desc); return hr; }
         *out=desc;
         return S_OK;
@@ -275,7 +275,7 @@ public:
     }
 };
 static const CLSID kProviderId={0xfac0d041,0x3dd0,0x4a8c,{0x9f,0x18,0x44,0x0c,0x44,0x33,0x0c,0x10}};
-extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsGetClassObject(
+extern "C" __declspec(dllexport) HRESULT __stdcall SafePCKidsGetClassObject(
     REFCLSID clsid,REFIID iid,LPVOID* out) {
     if (!out) return E_POINTER;
     *out=nullptr;
@@ -286,7 +286,7 @@ extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsGetClassObject(
     f->Release();
     return hr;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall FaceKidsCanUnloadNow() {
+extern "C" __declspec(dllexport) HRESULT __stdcall SafePCKidsCanUnloadNow() {
     return objects==0 && locks==0 ? S_OK : S_FALSE;
 }
 BOOL APIENTRY DllMain(HMODULE m,DWORD why,LPVOID) {

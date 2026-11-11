@@ -39,7 +39,7 @@ def main() -> int:
 
     name = "FKCI" + uuid.uuid4().hex[:12]
     password = "A9!" + secrets.token_urlsafe(25)
-    root = Path(os.environ["PROGRAMDATA"]) / ("FaceKidsAclCi" + uuid.uuid4().hex)
+    root = Path(os.environ["PROGRAMDATA"]) / ("SafePCKidsAclCi" + uuid.uuid4().hex)
     if root.exists():
         raise RuntimeError("Never reuse a lab ACL fixture")
     created_user = False
@@ -57,7 +57,7 @@ def main() -> int:
         mutable = root / "child-cache"
         protected.mkdir()
         mutable.mkdir()
-        fake_dll = protected / "FaceKidsCredentialProvider.synthetic"
+        fake_dll = protected / "SafePCKidsCredentialProvider.synthetic"
         fake_sqlite = protected / "quota-ledger.synthetic"
         cache = mutable / "cache.synthetic"
         fake_dll.write_bytes(b"fake binary - not registered")

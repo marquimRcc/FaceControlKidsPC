@@ -6,18 +6,18 @@ import net from "node:net";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const role = process.argv.includes("--role=child") ? "child" : "admin";
-const packagedIcon = path.join(here, "../assets/facekids-256.png");
-const workspaceIcon = path.join(here, "../../../assets/facekids-256.png");
+const packagedIcon = path.join(here, "../assets/safepckids-256.png");
+const workspaceIcon = path.join(here, "../../../assets/safepckids-256.png");
 const appIcon = existsSync(packagedIcon) ? packagedIcon : workspaceIcon;
-const adminSocket = process.env.FACEKIDS_ADMIN_SOCKET ?? "/run/facekids/admin.sock";
-const childSocket = process.env.FACEKIDS_CHILD_SOCKET ?? "/run/facekids-child/status.sock";
+const adminSocket = process.env.SAFEPCKIDS_ADMIN_SOCKET ?? "/run/safepckids/admin.sock";
+const childSocket = process.env.SAFEPCKIDS_CHILD_SOCKET ?? "/run/safepckids-child/status.sock";
 
 function socketRequest(socketPath: string, request: Record<string, unknown>): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const client = net.createConnection(socketPath);
     let response = "";
     const fail = (error: Error) => { client.destroy(); reject(error); };
-    client.setTimeout(4000, () => fail(new Error("O serviço FaceKids não respondeu")));
+    client.setTimeout(4000, () => fail(new Error("O serviço SafePCKids não respondeu")));
     client.on("connect", () => client.write(`${JSON.stringify(request)}\n`));
     client.on("data", chunk => {
       response += chunk.toString("utf8");
@@ -49,7 +49,7 @@ function createWindow() {
     minHeight: role === "child" ? 600 : 700,
     backgroundColor: "#0b1020",
     icon: appIcon,
-    title: role === "child" ? "FaceKids — Meu tempo" : "FaceKids — Painel dos pais",
+    title: role === "child" ? "SafePCKids — Meu tempo" : "SafePCKids — Painel dos pais",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(here, "preload.cjs"),
@@ -61,7 +61,7 @@ function createWindow() {
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://docs.facekids.local/")) void shell.openExternal(url);
+    if (url.startsWith("https://docs.safepckids.local/")) void shell.openExternal(url);
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", event => event.preventDefault());
@@ -71,21 +71,21 @@ function createWindow() {
   else void window.loadFile(path.join(here, "../dist/index.html"), { query: { role } });
 }
 
-app.setName("FaceKids");
+app.setName("SafePCKids");
 
 app.whenReady().then(() => {
-  ipcMain.handle("facekids:get-context", () => ({
+  ipcMain.handle("safepckids:get-context", () => ({
     role,
     platform: process.platform,
     backendConnected: false,
   }));
-  ipcMain.handle("facekids:admin-state", async () => {
+  ipcMain.handle("safepckids:admin-state", async () => {
     const response = await socketRequest(
       role === "child" ? childSocket : adminSocket, { op: "status" },
     );
     return { snapshot: response.snapshot, enrollment: response.enrollment ?? null };
   });
-  ipcMain.handle("facekids:enroll-child", async (_event, input: unknown) => {
+  ipcMain.handle("safepckids:enroll-child", async (_event, input: unknown) => {
     if (!input || typeof input !== "object") throw new Error("Cadastro inválido");
     const { name, minutes } = input as { name?: unknown; minutes?: unknown };
     if (typeof name !== "string" || !name.trim() || name.trim().length > 80 ||
@@ -97,26 +97,26 @@ app.whenReady().then(() => {
     });
     return { childId: added.childId };
   });
-  ipcMain.handle("facekids:cancel-enrollment", async () => {
+  ipcMain.handle("safepckids:cancel-enrollment", async () => {
     await adminRequest({ op: "cancel_enrollment" });
   });
-  ipcMain.handle("facekids:start-enrollment", async (_event, childId: unknown) => {
+  ipcMain.handle("safepckids:start-enrollment", async (_event, childId: unknown) => {
     if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
     await adminRequest({ op: "start_enrollment", childId });
   });
-  ipcMain.handle("facekids:list-photos", async (_event, childId: unknown) => {
+  ipcMain.handle("safepckids:list-photos", async (_event, childId: unknown) => {
     if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
     const response = await adminRequest({ op: "list_photos", childId });
     return response.photos;
   });
-  ipcMain.handle("facekids:select-photo", async (
+  ipcMain.handle("safepckids:select-photo", async (
     _event, childId: unknown, photoId: unknown,
   ) => {
     if (!typeOfNumber(childId) || childId <= 0 ||
         !typeOfNumber(photoId) || photoId <= 0) throw new Error("Foto inválida");
     await adminRequest({ op: "select_photo", childId, photoId });
   });
-  ipcMain.handle("facekids:rename-child", async (
+  ipcMain.handle("safepckids:rename-child", async (
     _event, childId: unknown, name: unknown,
   ) => {
     if (!typeOfNumber(childId) || childId <= 0 || typeof name !== "string" ||
@@ -125,15 +125,15 @@ app.whenReady().then(() => {
     }
     await adminRequest({ op: "rename_child", childId, name: name.trim() });
   });
-  ipcMain.handle("facekids:delete-child", async (_event, childId: unknown) => {
+  ipcMain.handle("safepckids:delete-child", async (_event, childId: unknown) => {
     if (!typeOfNumber(childId) || childId <= 0) throw new Error("Criança inválida");
     await adminRequest({ op: "delete_child", childId });
   });
-  ipcMain.handle("facekids:probe-camera", async () => {
+  ipcMain.handle("safepckids:probe-camera", async () => {
     const response = await adminRequest({ op: "probe", seconds: 5 });
     return response.probe;
   });
-  ipcMain.handle("facekids:set-daily-limit", async (
+  ipcMain.handle("safepckids:set-daily-limit", async (
     _event, childId: unknown, minutes: unknown,
   ) => {
     if (!typeOfNumber(childId) || childId <= 0 ||
@@ -142,7 +142,7 @@ app.whenReady().then(() => {
     }
     await adminRequest({ op: "set_daily_limit", childId, minutes });
   });
-  ipcMain.handle("facekids:add-bonus", async (
+  ipcMain.handle("safepckids:add-bonus", async (
     _event, childId: unknown, minutes: unknown,
   ) => {
     if (!typeOfNumber(childId) || childId <= 0 ||
@@ -151,7 +151,7 @@ app.whenReady().then(() => {
     }
     await adminRequest({ op: "add_bonus", childId, minutes });
   });
-  ipcMain.handle("facekids:set-curfew", async (_event, input: unknown) => {
+  ipcMain.handle("safepckids:set-curfew", async (_event, input: unknown) => {
     if (!input || typeof input !== "object") throw new Error("Horário inválido");
     const { enabled, start, end } = input as Record<string, unknown>;
     const clock = /^(?:[01]\d|2[0-3]):[0-5]\d$/;

@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from facekids.admin_dashboard import AdminDashboard, is_admin_account, time_format_hm
-from facekids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files, get_child_avatar_path
-from facekids.storage import Storage
+from safepckids.admin_dashboard import AdminDashboard, is_admin_account, time_format_hm
+from safepckids.avatar_utils import PhotoUpdateResult, set_child_photo_from_file, remove_child_avatar_files, get_child_avatar_path
+from safepckids.storage import Storage
 
 
 class TestAdminDashboard(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestAdminDashboard(unittest.TestCase):
 
     def test_is_admin_account_denied_for_filhos(self):
         with patch.dict(os.environ, {"USERNAME": "Filhos"}):
-            with patch("facekids.admin_dashboard.windows_token_user", return_value="Filhos"):
+            with patch("safepckids.admin_dashboard.windows_token_user", return_value="Filhos"):
                 self.assertFalse(is_admin_account())
 
     def test_time_format_hm(self):
@@ -55,9 +55,9 @@ class TestAdminDashboard(unittest.TestCase):
         dashboard.store = MagicMock()
         dashboard.status_text = MagicMock()
         result = PhotoUpdateResult(True, "Foto atualizada", Path("avatar.png"))
-        with patch("facekids.admin_dashboard.filedialog.askopenfilename", return_value="foto.png"), \
-             patch("facekids.admin_dashboard.set_child_photo_from_file", return_value=result) as update, \
-             patch("facekids.admin_dashboard.messagebox.showinfo"):
+        with patch("safepckids.admin_dashboard.filedialog.askopenfilename", return_value="foto.png"), \
+             patch("safepckids.admin_dashboard.set_child_photo_from_file", return_value=result) as update, \
+             patch("safepckids.admin_dashboard.messagebox.showinfo"):
             AdminDashboard._pick_photo_file(dashboard, 2)
 
         self.assertFalse(update.call_args.kwargs["update_biometrics"])
@@ -104,7 +104,7 @@ class TestAdminDashboard(unittest.TestCase):
             dummy = np.zeros((100, 100, 3), dtype=np.uint8)
             cv2.imwrite(str(jpg_file), dummy)
 
-            with patch("facekids.avatar_utils.AVATAR_DIR", avatar_dir):
+            with patch("safepckids.avatar_utils.AVATAR_DIR", avatar_dir):
                 res = get_child_avatar_path(9)
                 self.assertIsNotNone(res)
                 self.assertTrue(res.name.endswith(".png"))
@@ -113,7 +113,7 @@ class TestAdminDashboard(unittest.TestCase):
     def test_sample_photos_gallery_and_selection(self):
         import cv2
         import numpy as np
-        from facekids.avatar_utils import get_child_sample_photos, select_child_sample_photo
+        from safepckids.avatar_utils import get_child_sample_photos, select_child_sample_photo
         with tempfile.TemporaryDirectory() as td:
             avatar_dir = Path(td) / "fotos"
             samples_dir = avatar_dir / "amostras_7"
@@ -125,7 +125,7 @@ class TestAdminDashboard(unittest.TestCase):
                 img[:] = (i * 20 % 255, 100, 150)
                 cv2.imwrite(str(samples_dir / f"amostra_{i}.jpg"), img)
 
-            with patch("facekids.avatar_utils.AVATAR_DIR", avatar_dir):
+            with patch("safepckids.avatar_utils.AVATAR_DIR", avatar_dir):
                 samples = get_child_sample_photos(7)
                 self.assertEqual(len(samples), 12)
                 self.assertTrue(samples[0]["selected"])

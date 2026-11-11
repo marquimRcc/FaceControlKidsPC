@@ -17,7 +17,7 @@
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfuuid.lib")
 
-namespace facekids_camera {
+namespace safepckids_camera {
 
 enum class Capability {
     Unknown,
@@ -104,4 +104,4 @@ inline bool self_test() {
            "CAMERA_ENUMERATED_NOT_VERIFIED";
 }
 
-} // namespace facekids_camera
+} // namespace safepckids_camera

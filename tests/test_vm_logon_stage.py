@@ -4,7 +4,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "FaceKids-VM-Autenticacao.ps1"
+SCRIPT = ROOT / "scripts" / "SafePCKids-VM-Autenticacao.ps1"
 DOCUMENT = ROOT / "docs" / "VM-P3-P4-P5-AUTENTICACAO-20261027.md"
 
 
@@ -18,17 +18,17 @@ class VmLogonStageTests(unittest.TestCase):
         source = self.source
         self.assertIn("Assert-Guest", source)
         self.assertIn("innotek|VirtualBox", source)
-        self.assertIn("FaceKids-VM-Lab", source)
-        self.assertIn("FaceKids-VM-CP-Lab", source)
+        self.assertIn("SafePCKids-VM-Lab", source)
+        self.assertIn("SafePCKids-VM-CP-Lab", source)
         self.assertIn("RECUSADO: execute na conta ADMINISTRATIVA", source)
         self.assertNotIn("Register-ScheduledTask", source)
         self.assertNotIn("New-Service", source)
-        self.assertNotIn("C:\\\\ProgramData\\\\FaceKids\\\\FaceKidsCredentialProvider.dll", source)
+        self.assertNotIn("C:\\\\ProgramData\\\\SafePCKids\\\\SafePCKidsCredentialProvider.dll", source)
 
     def test_worker_started_before_credential_registration(self):
         for needle in [
             "StartAuth", "Require-Assets", "Require-Filhos",
-            "facekids.auth_service", "Get-WorkerSid", "listening",
+            "safepckids.auth_service", "Get-WorkerSid", "listening",
             "Invoke-AuthPipe -Command PING",
             "Invoke-AuthPipe -Command AUTH_QUERY",
             "if($response.status -ne 'ALLOW')",
@@ -52,7 +52,7 @@ class VmLogonStageTests(unittest.TestCase):
 
     def test_launcher_pid_can_differ_from_real_named_pipe_server_pid(self):
         source = self.source
-        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+        preflight = (ROOT / "scripts" / "Validar-Passo2-SafePCKids-VM.ps1").read_text(
             encoding="utf-8")
         # The Windows virtualenv Python redirector can change the process PID.
         # Resolve the real server from its own status and verify its SID and CLI.
@@ -61,7 +61,7 @@ class VmLogonStageTests(unittest.TestCase):
             "launcherPid=$p.Id",
             "processId=$actualPid",
             "Get-WorkerSid -ProcessId $actualPid",
-            "$actual.CommandLine -notmatch 'facekids[.]auth_service'",
+            "$actual.CommandLine -notmatch 'safepckids[.]auth_service'",
             "$p.CommandLine -notlike ('*'+$statusFile+'*')",
             "[int]$serverState.pid -ne [int]$p.ProcessId",
         ]:
@@ -113,7 +113,7 @@ class VmLogonStageTests(unittest.TestCase):
                 self.assertIn(needle.lstrip("-"), self.source)
 
     def test_step2_preflight_only_reads_live_lab_state(self):
-        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+        preflight = (ROOT / "scripts" / "Validar-Passo2-SafePCKids-VM.ps1").read_text(
             encoding="utf-8")
         guide = (ROOT / "docs" / "VM-PASSO2-PREFLIGHT-20261027.md").read_text(
             encoding="utf-8")
@@ -130,7 +130,7 @@ class VmLogonStageTests(unittest.TestCase):
         self.assertIn("-FixedPasswordConfirmed", guide)
 
     def test_step2_diagnostics_record_success_and_failure_with_reason_codes(self):
-        preflight = (ROOT / "scripts" / "Validar-Passo2-FaceKids-VM.ps1").read_text(
+        preflight = (ROOT / "scripts" / "Validar-Passo2-SafePCKids-VM.ps1").read_text(
             encoding="utf-8")
         for needle in [
             "function Get-WorkerDiagnostics", "function Test-AuthPipePing",
@@ -138,7 +138,7 @@ class VmLogonStageTests(unittest.TestCase):
             "WORKER_EXITED_OR_STALE_PID", "WORKER_OWNER_SID_MISMATCH",
             "WORKER_SID_QUERY_FAILED", "WORKER_SID_QUERY_EXCEPTION",
             "IPC_PONG", "PIPE_UNAVAILABLE", "reason_code",
-            "facekids-vm-events.jsonl", "passo2-ultimo.json",
+            "safepckids-vm-events.jsonl", "passo2-ultimo.json",
             "Add-Content -LiteralPath $historyFile",
             "Set-Content -LiteralPath $lastFile",
             "PRECHECK_BLOQUEADO", "Preflight tecnico aprovado",
@@ -153,9 +153,9 @@ class VmLogonStageTests(unittest.TestCase):
         self.assertNotIn("New-LocalUser", preflight)
 
     def test_one_line_driver_refreshes_lab_and_never_installs_login(self):
-        wrapper = (ROOT / "scripts" / "Preparar-FaceKids-Autenticacao-VM.ps1").read_text(
+        wrapper = (ROOT / "scripts" / "Preparar-SafePCKids-Autenticacao-VM.ps1").read_text(
             encoding="utf-8")
-        bootstrap = (ROOT / "scripts" / "Iniciar-FaceKids-VM-Developer.ps1").read_text(
+        bootstrap = (ROOT / "scripts" / "Iniciar-SafePCKids-VM-Developer.ps1").read_text(
             encoding="utf-8")
         for needle in ["VirtualBox|innotek", "scripts/", "-NoDashboard",
                        "-SkipTests", "-NoCameraProbe",

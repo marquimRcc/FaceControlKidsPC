@@ -17,7 +17,7 @@ jobs:
       - name: Refuse privileged SCM experiments outside disposable GitHub VM
         shell: pwsh
         env:
-          FACEKIDS_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SAFEPCKIDS_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           $ErrorActionPreference = 'Stop'
           & .\scripts\Conferir-Ambiente-Isolado.ps1 -RequireGitHubHosted
@@ -29,21 +29,21 @@ jobs:
           if not defined VSROOT exit /b 1
           call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
           if errorlevel 1 exit /b 1
-          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:FaceKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib ole32.lib mfplat.lib mf.lib mfuuid.lib shell32.lib mfreadwrite.lib
+          cl /nologo /std:c++17 /EHsc /W4 native\windows_broker_poc\broker.cpp /link /OUT:SafePCKidsBrokerPoc.exe Advapi32.lib Wtsapi32.lib winsqlite3.lib ole32.lib mfplat.lib mf.lib mfuuid.lib shell32.lib mfreadwrite.lib
           if errorlevel 1 exit /b 1
-          FaceKidsBrokerPoc.exe --self-test
+          SafePCKidsBrokerPoc.exe --self-test
           if errorlevel 1 exit /b 1
-          FaceKidsBrokerPoc.exe --camera-capability
+          SafePCKidsBrokerPoc.exe --camera-capability
           if errorlevel 1 exit /b 1
       - name: Reject non-SYSTEM SCM account before opening ProgramData
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $name = 'FaceKidsBrokerPoc'
-          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
-          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          $name = 'SafePCKidsBrokerPoc'
+          $exe = Join-Path $PWD 'SafePCKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'SafePCKids'
           if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
-            throw 'Unexpected existing FaceKidsBrokerPoc service'
+            throw 'Unexpected existing SafePCKidsBrokerPoc service'
           }
           if (Test-Path $root) { throw 'Refusing to touch existing data directory' }
           $image = '"' + $exe + '" --service'
@@ -76,9 +76,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $name = 'FaceKidsBrokerPoc'
-          $exe = Join-Path $PWD 'FaceKidsBrokerPoc.exe'
-          $root = Join-Path $env:ProgramData 'FaceControlKidsPC'
+          $name = 'SafePCKidsBrokerPoc'
+          $exe = Join-Path $PWD 'SafePCKidsBrokerPoc.exe'
+          $root = Join-Path $env:ProgramData 'SafePCKids'
           $db = Join-Path $root 'quota.sqlite3'
           if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
             throw "Service $name unexpectedly already exists"
@@ -127,7 +127,7 @@ jobs:
             $originalBytes = [System.IO.File]::ReadAllBytes($db)
             if ($originalBytes.Length -lt 100) { throw 'Unexpectedly short SQLite database' }
             $originalHash = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash
-            [System.IO.File]::WriteAllBytes($db, [Text.Encoding]::ASCII.GetBytes('INVALID_FACEKIDS_SQLITE_TEST_ONLY'))
+            [System.IO.File]::WriteAllBytes($db, [Text.Encoding]::ASCII.GetBytes('INVALID_SAFEPCKIDS_SQLITE_TEST_ONLY'))
             try {
               $refused = $false
               try { Start-Service -Name $name -ErrorAction Stop } catch { $refused = $true }

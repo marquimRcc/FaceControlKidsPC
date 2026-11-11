@@ -1,7 +1,7 @@
-# FaceControlKidsPC — aceite seguro de hardware / Windows
+# SafePCKids — aceite seguro de hardware / Windows
 
 ## Escopo
-Branch exclusiva: `fix/facekids-ipc-security-hardening-20261024`.
+Branch exclusiva: `fix/safepckids-ipc-security-hardening-20261024`.
 Esta branch **nao** foi instalada no computador domestico. O proprietario
 relatou que a baseline anterior desbloqueia Filhos; nao confundir este relato
 com teste independente desta branch, prova anti-spoof ou identidade do pipe.
@@ -10,9 +10,9 @@ com teste independente desta branch, prova anti-spoof ou identidade do pipe.
 Em PowerShell, na raiz do repositorio:
 
 ```powershell
-.\scripts\Instalar-FaceKids-Nativo.ps1 -PreflightOnly
-.\scripts\Desinstalar-FaceKids-Nativo.ps1 -AuditOnly
-.\scripts\Auditar-Identidade-PipeFaceKids.ps1
+.\scripts\Instalar-SafePCKids-Nativo.ps1 -PreflightOnly
+.\scripts\Desinstalar-SafePCKids-Nativo.ps1 -AuditOnly
+.\scripts\Auditar-Identidade-PipeSafePCKids.ps1
 ```
 
 - O primeiro inspeciona ACLs: DLL, scripts, logs, banco SQLite/WAL/SHM e fotos.
@@ -36,7 +36,7 @@ Em PowerShell, na raiz do repositorio:
    processos *nao* fornece essa prova. Nao ativar endurecimento que derrube
    a instancia interativa sem esse ensaio.
 4. **ACL dos dados:** o instalador legado concedeu Modify no diretorio
-   ProgramData/FaceKids para Filhos. Separar executaveis/codigo de dados
+   ProgramData/SafePCKids para Filhos. Separar executaveis/codigo de dados
    gravaveis e migrar SQLite/fotos com backup e rollback transacional em VM.
    *Nao* remover o Modify cegamente: o agente necessita gravar a quota.
 5. **Teste voluntario com webcam real:** com login admin disponivel, verificar

@@ -1,4 +1,4 @@
-# FaceKids — transição do agente Filhos: fronteira de escrita e leitura (25/10/2026)
+# SafePCKids — transição do agente Filhos: fronteira de escrita e leitura (25/10/2026)
 
 ## Escopo desta rodada
 
@@ -18,19 +18,19 @@ Também foi acrescentado um adaptador `BrokerLabReadOnlyQuota` de **observação
 
 ## Fortalecimento do Named Pipe de leitura
 
-- O cliente busca o **PID real da outra ponta** com `GetNamedPipeServerProcessId` e confere esse PID contra o serviço **exato** `FaceKidsQuotaLabOnly` em execução, consultando a identidade `LocalSystem` registrada no SCM com `QueryServiceStatusEx` e `QueryServiceConfigW` **antes de escrever a requisição**. A consulta direta de token SYSTEM pode falhar para usuário padrão e não é utilizada no cliente principal.
+- O cliente busca o **PID real da outra ponta** com `GetNamedPipeServerProcessId` e confere esse PID contra o serviço **exato** `SafePCKidsQuotaLabOnly` em execução, consultando a identidade `LocalSystem` registrada no SCM com `QueryServiceStatusEx` e `QueryServiceConfigW` **antes de escrever a requisição**. A consulta direta de token SYSTEM pode falhar para usuário padrão e não é utilizada no cliente principal.
 - Um pipe servido por um processo comum no runner é recusado; o pipe real SCM iniciado sob SYSTEM precisa corresponder ao PID e à conta do serviço cadastrado.
 - Repostas fora do contrato, campos extras (`child_id`, `elapsed_seconds`), tempos NaN/infinito/negativos, contraditórios (saldo zero + permitido) e falhas de transporte não autorizam ações.
 - Essa validação é **apenas defesa adicional**. PID/nome/conta SCM isoladamente **não bastam** para confiar nos valores, porque falta vincular o endpoint a um serviço SCM específico com configuração protegida e um identificador facial atual. O cliente de laboratório não deve controlar `LockWorkStation` ou login Windows.
 
 ## Protótipo executável de consulta sem escrita (VM)
 
-O módulo `facekids.filhos_quota_vm_readonly` agora fornece um ensaio concreto, **sem abrir SQLite, editar quota ou bloquear Windows**. Ele verifica primeiro a configuração protegida `HKLM\\SOFTWARE\\FaceControlKidsPC\\QuotaBrokerLabService`, exige `LabOnly=1`, confere que o SID efetivo do processo corresponde ao `ClientSid` configurado e só então consulta o Named Pipe específico. A resposta passa pelas verificações de protocolo e identidade do servidor SCM.
+O módulo `safepckids.filhos_quota_vm_readonly` agora fornece um ensaio concreto, **sem abrir SQLite, editar quota ou bloquear Windows**. Ele verifica primeiro a configuração protegida `HKLM\\SOFTWARE\\SafePCKids\\QuotaBrokerLabService`, exige `LabOnly=1`, confere que o SID efetivo do processo corresponde ao `ClientSid` configurado e só então consulta o Named Pipe específico. A resposta passa pelas verificações de protocolo e identidade do servidor SCM.
 
 **Somente dentro de VM descartável com o serviço de laboratório explicitamente registrado e ativo**:
 
 ```powershell
-python -m facekids.filhos_quota_vm_readonly --vm-lab-only
+python -m safepckids.filhos_quota_vm_readonly --vm-lab-only
 ```
 
 Se a política/identidade/canal não existirem ou não forem válidos, retorna erro sem abrir banco, sem tentar cobrança, sem trocar perfis e sem bloquear a sessão. **Não** executar em PC familiar e **não** usar esse módulo como substituto do agente de tempo em produção: a leitura ainda não conhece a identidade facial dinâmica dos três filhos. O launcher doméstico não foi alterado para chamar esse módulo.
@@ -46,7 +46,7 @@ Se a política/identidade/canal não existirem ou não forem válidos, retorna e
 
 `tests/test_quota_broker_transport_win.py`: processo comum recusado pela inspeção do token do Named Pipe; transporte unitário do pipe testado com bypass de **teste apenas** para a verificação por SCM. O teste de SCM real exige PID e conta registrados.
 
-`scripts/ci_scm_lab_smoke.py`: conta Windows sintética usa a consulta do adaptador no Named Pipe **real** do serviço `FaceKidsQuotaLabOnly` sob SYSTEM. O administrador é recusado pela ACL/mapeamento e nenhuma cobrança ocorre.
+`scripts/ci_scm_lab_smoke.py`: conta Windows sintética usa a consulta do adaptador no Named Pipe **real** do serviço `SafePCKidsQuotaLabOnly` sob SYSTEM. O administrador é recusado pela ACL/mapeamento e nenhuma cobrança ocorre.
 
 ## Pendências bloqueadoras — não chamar de corte concluído
 

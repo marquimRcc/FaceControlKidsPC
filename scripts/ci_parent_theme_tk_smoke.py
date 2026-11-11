@@ -12,9 +12,9 @@ import tempfile
 import tkinter as tk
 from unittest.mock import patch
 
-from facekids import admin_dashboard
-from facekids.storage import Storage
-from facekids.ui_theme import load_theme, save_theme, theme_palette
+from safepckids import admin_dashboard
+from safepckids.storage import Storage
+from safepckids.ui_theme import load_theme, save_theme, theme_palette
 
 
 def _require_hosted_windows() -> None:
@@ -22,7 +22,7 @@ def _require_hosted_windows() -> None:
         "GITHUB_ACTIONS": "true",
         "RUNNER_ENVIRONMENT": "github-hosted",
         "RUNNER_OS": "Windows",
-        "GITHUB_REPOSITORY": "marquimRcc/FaceControlKidsPC",
+        "GITHUB_REPOSITORY": "marquimRcc/SafePCKids",
     }
     if os.name != "nt" or any(os.environ.get(key) != value
                               for key, value in expected.items()):
@@ -41,7 +41,7 @@ def _find_option_menu(parent):
 
 def main() -> int:
     _require_hosted_windows()
-    with tempfile.TemporaryDirectory(prefix="facekids-parent-ui-smoke-") as folder:
+    with tempfile.TemporaryDirectory(prefix="safepckids-parent-ui-smoke-") as folder:
         path = Path(folder) / "synthetic-children.sqlite3"
         pref = Path(folder) / "preferences" / "theme.json"
         db = Storage(path)

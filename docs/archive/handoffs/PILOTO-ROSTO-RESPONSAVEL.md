@@ -4,7 +4,7 @@ Branch: \`feature/parent-face-pilot\`, criada da main já integrada.
 
 Este piloto **abre a webcam real**, captura doze representações
 numéricas YuNet/SFace do rosto adulto, armazena-as em
-\`%LOCALAPPDATA%\FaceKids\piloto-responsavel\piloto.sqlite3\`
+\`%LOCALAPPDATA%\SafePCKids\piloto-responsavel\piloto.sqlite3\`
 e mostra o reconhecimento ao vivo por até 60 segundos.
 
 Não grava fotografia ou vídeo, não envia dados biométricos pela rede,

@@ -12,14 +12,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids import filhos_agent, auth_service
-from facekids.storage import Storage
+from safepckids import filhos_agent, auth_service
+from safepckids.storage import Storage
 
 
 class DeveloperIntegrationRegression(unittest.TestCase):
     def test_main_session_rules_use_the_real_pure_policy(self):
         source = inspect.getsource(filhos_agent.run_agent)
-        from facekids.session_transition_policy import (
+        from safepckids.session_transition_policy import (
             decide_child_transition, TransitionDecision)
         self.assertIn("decide_child_transition(", source)
         self.assertIn("session_active_since_mono", source)

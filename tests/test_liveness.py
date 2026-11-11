@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 
-from facekids.liveness import PassiveLivenessDetector, LivenessDecision
+from safepckids.liveness import PassiveLivenessDetector, LivenessDecision
 
 
 class PassiveLivenessDetectorTests(unittest.TestCase):

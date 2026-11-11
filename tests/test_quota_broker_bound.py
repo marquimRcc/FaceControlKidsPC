@@ -5,19 +5,19 @@ from tempfile import TemporaryDirectory
 import threading
 import unittest
 
-from facekids.quota_broker_bound_protocol import (
+from safepckids.quota_broker_bound_protocol import (
     BOUND_ACTION, BOUND_PROTOCOL, BoundBalance, handle_bound_read,
     validate_bound_reply,
 )
-from facekids.quota_broker_runtime import ServiceOwnedQuotaRuntime
-from facekids.quota_broker_scm_host import ServiceOwnedScmHost
-from facekids.quota_broker_wts import WtsSnapshot
-from facekids.storage import Storage
+from safepckids.quota_broker_runtime import ServiceOwnedQuotaRuntime
+from safepckids.quota_broker_scm_host import ServiceOwnedScmHost
+from safepckids.quota_broker_wts import WtsSnapshot
+from safepckids.storage import Storage
 
 
 class BoundBalanceProtocolTests(unittest.TestCase):
     sid = "S-1-5-21-10-20-30-1001"
-    request = b'{"version":"FACEKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE"}'
+    request = b'{"version":"SAFEPCKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE"}'
 
     def test_contract_returns_service_selected_identity_only(self):
         calls = []
@@ -45,7 +45,7 @@ class BoundBalanceProtocolTests(unittest.TestCase):
             {"version": BOUND_PROTOCOL, "action": "CHARGE"},
             {"version": BOUND_PROTOCOL, "action": "SET_CHILD"},
             {"version": BOUND_PROTOCOL, "action": "UNLOCK"},
-            {"version": "FACEKIDS_QUOTA_V1", "action": "GET_BOUND_BALANCE"},
+            {"version": "SAFEPCKIDS_QUOTA_V1", "action": "GET_BOUND_BALANCE"},
         ):
             with self.subTest(payload=request):
                 reply = handle_bound_read(
@@ -55,8 +55,8 @@ class BoundBalanceProtocolTests(unittest.TestCase):
                 self.assertEqual(reply, {"status": "DENY"})
         self.assertEqual(called, [])
         for raw in (
-            b'{"version":"FACEKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE","action":"CHARGE"}',
-            b'{"version":"FACEKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE"}' * 8,
+            b'{"version":"SAFEPCKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE","action":"CHARGE"}',
+            b'{"version":"SAFEPCKIDS_BOUND_QUOTA_V1","action":"GET_BOUND_BALANCE"}' * 8,
             b'[]', b'', b'{"version":null,"action":null}',
         ):
             self.assertEqual(handle_bound_read(

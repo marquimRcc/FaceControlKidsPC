@@ -4,13 +4,13 @@
 sem conexão com a DLL do Credential Provider.
 
 A investigação do WinFace revelou a vantagem de um veredito biométrico recente
-e um token de autorização consumido uma única vez. Porém, no FaceControlKidsPC,
+e um token de autorização consumido uma única vez. Porém, no SafePCKids,
 o desbloqueio só poderá ocorrer quando **a criança identificada** tiver saldo
 positivo, mesmo que todas compartilhem o mesmo usuário Windows Filhos.
 
 ## O que existe agora
 
-- facekids/unlock_policy.py: avaliação fail-closed de face única, identidade,
+- safepckids/unlock_policy.py: avaliação fail-closed de face única, identidade,
   3 confirmações, vivacidade, timestamp recente e saldo individual positivo.
 - OneUseTicketRegistry: nonce aleatório que expira rapidamente, vinculado a
   uma sessão Windows e consumido uma única vez; saldo reconsultado no consumo.

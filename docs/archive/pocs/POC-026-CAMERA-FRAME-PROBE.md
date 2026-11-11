@@ -7,7 +7,7 @@
 - O frame permanece apenas em memoria. O codigo calcula uma medida
   simples de uniformidade e descarta a memoria COM, sem salvar foto ou
   modelo biometrico.
-- O CLI `FaceKidsBrokerPoc.exe --frame-probe` so executa sob comando
+- O CLI `SafePCKidsBrokerPoc.exe --frame-probe` so executa sob comando
   explicito; nao e chamado na inicializacao do SCM, por LogonUI
   nem pelo pipe da conta Filhos.
 - `--self-test` exercita o processamento de bytes com frames artificiais.

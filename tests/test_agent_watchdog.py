@@ -5,13 +5,13 @@ import time
 import unittest
 from unittest.mock import MagicMock
 
-from facekids.agent_watchdog import (
+from safepckids.agent_watchdog import (
     AgentWatchdog,
     WatchdogAction,
     read_agent_heartbeat,
     write_agent_heartbeat,
 )
-from facekids.session import SessionState
+from safepckids.session import SessionState
 
 
 class TestAgentWatchdog(unittest.TestCase):
@@ -38,7 +38,7 @@ class TestAgentWatchdog(unittest.TestCase):
             startup_grace_period=startup_grace,
             target_user="Filhos",
             heartbeat_file=self.hb_file,
-            task_name="FaceKidsFilhosAgent",
+            task_name="SafePCKidsFilhosAgent",
             session_state_fn=lambda sid: session_state,
             session_user_fn=lambda sid: active_user,
             console_session_fn=lambda: session_id,
@@ -122,7 +122,7 @@ class TestAgentWatchdog(unittest.TestCase):
 
     def test_default_lock_session_fallback(self):
         from unittest.mock import patch
-        from facekids.agent_watchdog import default_lock_session
+        from safepckids.agent_watchdog import default_lock_session
 
         with patch("sys.platform", "win32"), \
              patch("ctypes.WinDLL") as mock_windll, \

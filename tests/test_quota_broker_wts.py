@@ -4,9 +4,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_broker_policy import ServiceOwnedQuotaBroker
-from facekids.quota_broker_wts import WtsLockTracker, WtsSnapshot, VerifiedWtsQuotaWorker
-from facekids.storage import Storage
+from safepckids.quota_broker_policy import ServiceOwnedQuotaBroker
+from safepckids.quota_broker_wts import WtsLockTracker, WtsSnapshot, VerifiedWtsQuotaWorker
+from safepckids.storage import Storage
 
 
 class Clock:
@@ -124,7 +124,7 @@ class WtsQuotaWorkerTests(unittest.TestCase):
         self.assertTrue(self.locks.is_unlocked(42))  # invalid callback ignored
 
     def test_unprivileged_wts_query_cannot_guess_sid_or_unlock(self):
-        from facekids.quota_broker_wts_win import observe_console_from_system
+        from safepckids.quota_broker_wts_win import observe_console_from_system
         import os
         snapshot = observe_console_from_system()
         if os.name != "nt":

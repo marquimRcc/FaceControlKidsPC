@@ -26,13 +26,13 @@ class NativeLoginGuardrails(unittest.TestCase):
         self.assertNotIn("CPGSR_RETURN_NO_CREDENTIAL_FINISHED", body)
 
     def test_real_provider_targets_filhos_and_requires_auth(self):
-        provider_src = (ROOT / "native/credential_provider_facekids/FaceKidsProvider.cpp").read_text(
+        provider_src = (ROOT / "native/credential_provider_safepckids/SafePCKidsProvider.cpp").read_text(
             encoding="utf-8"
         )
-        credential_src = (ROOT / "native/credential_provider_facekids/FaceKidsCredential.cpp").read_text(
+        credential_src = (ROOT / "native/credential_provider_safepckids/SafePCKidsCredential.cpp").read_text(
             encoding="utf-8"
         )
-        pipe_src = (ROOT / "native/credential_provider_facekids/FaceKidsPipeClient.h").read_text(
+        pipe_src = (ROOT / "native/credential_provider_safepckids/SafePCKidsPipeClient.h").read_text(
             encoding="utf-8"
         )
 
@@ -73,11 +73,11 @@ class NativeLoginGuardrails(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/credential-provider-build.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("FACEKIDS_DIAGNOSTIC_HOST_TEST", workflow)
-        self.assertIn("FaceKidsDiagnosticHostTest.dll", workflow)
-        self.assertIn("FaceKidsDiagnosticProvider.dll", workflow)
-        self.assertIn("FaceKidsProviderHost.exe", workflow)
-        self.assertIn("FaceKidsCredentialProvider.dll", workflow)
+        self.assertIn("SAFEPCKIDS_DIAGNOSTIC_HOST_TEST", workflow)
+        self.assertIn("SafePCKidsDiagnosticHostTest.dll", workflow)
+        self.assertIn("SafePCKidsDiagnosticProvider.dll", workflow)
+        self.assertIn("SafePCKidsProviderHost.exe", workflow)
+        self.assertIn("SafePCKidsCredentialProvider.dll", workflow)
         self.assertIn("build-real-credential-provider", workflow)
 
 

@@ -11,13 +11,13 @@ e sem bloquear ou desbloquear Windows por conta própria.
 ## Rodar sem instalar Python
 
 No GitHub Actions da branch, abra o workflow Native Media Foundation webcam PoC,
-baixe o artifact FaceKidsMFProbe-windows-x64 e descompacte.
+baixe o artifact SafePCKidsMFProbe-windows-x64 e descompacte.
 
 1. Faça login na conta Filhos e feche programas usando a webcam.
-2. Execute FaceKidsMFProbe.exe 120 0 em um terminal aberto nessa pasta.
+2. Execute SafePCKidsMFProbe.exe 120 0 em um terminal aberto nessa pasta.
 3. Pressione Win+L manualmente e mantenha a sessão bloqueada por 30 a 60 s.
 4. Desbloqueie normalmente, espere a medição terminar.
-5. Consulte FaceKids-MediaFoundation-WinL.csv no mesmo diretório.
+5. Consulte SafePCKids-MediaFoundation-WinL.csv no mesmo diretório.
 
 O primeiro argumento é a duração (segundos, entre 10 e 600);
 o segundo é índice da câmera (0, 1 etc.). Se o formato RGB32 não for
@@ -32,7 +32,7 @@ captação, não garantia de funcionamento dentro de LogonUI.
 
 Em Developer PowerShell x64 com Visual Studio C++ e Windows SDK:
 
-    cl /nologo /std:c++17 /EHsc /W4 native\media_foundation_probe\probe.cpp /link /OUT:FaceKidsMFProbe.exe
+    cl /nologo /std:c++17 /EHsc /W4 native\media_foundation_probe\probe.cpp /link /OUT:SafePCKidsMFProbe.exe
 
 A compilação também é executada automaticamente no GitHub Actions.
 A prova anterior P0-1 (Python/OpenCV com DSHOW/MSMF) continua disponível;

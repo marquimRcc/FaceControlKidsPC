@@ -1,4 +1,4 @@
-"""FaceControlKidsPC - Testes de Paridade Funcional, Servicos e DPAPI.
+"""SafePCKids - Testes de Paridade Funcional, Servicos e DPAPI.
 
 Valida os endpoints REST do painel administrativo web restaurados para paridade com a main:
 - /api/service/status e /api/service/restart
@@ -6,8 +6,8 @@ Valida os endpoints REST do painel administrativo web restaurados para paridade 
 - /api/children/<id>/photos e /api/children/<id>/photos/select
 - /api/child/delete
 - /api/uninstall
-- facekids.credential_store (Cofre DPAPI do Windows)
-- facekids.installer_engine (provisionamento e desinstalador)
+- safepckids.credential_store (Cofre DPAPI do Windows)
+- safepckids.installer_engine (provisionamento e desinstalador)
 """
 from __future__ import annotations
 
@@ -22,15 +22,15 @@ from unittest.mock import patch, MagicMock
 import urllib.request
 import urllib.error
 
-from facekids.app_server import FaceKidsApiHandler
-import facekids.credential_store as cred_store
-import facekids.installer_engine as installer_engine
+from safepckids.app_server import SafePCKidsApiHandler
+import safepckids.credential_store as cred_store
+import safepckids.installer_engine as installer_engine
 
 
 class TestParityEndpoints(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), FaceKidsApiHandler)
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), SafePCKidsApiHandler)
         cls.port = cls.server.server_port
         cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.server_thread.start()
@@ -76,7 +76,7 @@ class TestParityEndpoints(unittest.TestCase):
             "filhos_agent": {"registered": True},
             "credential_provider": {"registered": True},
         }
-        with patch("facekids.app_server.verify_runtime_health", return_value=mock_health):
+        with patch("safepckids.app_server.verify_runtime_health", return_value=mock_health):
             status, data = self._get_json("/api/service/status")
             self.assertEqual(status, 200)
             self.assertTrue(data.get("ok"))
@@ -84,9 +84,9 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_service_restart_endpoint(self):
         """Valida POST /api/service/restart para reinicio de tarefas do Windows."""
-        with patch("facekids.app_server._run_win_cmd") as mock_cmd:
+        with patch("safepckids.app_server._run_win_cmd") as mock_cmd:
             mock_cmd.return_value = MagicMock(returncode=0)
-            status, data = self._post_json("/api/service/restart", {"service": "FaceKidsAuthService"})
+            status, data = self._post_json("/api/service/restart", {"service": "SafePCKidsAuthService"})
             self.assertEqual(status, 200)
             self.assertTrue(data.get("ok"))
             self.assertIn("reiniciado", data.get("message", "").lower())
@@ -99,7 +99,7 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_windows_account_settings_endpoint(self):
         """Valida POST /api/settings/windows-account atualizando senha no Windows e no DPAPI."""
-        with patch("facekids.app_server.ensure_filhos_windows_user", return_value=(True, "Conta atualizada")) as mock_ensure:
+        with patch("safepckids.app_server.ensure_filhos_windows_user", return_value=(True, "Conta atualizada")) as mock_ensure:
             status, data = self._post_json("/api/settings/windows-account", {
                 "username": "Filhos",
                 "password": "NewSecretPassword123!",
@@ -126,8 +126,8 @@ class TestParityEndpoints(unittest.TestCase):
             for i in range(1, 4):
                 (amostras_dir / f"amostra_{i}.jpg").write_bytes(b"fake_jpg_bytes")
 
-            with patch("facekids.app_server.PROGRAMDATA_DIR", mock_progdata), \
-                 patch("facekids.avatar_utils.AVATAR_DIR", mock_progdata / "fotos"):
+            with patch("safepckids.app_server.PROGRAMDATA_DIR", mock_progdata), \
+                 patch("safepckids.avatar_utils.AVATAR_DIR", mock_progdata / "fotos"):
                 status, data = self._get_json("/api/children/1/photos")
                 self.assertEqual(status, 200)
                 self.assertTrue(data.get("ok"))
@@ -143,9 +143,9 @@ class TestParityEndpoints(unittest.TestCase):
             sample_file = amostras_dir / "amostra_3.jpg"
             sample_file.write_bytes(b"sample_content_3")
 
-            with patch("facekids.app_server.PROGRAMDATA_DIR", mock_progdata), \
-                 patch("facekids.app_server.select_child_sample_photo", return_value=True) as mock_sel, \
-                 patch("facekids.app_server.Storage") as mock_storage_cls:
+            with patch("safepckids.app_server.PROGRAMDATA_DIR", mock_progdata), \
+                 patch("safepckids.app_server.select_child_sample_photo", return_value=True) as mock_sel, \
+                 patch("safepckids.app_server.Storage") as mock_storage_cls:
                 mock_store = MagicMock()
                 mock_storage_cls.return_value = mock_store
                 status, data = self._post_json("/api/children/2/photos/select", {
@@ -157,8 +157,8 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_child_delete_endpoint(self):
         """Valida POST /api/child/delete removendo cadastro."""
-        with patch("facekids.app_server.Storage") as mock_storage_cls, \
-             patch("facekids.app_server.remove_child_avatar_files") as mock_remove_files:
+        with patch("safepckids.app_server.Storage") as mock_storage_cls, \
+             patch("safepckids.app_server.remove_child_avatar_files") as mock_remove_files:
             mock_store = MagicMock()
             mock_storage_cls.return_value = mock_store
             status, data = self._post_json("/api/child/delete", {"child_id": 5})
@@ -169,14 +169,14 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_child_delete_endpoint_real_db(self):
         """Valida POST /api/child/delete com banco de dados real SQLite."""
-        from facekids.storage import Storage
+        from safepckids.storage import Storage
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "test_delete.sqlite3"
             store = Storage(db_path)
             cid = store.add_person("Teste Exclusao", 60)
             store.close()
-            with patch("facekids.app_server.DEFAULT_DB_FILE", db_path), \
-                 patch("facekids.app_server.remove_child_avatar_files"):
+            with patch("safepckids.app_server.DEFAULT_DB_FILE", db_path), \
+                 patch("safepckids.app_server.remove_child_avatar_files"):
                 status, data = self._post_json("/api/child/delete", {"child_id": cid})
                 self.assertEqual(status, 200)
                 self.assertTrue(data.get("ok"))
@@ -188,7 +188,7 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_child_rename_endpoint(self):
         """Valida POST /api/child/rename atualizando nome da crianca no banco de dados."""
-        with patch("facekids.app_server.Storage") as mock_storage_cls:
+        with patch("safepckids.app_server.Storage") as mock_storage_cls:
             mock_store = MagicMock()
             mock_storage_cls.return_value = mock_store
             status, data = self._post_json("/api/child/rename", {"child_id": 1, "name": "Lucas"})
@@ -206,8 +206,8 @@ class TestParityEndpoints(unittest.TestCase):
         """Valida POST /api/uninstall executando desinstalacao completa do sistema."""
         with tempfile.TemporaryDirectory() as td:
             isolated_db = Path(td) / "fake_nonexistent.sqlite3"
-            with patch("facekids.app_server.DEFAULT_DB_FILE", isolated_db), \
-                 patch("facekids.app_server.uninstall_system", return_value=(True, "Desinstalado com sucesso")) as mock_uninst:
+            with patch("safepckids.app_server.DEFAULT_DB_FILE", isolated_db), \
+                 patch("safepckids.app_server.uninstall_system", return_value=(True, "Desinstalado com sucesso")) as mock_uninst:
                 status, data = self._post_json("/api/uninstall", {
                     "remove_data": True,
                     "remove_windows_user": False,
@@ -219,14 +219,14 @@ class TestParityEndpoints(unittest.TestCase):
 
     def test_child_bonus_positive_and_negative(self):
         """Valida POST /api/child/bonus com valores positivos (+30m) e reduções negativas (-15m)."""
-        from facekids.storage import Storage
+        from safepckids.storage import Storage
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "kids.sqlite3"
             store = Storage(db_path)
             cid = store.add_person("Gabriel", 120)
             store.close()
 
-            with patch("facekids.app_server.DEFAULT_DB_FILE", db_path):
+            with patch("safepckids.app_server.DEFAULT_DB_FILE", db_path):
                 # 1. Bônus positivo (+30m)
                 status, data = self._post_json("/api/child/bonus", {"child_id": cid, "minutes": 30})
                 self.assertEqual(status, 200)
@@ -271,7 +271,7 @@ class TestCredentialStoreDPAPI(unittest.TestCase):
 class TestInstallerEngineHealthAndUninstall(unittest.TestCase):
     def test_verify_runtime_health(self):
         """Valida coleta de status de tarefas agendadas e credencial."""
-        with patch("facekids.installer_engine._run_win_cmd") as mock_cmd:
+        with patch("safepckids.installer_engine._run_win_cmd") as mock_cmd:
             mock_cmd.return_value = MagicMock(returncode=0, stdout="Running")
             health = installer_engine.verify_runtime_health()
             self.assertIn("auth_service", health)
@@ -280,7 +280,7 @@ class TestInstallerEngineHealthAndUninstall(unittest.TestCase):
 
     def test_uninstall_system_flow(self):
         """Valida que o desinstalador encerra tarefas, remove chaves e atalhos na ordem de seguranca."""
-        with patch("facekids.installer_engine._run_win_cmd") as mock_cmd:
+        with patch("safepckids.installer_engine._run_win_cmd") as mock_cmd:
             mock_cmd.return_value = MagicMock(returncode=0, stdout="", stderr="")
             ok, msg = installer_engine.uninstall_system(remove_data=False, remove_windows_user=False)
             self.assertTrue(ok)

@@ -5,8 +5,8 @@ from tempfile import TemporaryDirectory
 import sqlite3
 import unittest
 
-from facekids.quota_broker_migration import create_vm_snapshot
-from facekids.storage import Storage
+from safepckids.quota_broker_migration import create_vm_snapshot
+from safepckids.storage import Storage
 
 
 class MigrationSnapshotTests(unittest.TestCase):
@@ -51,7 +51,7 @@ class MigrationSnapshotTests(unittest.TestCase):
                 with self.subTest(source=str(src), target=str(dst)):
                     with self.assertRaises((ValueError, FileNotFoundError)):
                         create_vm_snapshot(src, dst, lab_root=root)
-            self.assertEqual(len(list(root.glob("*.facekids-incomplete"))), 0)
+            self.assertEqual(len(list(root.glob("*.safepckids-incomplete"))), 0)
 
     def test_restore_in_disposable_lab_keeps_original_ledger_independent(self):
         with TemporaryDirectory() as td:

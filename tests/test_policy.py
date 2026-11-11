@@ -1,5 +1,5 @@
 import unittest
-from facekids.policy import Policy,Action
+from safepckids.policy import Policy,Action
 
 class PolicyTest(unittest.TestCase):
     def test_confirm_then_charge_and_lock_quota(self):

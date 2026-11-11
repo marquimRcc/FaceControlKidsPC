@@ -1,7 +1,7 @@
 // Validate actual calendar days before using them as quota ledger keys.
 #pragma once
 #include <cstring>
-namespace facekids_date {
+namespace safepckids_date {
 inline bool valid(const char* day) {
     if (!day || std::strlen(day)!=10) return false;
     for(int i=0;i<10;++i) {

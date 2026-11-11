@@ -6,9 +6,9 @@ from tempfile import TemporaryDirectory
 import sqlite3
 import unittest
 
-from facekids.quota_broker_read_store import ReadOnlyQuotaView
-from facekids.quota_broker_protocol import VerifiedClient, handle_broker_read
-from facekids.storage import Storage
+from safepckids.quota_broker_read_store import ReadOnlyQuotaView
+from safepckids.quota_broker_protocol import VerifiedClient, handle_broker_read
+from safepckids.storage import Storage
 
 
 class BrokerReadStoreTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class BrokerReadStoreTests(unittest.TestCase):
             store.close()
             sid = "S-1-5-21-999-999-999-1001"
             identity = VerifiedClient(sid, sid, cid)
-            req = b'{"version":"FACEKIDS_QUOTA_V1","action":"GET_BALANCE"}'
+            req = b'{"version":"SAFEPCKIDS_QUOTA_V1","action":"GET_BALANCE"}'
             with ReadOnlyQuotaView(path) as view:
                 response = handle_broker_read(req, identity, view,
                                               observed_day=date(2026, 10, 24))

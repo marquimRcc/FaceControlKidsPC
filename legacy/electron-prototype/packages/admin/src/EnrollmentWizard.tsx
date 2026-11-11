@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EnrollmentStatus } from "@facekids/contracts";
+import type { EnrollmentStatus } from "@safepckids/contracts";
 import { ArrowRight, Check, ShieldCheck, UserRound } from "lucide-react";
 
 const steps = ["Perfil", "Reconhecimento", "Confirmar"];

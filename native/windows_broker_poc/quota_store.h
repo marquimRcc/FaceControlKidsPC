@@ -22,7 +22,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "winsqlite3.lib")
 
-namespace facekids_quota {
+namespace safepckids_quota {
 
 static constexpr wchar_t kSecureDirectoryDacl[] =
     L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
@@ -322,7 +322,7 @@ public:
 
     bool remaining(int child, const char* day, sqlite3_int64* seconds) const {
         if (!db_ || child < 1 || child > 3 || !seconds ||
-            !facekids_date::valid(day)) return false;
+            !safepckids_date::valid(day)) return false;
         return statement_int(db_,
             "SELECT max(0,c.limit_seconds + coalesce(q.bonus_seconds,0)"
             " - coalesce(q.used_seconds,0)) FROM children c"
@@ -343,7 +343,7 @@ public:
         return ok;
     }
     bool charge(int child, const char* day, int seconds) {
-        if (!db_ || child < 1 || child > 3 || !facekids_date::valid(day) ||
+        if (!db_ || child < 1 || child > 3 || !safepckids_date::valid(day) ||
             seconds <= 0 || seconds > 86400) return false;
         if (!exec(db_, "BEGIN IMMEDIATE;")) return false;
         bool ok = false;
@@ -377,7 +377,7 @@ public:
         return ok;
     }
     bool add_bonus(int child, const char* day, int minutes) {
-        if (!db_ || child < 1 || child > 3 || !facekids_date::valid(day) ||
+        if (!db_ || child < 1 || child > 3 || !safepckids_date::valid(day) ||
             minutes <= 0 || minutes > 480) return false;
         sqlite3_stmt* stmt = nullptr;
         if (sqlite3_prepare_v2(db_,
@@ -407,7 +407,7 @@ inline std::wstring program_data_root() {
         if (folder) CoTaskMemFree(folder);
         return {};
     }
-    const std::wstring result=std::wstring(folder)+L"\\FaceControlKidsPC";
+    const std::wstring result=std::wstring(folder)+L"\\SafePCKids";
     CoTaskMemFree(folder);
     return result;
 }
@@ -500,7 +500,7 @@ inline bool reject_unreadable_sqlite(const std::wstring& folder) {
 }
 
 inline bool self_test() {
-    if (!trusted_root_self_test() || !facekids_date::self_test()) return false;
+    if (!trusted_root_self_test() || !safepckids_date::self_test()) return false;
     wchar_t tmp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, tmp)) return false;
     wchar_t testPath[MAX_PATH] = {};
@@ -592,4 +592,4 @@ inline bool self_test() {
     return success;
 }
 
-} // namespace facekids_quota
+} // namespace safepckids_quota

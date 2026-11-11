@@ -5,11 +5,11 @@ import unittest
 
 import numpy as np
 
-from facekids.parent_face_pilot import (
+from safepckids.parent_face_pilot import (
     Outcome, RecognitionWindow, REQUIRED_SAMPLES,
     _valid_features, replace_templates
 )
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 class ParentFacePilotTests(unittest.TestCase):

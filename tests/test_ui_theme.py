@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import json
 import unittest
 
-from facekids.ui_theme import (
+from safepckids.ui_theme import (
     DEFAULT_THEME, THEMES, load_theme, preference_path, save_theme,
     theme_palette,
 )
@@ -74,7 +74,7 @@ class ThemeChoiceTests(unittest.TestCase):
 
     def test_preference_location_is_never_inside_child_programdata(self):
         with TemporaryDirectory() as root:
-            expected = Path(root) / "FaceKids" / "parent-ui-preferences.json"
+            expected = Path(root) / "SafePCKids" / "parent-ui-preferences.json"
             self.assertEqual(preference_path(base=Path(root)), expected)
 
 

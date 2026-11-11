@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from facekids import installer_engine as engine
+from safepckids import installer_engine as engine
 
 
 class InstallerCompletionTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class InstallerCompletionTests(unittest.TestCase):
         for relative in (
             ".venv/Scripts/python.exe",
             ".venv/Scripts/pythonw.exe",
-            "native/credential_provider_facekids/FaceKidsCredentialProvider.dll",
+            "native/credential_provider_safepckids/SafePCKidsCredentialProvider.dll",
             "scripts/Ativar-Desbloqueio-No-Boot.ps1",
             "models/face_detection_yunet_2023mar.onnx",
             "models/face_recognition_sface_2021dec.onnx",

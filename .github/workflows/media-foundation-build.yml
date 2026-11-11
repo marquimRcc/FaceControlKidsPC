@@ -20,18 +20,18 @@ jobs:
           if not defined VSROOT exit /b 1
           call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
           if errorlevel 1 exit /b 1
-          cl /nologo /std:c++17 /EHsc /W4 native\media_foundation_probe\probe.cpp /link /OUT:FaceKidsMFProbe.exe
+          cl /nologo /std:c++17 /EHsc /W4 native\media_foundation_probe\probe.cpp /link /OUT:SafePCKidsMFProbe.exe
           if errorlevel 1 exit /b 1
       - name: Check standalone program usage (no webcam required)
         shell: cmd
         run: |
-          FaceKidsMFProbe.exe 0
+          SafePCKidsMFProbe.exe 0
           if not errorlevel 1 exit /b 1
-          FaceKidsMFProbe.exe 120 -1
+          SafePCKidsMFProbe.exe 120 -1
           if not errorlevel 1 exit /b 1
           exit /b 0
       - uses: actions/upload-artifact@v4
         with:
-          name: FaceKidsMFProbe-windows-x64
-          path: FaceKidsMFProbe.exe
+          name: SafePCKidsMFProbe-windows-x64
+          path: SafePCKidsMFProbe.exe
           retention-days: 14

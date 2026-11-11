@@ -11,7 +11,7 @@
 #pragma comment(lib, "wtsapi32.lib")
 #pragma comment(lib, "advapi32.lib")
 
-namespace facekids_wts {
+namespace safepckids_wts {
 
 enum class LockView { Locked, Unlocked, Inactive, Unknown };
 
@@ -100,7 +100,7 @@ inline int dump_local_sessions() {
         std::printf("WTS enumeration unavailable (error %lu)\n", GetLastError());
         return 4;
     }
-    std::puts("FaceKids WTS diagnostics: read-only, no authentication");
+    std::puts("SafePCKids WTS diagnostics: read-only, no authentication");
     for (DWORD i = 0; i < count; ++i) {
         const DWORD id = sessions[i].SessionId;
         const auto state = read_state(id);
@@ -115,4 +115,4 @@ inline int dump_local_sessions() {
     if (sessions) WTSFreeMemory(sessions);
     return 0;
 }
-} // namespace facekids_wts
+} // namespace safepckids_wts

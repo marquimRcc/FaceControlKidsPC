@@ -81,7 +81,7 @@ int wmain(int argc, wchar_t** argv) {
     if (argc > 1) duration = _wtoi(argv[1]);
     if (argc > 2) camera_index = _wtoi(argv[2]);
     if (argc > 3 || duration < 10 || duration > 600 || camera_index < 0) {
-        std::puts("Usage: FaceKidsMFProbe.exe [duration: 10..600 seconds] [camera index >= 0]");
+        std::puts("Usage: SafePCKidsMFProbe.exe [duration: 10..600 seconds] [camera index >= 0]");
         return 2;
     }
 
@@ -118,14 +118,14 @@ int wmain(int argc, wchar_t** argv) {
                     static_cast<unsigned long>(hr));
         exit_code = 5;
     } else {
-        std::ofstream csv("FaceKids-MediaFoundation-WinL.csv", std::ios::trunc);
+        std::ofstream csv("SafePCKids-MediaFoundation-WinL.csv", std::ios::trunc);
         if (!csv) {
-            std::puts("Cannot write FaceKids-MediaFoundation-WinL.csv in this directory.");
+            std::puts("Cannot write SafePCKids-MediaFoundation-WinL.csv in this directory.");
             exit_code = 6;
         } else {
             csv << "elapsed_seconds,session,capture_ok,frame_nonuniform,brightness_mean,brightness_stddev,read_hresult\n";
             csv.flush();
-            std::puts("FaceKids Media Foundation diagnostic started.");
+            std::puts("SafePCKids Media Foundation diagnostic started.");
             std::puts("Press Win+L now; keep Windows locked 30-60 seconds; unlock normally.");
             std::puts("Only brightness statistics are logged. No images are saved.");
             int locked = 0, good_locked = 0, active = 0;
@@ -166,7 +166,7 @@ int wmain(int argc, wchar_t** argv) {
             if (locked < 5) std::puts("INCONCLUSIVE: WTS did not report at least 5 locked samples.");
             else if (good_locked >= 3) std::puts("CAMERA_READS_DURING_LOCK: preliminary evidence only.");
             else std::puts("NO_USABLE_LOCKED_FRAMES: test backend/privacy/camera.");
-            std::puts("Report: FaceKids-MediaFoundation-WinL.csv");
+            std::puts("Report: SafePCKids-MediaFoundation-WinL.csv");
         }
     }
     drop(format);

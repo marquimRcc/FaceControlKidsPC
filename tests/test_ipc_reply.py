@@ -3,7 +3,7 @@ import math
 import time
 import unittest
 
-from facekids.ipc_reply import validated_pipe_allow
+from safepckids.ipc_reply import validated_pipe_allow
 
 
 class IPCReplyTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class IPCReplyTests(unittest.TestCase):
         self.valid = {
             "status": "ALLOW",
             "user": "Filhos",
-            "protocol_marker": "FACEKIDS_IPC_V1",
+            "protocol_marker": "SAFEPCKIDS_IPC_V1",
             "child_id": 2,
             "child_name": "Crianca 2",
             "remaining": 7199,

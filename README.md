@@ -1,14 +1,14 @@
-# FaceControlKidsPC — Desbloqueio Facial Automático e Controle de Quotas
+# SafePCKids — Desbloqueio Facial Automático e Controle de Quotas
 
 ## Instalação no Windows
 
-Abra `scripts/Instalar-FaceKids.bat` com dois cliques. O script solicita a permissão de administrador, prepara Python e as bibliotecas, e instala o aplicativo em `C:\Program Files\FaceKids`. O assistente pede o PIN dos pais, o nome e o limite diário da criança. A conta local aparece como **Filhos**, com senha **1** preenchida por padrão; essa senha pode ser alterada antes de concluir.
+Abra `scripts/Instalar-SafePCKids.bat` com dois cliques. O script solicita a permissão de administrador, prepara Python e as bibliotecas, e instala o aplicativo em `C:\Program Files\SafePCKids`. O assistente pede o PIN dos pais, o nome e o limite diário da criança. A conta local aparece como **Filhos**, com senha **1** preenchida por padrão; essa senha pode ser alterada antes de concluir.
 
-O assistente cria a conta, captura 12 amostras faciais e só então registra e verifica as tarefas do Windows e abre o Painel dos Pais. Os dados e fotos ficam em `C:\ProgramData\FaceKids`. O painel também fica disponível por atalhos na Área de Trabalho e no Menu Iniciar.
+O assistente cria a conta, captura 12 amostras faciais e só então registra e verifica as tarefas do Windows e abre o Painel dos Pais. Os dados e fotos ficam em `C:\ProgramData\SafePCKids`. O painel também fica disponível por atalhos na Área de Trabalho e no Menu Iniciar.
 
-Se uma instalação anterior ficou incompleta, execute `scripts/Implantar-FaceKids.ps1` como administrador para instalar a cópia permanente e reparar as tarefas sem apagar os perfis, fotos ou PIN. O instalador avisa quando alguma etapa falhar; nesse caso, o painel não é apresentado como pronto.
+Se uma instalação anterior ficou incompleta, execute `scripts/Implantar-SafePCKids.ps1` como administrador para instalar a cópia permanente e reparar as tarefas sem apagar os perfis, fotos ou PIN. O instalador avisa quando alguma etapa falhar; nesse caso, o painel não é apresentado como pronto.
 
-O protótipo Windows x64 gera um único `FaceKids-Instalador-Windows-x64.exe` com o assistente e os componentes necessários. O formato do pacote, os critérios de teste e a futura publicação estão no [registro da decisão](docs/ADR-003-EXECUTAVEL-UNICO-E-RELEASES.md).
+O protótipo Windows x64 gera um único `SafePCKids-Instalador-Windows-x64.exe` com o assistente e os componentes necessários. O formato do pacote, os critérios de teste e a futura publicação estão no [registro da decisão](docs/ADR-003-EXECUTAVEL-UNICO-E-RELEASES.md).
 
 Sistema doméstico de controle parental e autenticação biométrica facial para computadores compartilhados com **Windows 10 e Windows 11**.
 
@@ -19,7 +19,7 @@ Sistema doméstico de controle parental e autenticação biométrica facial para
 
 ## 1. Principais Funcionalidades
 
-- **Desbloqueio Facial Transparente no Logon (LogonUI):** Credential Provider nativo em C++ (`FaceKidsCredentialProvider.dll`) que atua exclusivamente na conta compartilhada `Filhos`. A senha inicial é `1` e pode ser alterada no assistente ou no painel.
+- **Desbloqueio Facial Transparente no Logon (LogonUI):** Credential Provider nativo em C++ (`SafePCKidsCredentialProvider.dll`) que atua exclusivamente na conta compartilhada `Filhos`. A senha inicial é `1` e pode ser alterada no assistente ou no painel.
 - **Painel dos Pais Centralizado:** Interface local aberta em janela do Microsoft Edge, com atalhos na Área de Trabalho e no Menu Iniciar.
 - **Cadastro Facial com Galeria de 12 Fotos:** Captura guiada de 12 fotos da webcam (salvas limpas, sem retângulo de detecção verde sobreposto no rosto) permitindo escolher visualmente o avatar oficial da criança na galeria.
 - **Tela de Boas-Vindas Inteligente:** Exibe avatar e saldo diário imediatamente após o desbloqueio facial, fecha-se automaticamente após 4 segundos e reaparece brevemente a cada 30 minutos como lembrete suave do tempo restante.
@@ -35,10 +35,10 @@ Os scripts de operação ficam na pasta `scripts/`:
 
 | Script | Finalidade |
 |---|---|
-| **`Instalar-FaceKids.bat`** | Prepara o aplicativo e abre o assistente de instalação. |
-| **`Painel-FaceKids.bat`** | Abre o Painel dos Pais. |
-| **`Implantar-FaceKids.ps1`** | Repara uma instalação parcial e a move para uma pasta permanente. |
-| **`Desinstalar-FaceKids.bat`** | Desinstala e remove os dados e a conta Filhos. |
+| **`Instalar-SafePCKids.bat`** | Prepara o aplicativo e abre o assistente de instalação. |
+| **`Painel-SafePCKids.bat`** | Abre o Painel dos Pais. |
+| **`Implantar-SafePCKids.ps1`** | Repara uma instalação parcial e a move para uma pasta permanente. |
+| **`Desinstalar-SafePCKids.bat`** | Desinstala e remove os dados e a conta Filhos. |
 
 ---
 
@@ -51,15 +51,15 @@ Para entender detalhadamente a divisão entre os módulos de **Produção Window
        Webcam USB (XWF-1080P)
                  │
                  ▼
-    Face Kids Auth Service (Python SYSTEM / Admin)
+    SafePCKids Auth Service (Python SYSTEM / Admin)
        - OpenCV YuNet (detecção) + SFace (biometria)
        - Consulta SQLite local (kids.sqlite3)
        - Watchdog Anti-Burla (agent_watchdog.py)
-       - Servidor Named Pipe: \\.\pipe\FaceKidsAuthPipe
+       - Servidor Named Pipe: \\.\pipe\SafePCKidsAuthPipe
                  │
                  ▼ (IPC Seguro / Status Tipado)
-    Face Kids Credential Provider (C++ / COM)
-       - DLL nativa: FaceKidsCredentialProvider.dll
+    SafePCKids Credential Provider (C++ / COM)
+       - DLL nativa: SafePCKidsCredentialProvider.dll
        - Filtragem estrita por SID (apenas conta Filhos)
        - AutoLogon transparente (senha "1")
                  │

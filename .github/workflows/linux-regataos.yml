@@ -28,13 +28,13 @@ jobs:
           set -euo pipefail
           for script in \
             scripts/*RegataOS.sh \
-            scripts/Empacotar-FaceKids-Desktop-Linux.sh \
-            packaging/facekids-admin \
-            packaging/facekids-admin-gui \
-            packaging/facekids-child-gui \
-            packaging/install-facekids-desktop-bundle \
-            packaging/facekids-linux-probe \
-            packaging/facekids-pam-helper
+            scripts/Empacotar-SafePCKids-Desktop-Linux.sh \
+            packaging/safepckids-admin \
+            packaging/safepckids-admin-gui \
+            packaging/safepckids-child-gui \
+            packaging/install-safepckids-desktop-bundle \
+            packaging/safepckids-linux-probe \
+            packaging/safepckids-pam-helper
           do
             bash -n "$script"
           done
@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           unit=$(mktemp --suffix=.service)
-          cp packaging/facekids-linux.service "$unit"
+          cp packaging/safepckids-linux.service "$unit"
           sed -i \
             -e 's#^ExecStart=.*#ExecStart=/usr/bin/true#' \
             -e 's#^WorkingDirectory=.*#WorkingDirectory=/tmp#' \

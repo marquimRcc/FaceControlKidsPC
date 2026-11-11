@@ -6,7 +6,7 @@
 #include <windows.h>
 #include <sddl.h>
 
-namespace facekids_service_identity {
+namespace safepckids_service_identity {
 
 enum class ServiceIdentity { LocalSystem, NotLocalSystem, Unavailable };
 
@@ -53,4 +53,4 @@ inline bool self_test() {
     return pass;
 }
 
-} // namespace facekids_service_identity
+} // namespace safepckids_service_identity

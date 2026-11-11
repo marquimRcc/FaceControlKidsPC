@@ -4,10 +4,10 @@ import unittest
 
 import numpy as np
 
-from facekids.parent_face_pilot import PROFILE_NAME, REQUIRED_SAMPLES
-from facekids.storage import Storage
-from facekids.windows_session_diagnostic import LockView as WTS
-from facekids.locked_face_probe import (
+from safepckids.parent_face_pilot import PROFILE_NAME, REQUIRED_SAMPLES
+from safepckids.storage import Storage
+from safepckids.windows_session_diagnostic import LockView as WTS
+from safepckids.locked_face_probe import (
     LockedFaceStats, Status, load_adult_templates_read_only,
 )
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from facekids.quota_broker_lab import parse_args, validate_lab_options
+from safepckids.quota_broker_lab import parse_args, validate_lab_options
 
 
 class QuotaLabLauncherTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class QuotaLabLauncherTests(unittest.TestCase):
 
     def test_valid_lab_fixture_is_read_only_by_construction(self):
         with TemporaryDirectory() as td:
-            root = Path(td) / "facekids-quota-lab"
+            root = Path(td) / "safepckids-quota-lab"
             root.mkdir()
             db = root / "fixture.sqlite3"
             db.write_bytes(b"synthetic placeholder")
@@ -33,7 +33,7 @@ class QuotaLabLauncherTests(unittest.TestCase):
             db.write_bytes(b"dummy")
             with self.assertRaises(ValueError):
                 validate_lab_options(self.options(db))
-            lab = root / "facekids-quota-lab"
+            lab = root / "safepckids-quota-lab"
             lab.mkdir()
             fixture = lab / "fixture.sqlite3"
             fixture.write_bytes(b"dummy")

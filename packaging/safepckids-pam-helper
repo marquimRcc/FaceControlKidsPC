@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/usr/lib/safepckids
+export SAFEPCKIDS_CHILD_USER=filhos
+export SAFEPCKIDS_AUTH_SOCKET=/run/safepckids/auth.sock
+exec /opt/safepckids/venv/bin/python -m safepckids.linux_pam_helper

@@ -11,7 +11,7 @@
 
 #pragma comment(lib, "mfreadwrite.lib")
 
-namespace facekids_frame {
+namespace safepckids_frame {
 
 enum class Status { FrameMeasured, NoCamera, CaptureUnavailable };
 
@@ -137,4 +137,4 @@ inline Result capture_one_frame(unsigned int camera_index=0) {
     return output;
 }
 
-} // namespace facekids_frame
+} // namespace safepckids_frame

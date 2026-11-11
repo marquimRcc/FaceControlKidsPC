@@ -7,17 +7,17 @@
 ## Estado de referência
 
 - Data da atualização: 23/10/2026, fuso `America/Sao_Paulo`.
-- Repositório: `marquimRcc/FaceControlKidsPC`.
+- Repositório: `marquimRcc/SafePCKids`.
 - Branch: `feature/regataos-linux-implementation-20261022`.
 - Base do trabalho Linux: `research/regataos-linux-20261022`.
-- Pull request draft: <https://github.com/marquimRcc/FaceControlKidsPC/pull/3>.
+- Pull request draft: <https://github.com/marquimRcc/SafePCKids/pull/3>.
 - Último commit funcional publicado antes deste checkpoint: `e775fce`.
 - Ambiente observado: Regata OS 26, KDE Plasma 6.6.5, X11 e Python 3.13.
 
 ## Regra de continuidade autônoma
 
 Este trabalho deve continuar sem aguardar novas mensagens como `continue` ou
-`avance`. A automação `continuar-facekids-regata-os` permanece ativa neste
+`avance`. A automação `continuar-safepckids-regata-os` permanece ativa neste
 chat e dispara a cada dez minutos enquanto houver cota. A cota da janela de
 cinco horas deve ser consultada durante o trabalho.
 Quando restarem 8% ou menos, atualizar e commitar este documento, enviar os
@@ -27,7 +27,7 @@ silêncio; somente bloqueios que exijam ação humana devem ser comunicados.
 
 ## Objetivo do produto no Linux
 
-O FaceKids deve controlar uma conta Linux compartilhada por uma ou mais
+O SafePCKids deve controlar uma conta Linux compartilhada por uma ou mais
 crianças. O rosto presente determina qual quota individual é debitada. A contagem ocorre
 somente enquanto a sessão está ativa e desbloqueada. O sistema bloqueia a
 sessão quando a quota termina, o horário permitido acaba ou a identidade fica
@@ -43,16 +43,16 @@ senha. Alterações no PAM são opcionais, explícitas e reversíveis.
 Webcam V4L2 (/dev/video0)
           |
           v
-Serviço root facekids-linux.service
+Serviço root safepckids-linux.service
   - captura e rejeição de quadros inválidos
   - YuNet: detecção de exatamente um rosto
   - SFace: vetor e comparação local
   - ChildQuotaEngine: uma ou mais identidades, quota e tempo monotônico
-  - SQLite protegido em /var/lib/facekids
+  - SQLite protegido em /var/lib/safepckids
           |
           +--> systemd-logind: estado Active/State/LockedHint
           +--> loginctl lock-session: bloqueio da sessão correta
-          +--> socket root /run/facekids/auth.sock
+          +--> socket root /run/safepckids/auth.sock
                     |
                     v
             helper PAM opcional
@@ -118,16 +118,16 @@ pela sessão compartilhada.
 
 ### Componentes principais
 
-- `facekids/linux_runtime.py`: ciclo de captura, reconhecimento, cobrança,
+- `safepckids/linux_runtime.py`: ciclo de captura, reconhecimento, cobrança,
   bloqueio e servidor de autorização.
-- `facekids/session.py`: descoberta da sessão gráfica e interpretação
+- `safepckids/session.py`: descoberta da sessão gráfica e interpretação
   conservadora do estado publicado pelo logind.
-- `facekids/linux_auth.py`: confirmações e tickets faciais efêmeros.
-- `facekids/linux_pam_helper.py`: cliente mínimo do socket protegido.
-- `facekids/linux_admin.py`: operações administrativas e cadastro.
-- `facekids/linux_probe.py`: diagnóstico de câmera sem biometria.
-- `facekids/platform_paths.py`: caminhos corretos por plataforma.
-- `packaging/facekids-linux.service`: execução como root e endurecimento do
+- `safepckids/linux_auth.py`: confirmações e tickets faciais efêmeros.
+- `safepckids/linux_pam_helper.py`: cliente mínimo do socket protegido.
+- `safepckids/linux_admin.py`: operações administrativas e cadastro.
+- `safepckids/linux_probe.py`: diagnóstico de câmera sem biometria.
+- `safepckids/platform_paths.py`: caminhos corretos por plataforma.
+- `packaging/safepckids-linux.service`: execução como root e endurecimento do
   serviço systemd.
 - `scripts/*RegataOS.sh`: criação da conta, instalação, remoção e ativação ou
   recuperação do PAM.
@@ -189,7 +189,7 @@ validadas com `systemd-analyze verify`.
 
 Avançada. A webcam real passou no probe com detecções faciais confirmadas,
 o perfil da criança 1 foi cadastrado localmente com sucesso, e o serviço
-`facekids-linux.service` foi habilitado e iniciado com status ativo/running
+`safepckids-linux.service` foi habilitado e iniciado com status ativo/running
 sob o isolamento systemd (`User=root`, `UMask=0077`, `RuntimeDirectory=0700`,
 sem sockets IP ou privilégios extras). O próximo passo é efetuar login na
 conta `filhos` e validar o reconhecimento em sessão gráfica ativa, o débito
@@ -201,9 +201,9 @@ monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
 - Implementado runtime Linux para uma conta compartilhada e quantidade
   variável de perfis.
 - A conta compartilhada `filhos` foi criada sem grupos suplementares ou acesso
-  direto à webcam; o serviço `facekids-linux.service` foi instalado e iniciado.
+  direto à webcam; o serviço `safepckids-linux.service` foi instalado e iniciado.
 - O perfil da criança 1 foi cadastrado com sucesso presencialmente via
-  `facekids-admin enroll 1`.
+  `safepckids-admin enroll 1`.
 - O instalador aceita de uma a vinte crianças e usa uma quando a quantidade é
   omitida; o runtime não contém mais a exigência fixa de três perfis.
 - Implementada descoberta de sessão por logind e bloqueio dirigido por ID.
@@ -235,9 +235,9 @@ monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
   capturam `RuntimeError` e são limitadas a uma tentativa a cada dez segundos,
   evitando repetição contínua em loop.
 - O método `close()` do runtime finaliza de forma limpa a thread servidora de
-  autorização e remove o arquivo de socket em `/run/facekids/auth.sock`.
+  autorização e remove o arquivo de socket em `/run/safepckids/auth.sock`.
 - Corrigida a permissão de instalação dos modelos ONNX (`0644`), permitindo que
-  o diagnóstico `facekids-linux-probe` leia os modelos sem privilégios de root.
+  o diagnóstico `safepckids-linux-probe` leia os modelos sem privilégios de root.
 - Implementada ponte PAM opcional, com backup e restauração.
 - Criados instalador, desinstalador, criador da conta infantil e wrappers.
 - Corrigidos caminhos Windows que criavam `C:` acidentalmente no Linux.
@@ -255,8 +255,8 @@ monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
   retornou `CAMERA_UTILIZAVEL`: no segundo teste em 22/10/2026 (22:24), registrou
   30/30 quadros utilizáveis, 5,95 fps, brilho médio de 87,07 e 8 detecções
   faciais confirmadas na câmera.
-- A conta `filhos` e os arquivos de sistema em `/usr/lib/facekids` e
-  `/var/lib/facekids` foram instalados pelo responsável.
+- A conta `filhos` e os arquivos de sistema em `/usr/lib/safepckids` e
+  `/var/lib/safepckids` foram instalados pelo responsável.
 - A instalação do sistema exige `sudo` interativo; a sessão automatizada não
   possui a senha do responsável.
 - O helper PAM atende uma conversa de autenticação já iniciada. O runtime agora
@@ -277,7 +277,7 @@ monotônico da quota e o desbloqueio automático do KScreenLocker pelo logind.
 5. Avaliar aviso sonoro ou notificação segura na sessão ativa antes do bloqueio
    (ex.: aviso prévio de 15 segundos antes de travar a tela).
 6. Somente depois de homologado o desbloqueio por aproximação, testar a ponte
-   PAM opt-in (`facekids-enable-pam`) e seu retorno (`facekids-disable-pam`).
+   PAM opt-in (`safepckids-enable-pam`) e seu retorno (`safepckids-disable-pam`).
 7. Fazer revisão final do PR draft #3 e preparar o merge para a branch principal.
 
 ## Próximos passos recomendados para outra IA
@@ -302,13 +302,13 @@ PYTHONPATH="$PWD/.local-tools/python-tk/usr/lib64/python3.13:$PWD/.local-tools/p
   .venv/bin/python -m unittest discover -s tests -v
 
 .venv/bin/ruff check \
-  facekids/linux_auth.py facekids/linux_runtime.py facekids/linux_admin.py \
-  facekids/linux_probe.py facekids/linux_pam_helper.py facekids/platform_paths.py \
+  safepckids/linux_auth.py safepckids/linux_runtime.py safepckids/linux_admin.py \
+  safepckids/linux_probe.py safepckids/linux_pam_helper.py safepckids/platform_paths.py \
   tests/test_linux_auth.py tests/test_linux_runtime.py \
   tests/test_linux_admin.py tests/test_linux_installer.py tests/test_linux_probe.py
 
-for script in scripts/*RegataOS.sh packaging/facekids-admin \
-  packaging/facekids-linux-probe packaging/facekids-pam-helper; do
+for script in scripts/*RegataOS.sh packaging/safepckids-admin \
+  packaging/safepckids-linux-probe packaging/safepckids-pam-helper; do
   bash -n "$script"
 done
 ```
@@ -329,7 +329,7 @@ Antes de qualquer pausa planejada, a IA deve:
 
 ## Integração real do painel — 23/10/2026
 
-Foi implementado o socket administrativo `/run/facekids/admin.sock`, separado
+Foi implementado o socket administrativo `/run/safepckids/admin.sock`, separado
 do socket PAM. Ele usa `SO_PEERCRED`, grupo administrativo configurável,
 diretório `0750` e socket `0660`. O renderer Electron continua sem Node.js e
 sem acesso ao SQLite; somente o processo principal fala o protocolo JSON
@@ -344,10 +344,10 @@ Cancelar remove o perfil novo ainda vazio. O runtime pode
 permanecer ativo com cadastro incompleto para permitir a recuperação pelo
 painel, mas mantém a sessão bloqueada até todos os perfis terem amostras.
 
-Foi criado o aplicativo KDE **FaceKids — Painel dos pais** em
-`~/.local/share/applications/facekids-admin.desktop`, além dos scripts
+Foi criado o aplicativo KDE **SafePCKids — Painel dos pais** em
+`~/.local/share/applications/safepckids-admin.desktop`, além dos scripts
 `Abrir-Painel-RegataOS.sh`, `Criar-Atalho-Painel-RegataOS.sh` e
-`Atualizar-FaceKids-RegataOS.sh`.
+`Atualizar-SafePCKids-RegataOS.sh`.
 
 Validação acumulada: 217 testes Python aprovados (2 skips específicos de
 plataforma), typecheck dos quatro pacotes, 3 testes TypeScript, build Vite/Electron,
@@ -357,7 +357,7 @@ não impediu a execução.
 
 O atualizador foi executado com sucesso na máquina em 23/10/2026 às 10:08
 (`America/Sao_Paulo`). O serviço foi reiniciado e permaneceu ativo, com grupo
-`wheel`. As permissões observadas foram `/run/facekids` `0750`, `admin.sock`
+`wheel`. As permissões observadas foram `/run/safepckids` `0750`, `admin.sock`
 `0660 root:wheel` e `auth.sock` `0600`. Uma consulta real feita pela conta
 `marcos` retornou serviço online, um perfil existente, nenhuma captura em
 andamento e resposta JSON válida. O banco existente foi preservado.
@@ -365,7 +365,7 @@ andamento e resposta JSON válida. O banco existente foi preservado.
 Para reaplicar esta versão após alterações futuras, use:
 
 ```bash
-sudo bash scripts/Atualizar-FaceKids-RegataOS.sh filhos wheel
+sudo bash scripts/Atualizar-SafePCKids-RegataOS.sh filhos wheel
 ```
 
 ## Galeria de fotos de perfil — 23/10/2026
@@ -425,7 +425,7 @@ e Windows live WTS diagnostic.
 ## Tela infantil com estado real — 23/10/2026
 
 Foi implementado um canal Unix separado e somente de leitura em
-`/run/facekids-child/status.sock`. O diretório e o socket pertencem ao grupo
+`/run/safepckids-child/status.sock`. O diretório e o socket pertencem ao grupo
 primário da conta monitorada, usam modos `0750` e `0660`, e cada conexão é
 validada por `SO_PEERCRED`. O protocolo aceita exclusivamente `status` e
 retorna somente a criança reconhecida naquele momento; com identidade ausente,
@@ -447,7 +447,7 @@ commit `3c2184b` concedeu somente essa capacidade; `ProtectSystem=strict`,
 ausência de rede IP e as demais restrições continuam ativas.
 
 Depois da correção, a unidade ficou ativa sem reinícios. Foram confirmados
-`/run/facekids-child` `0750 root:filhos` e `status.sock` `0660 root:filhos`.
+`/run/safepckids-child` `0750 root:filhos` e `status.sock` `0660 root:filhos`.
 Uma consulta executada realmente como UID `filhos` recebeu `ok=true`, lista
 vazia sem rosto reconhecido e nenhum estado de cadastro. Operação diferente de
 `status` foi recusada; `filhos` não conseguiu conectar ao socket administrativo
@@ -480,7 +480,7 @@ autostart KDE foram instalados no home de `filhos`, ambos `0644 filhos:filhos`.
   testes TypeScript; typecheck dos quatro pacotes; build Vite/Electron; Ruff
   dos módulos alterados; sintaxe shell; `systemd-analyze verify`; e
   `git diff --check`. Os avisos do `systemd-analyze` pertencem a unidades
-  antigas do Regata OS, não à unidade FaceKids.
+  antigas do Regata OS, não à unidade SafePCKids.
 - Os três workflows dos commits `3c2184b` e `ed66f11` passaram: Unit tests,
   Linux Regata OS checks e Windows live WTS diagnostic.
 
@@ -520,12 +520,12 @@ relógio sobreposto. O símbolo comunica reconhecimento, proteção e controle d
 tempo e usa a paleta já adotada pelo painel (azul-marinho, ciano, azul e
 verde-menta).
 
-O recurso principal `assets/facekids.svg` foi redesenhado como vetor e foram
+O recurso principal `assets/safepckids.svg` foi redesenhado como vetor e foram
 geradas versões PNG de 16, 24, 32, 48, 64, 128, 256 e 512 pixels. O processo
-Electron passou a definir explicitamente `assets/facekids-256.png` como ícone
+Electron passou a definir explicitamente `assets/safepckids-256.png` como ícone
 da janela, corrigindo o X genérico exibido pelo gerenciador de janelas. Os
 atalhos XDG administrativo e infantil continuam apontando para o SVG vetorial.
-O nome do aplicativo também é definido como `FaceKids` antes da inicialização.
+O nome do aplicativo também é definido como `SafePCKids` antes da inicialização.
 
 Validação: inspeção visual da versão 512 px; dimensões e formatos dos oito PNGs;
 typecheck e build Vite/Electron aprovados; teste de integração Linux garante
@@ -539,14 +539,14 @@ Após a auditoria de código, os 3 primeiros pontos foram implementados, integra
 
 1. **Prévia da webcam em tempo real no cadastro facial (Live Camera Preview)**:
    - Contratos Zod (`packages/contracts/src/index.ts`): estendidos para incluir `preview` (JPEG em base64) e `feedback` (`waiting`, `ok`, `multiple`, `low_quality`).
-   - Serviço Linux (`facekids/linux_runtime.py`): adicionado helper seguro `_encode_camera_preview` que redimensiona quadros da webcam para miniatura 320x240 com bounding boxes desenhadas nos rostos detectados (ciano para 1 rosto, vermelho para múltiplos rostos). O feedback é calculado a cada quadro lido durante o enrollment ativo.
-   - Restrição estrita de acesso: a prévia da câmera e o estado de enrollment são transmitidos **exclusivamente** pelo socket administrativo `/run/facekids/admin.sock` (restrito ao root/wheel). O socket infantil `/run/facekids-child/status.sock` omite explicitamente qualquer dado de cadastro ou câmera.
+   - Serviço Linux (`safepckids/linux_runtime.py`): adicionado helper seguro `_encode_camera_preview` que redimensiona quadros da webcam para miniatura 320x240 com bounding boxes desenhadas nos rostos detectados (ciano para 1 rosto, vermelho para múltiplos rostos). O feedback é calculado a cada quadro lido durante o enrollment ativo.
+   - Restrição estrita de acesso: a prévia da câmera e o estado de enrollment são transmitidos **exclusivamente** pelo socket administrativo `/run/safepckids/admin.sock` (restrito ao root/wheel). O socket infantil `/run/safepckids-child/status.sock` omite explicitamente qualquer dado de cadastro ou câmera.
    - Frontend administrativo (`packages/admin/src/EnrollmentWizard.tsx` e `apps/desktop/src/styles.css`): a etapa 1 de captura substitui o avatar estático pelo streaming ao vivo da webcam (`<img className="camera-preview__stream" />`) com alertas visuais dinâmicos ("Posicione a criança", "Rosto detectado! Coletando amostras...", "⚠️ Mais de um rosto no quadro!", "Ajuste a iluminação").
 
-2. **Empacotamento desacoplado da interface desktop em `/opt/facekids/desktop/`**:
-   - Criação dos wrappers universais `packaging/facekids-admin-gui` e `packaging/facekids-child-gui`.
-   - Desacoplamento de `/home/marcos/`: `scripts/Criar-Tela-Infantil-RegataOS.sh` e `scripts/Criar-Atalho-Painel-RegataOS.sh` agora apontam os lançadores `.desktop` para `/usr/local/bin/facekids-*-gui` e usam o ícone do sistema `Icon=facekids`. A conta restrita `filhos` consegue iniciar o painel infantil mesmo se `/home/marcos` tiver permissão `0700`.
-   - Os instaladores `scripts/Instalar-FaceKids-RegataOS.sh` e `scripts/Atualizar-FaceKids-RegataOS.sh` instalam `dist/`, `dist-electron/`, `package.json`, `assets/`, runtime do Electron e os wrappers com permissões seguras em `/opt/facekids/desktop/`, `/usr/local/bin/`, `/usr/share/icons/` e `/usr/share/pixmaps/`.
+2. **Empacotamento desacoplado da interface desktop em `/opt/safepckids/desktop/`**:
+   - Criação dos wrappers universais `packaging/safepckids-admin-gui` e `packaging/safepckids-child-gui`.
+   - Desacoplamento de `/home/marcos/`: `scripts/Criar-Tela-Infantil-RegataOS.sh` e `scripts/Criar-Atalho-Painel-RegataOS.sh` agora apontam os lançadores `.desktop` para `/usr/local/bin/safepckids-*-gui` e usam o ícone do sistema `Icon=safepckids`. A conta restrita `filhos` consegue iniciar o painel infantil mesmo se `/home/marcos` tiver permissão `0700`.
+   - Os instaladores `scripts/Instalar-SafePCKids-RegataOS.sh` e `scripts/Atualizar-SafePCKids-RegataOS.sh` instalam `dist/`, `dist-electron/`, `package.json`, `assets/`, runtime do Electron e os wrappers com permissões seguras em `/opt/safepckids/desktop/`, `/usr/local/bin/`, `/usr/share/icons/` e `/usr/share/pixmaps/`.
    - Adicionado teste de regressão em `tests/test_linux_installer.py` (`test_desktop_gui_wrappers_and_packaging_decoupled_from_user_home`).
 
 3. **Otimização de polling e contagem suave**:
@@ -561,23 +561,23 @@ Após a auditoria de código, os 3 primeiros pontos foram implementados, integra
 Os pontos 4, 5 e 6 foram totalmente implementados e testados:
 
 4. **Resolução do monopólio da webcam V4L2 e concorrência no cadastro**:
-   - `facekids/linux_probe.py`: adicionado `probe_via_daemon()`. Quando o serviço `facekids-linux.service` está ativo e retendo `/dev/video0`, o utilitário `facekids-linux-probe` agora consulta o socket administrativo `/run/facekids/admin.sock` usando `op: "probe"`. Isso elimina completamente o erro `EBUSY` (dispositivo ocupado) e retorna telemetria ao vivo da câmera (quadros, usabilidade, brilho e rostos detectados). Se o serviço estiver desligado, o utilitário abre `/dev/video0` diretamente via OpenCV.
+   - `safepckids/linux_probe.py`: adicionado `probe_via_daemon()`. Quando o serviço `safepckids-linux.service` está ativo e retendo `/dev/video0`, o utilitário `safepckids-linux-probe` agora consulta o socket administrativo `/run/safepckids/admin.sock` usando `op: "probe"`. Isso elimina completamente o erro `EBUSY` (dispositivo ocupado) e retorna telemetria ao vivo da câmera (quadros, usabilidade, brilho e rostos detectados). Se o serviço estiver desligado, o utilitário abre `/dev/video0` diretamente via OpenCV.
    - Suporte a liberação cooperativa da câmera no daemon via `op: "pause_camera"` (permite que outros aplicativos externos usem `/dev/video0` temporariamente sem derrubar o serviço).
    - Eliminação de concorrência de CPU e falsos bloqueios durante cadastro: `run()` agora captura o quadro apenas uma vez por iteração. Enquanto `enrolling` estiver ativo, o débito de quota e verificação de bloqueio por ausência são suspensos (`self.engine.policy.pause()`), evitando travamentos da sessão do responsável durante o cadastro da criança.
 
 5. **Portabilidade Linux completa (`wheel` vs `sudo`)**:
-   - `facekids/linux_runtime.py`:
+   - `safepckids/linux_runtime.py`:
      - `uid_is_admin()` aprimorado com `resolve_admin_gids()` para aceitar múltiplos grupos administrativos (padrão `"wheel,sudo"`).
      - Busca os grupos suplementares com `os.getgrouplist(account.pw_name, account.pw_gid)`, garantindo compatibilidade com autenticações corporativas e modernas (NSS, LDAP, systemd-homed).
      - Tratamento seguro de `KeyError`: se a distribuição não tiver o grupo `wheel` (como Ubuntu, Debian e Mint), o daemon não trava e faz fallback automático para `sudo`.
-   - `scripts/Instalar-FaceKids-RegataOS.sh` e `scripts/Atualizar-FaceKids-RegataOS.sh`:
+   - `scripts/Instalar-SafePCKids-RegataOS.sh` e `scripts/Atualizar-SafePCKids-RegataOS.sh`:
      - Detecção automática de grupo administrativo: testa `wheel`, depois `sudo`, ajustando a unit do systemd e o tmpfiles dinamicamente.
 
 6. **Eliminação de `CAP_CHOWN` e Isolamento Zero-Capability no Systemd**:
-   - `packaging/facekids-linux.service`:
+   - `packaging/safepckids-linux.service`:
      - `CapabilityBoundingSet=` redefinido como vazio (zero capabilities), restabelecendo o confinamento estrito de segurança do processo root.
-   - `packaging/facekids-tmpfiles.conf` e scripts de instalação:
-     - Os diretórios `/run/facekids` (`0750 root:ADMIN_GROUP`) e `/run/facekids-child` (`2750 root:CHILD_USER`) agora são criados e mantidos pelo próprio `systemd-tmpfiles`.
+   - `packaging/safepckids-tmpfiles.conf` e scripts de instalação:
+     - Os diretórios `/run/safepckids` (`0750 root:ADMIN_GROUP`) e `/run/safepckids-child` (`2750 root:CHILD_USER`) agora são criados e mantidos pelo próprio `systemd-tmpfiles`.
      - O bit `setgid` (`2750`) garante que o socket `status.sock` pertença automaticamente ao grupo da criança sem depender de `os.chown` privilegiado.
      - `_start_child_status_server()` trata `PermissionError` silenciosamente, operando com segurança total sob privilégios mínimos.
 
@@ -594,15 +594,15 @@ Os pontos 4, 5 e 6 foram totalmente implementados e testados:
 A revisão dos commits `c2b4f89` e `e775fce` encontrou e corrigiu três
 regressões antes da atualização da instalação real:
 
-1. `RuntimeDirectory=facekids facekids-child` recriaria os dois diretórios com
+1. `RuntimeDirectory=safepckids safepckids-child` recriaria os dois diretórios com
    o mesmo grupo e modo da unidade, anulando a separação definida pelo
    `tmpfiles`. A unidade deixou de administrar esses diretórios; agora
-   `/etc/tmpfiles.d/facekids.conf` é a única autoridade para seus grupos e
-   modos. Isso preserva `/run/facekids-child` como `2750 root:<grupo-filhos>` e
+   `/etc/tmpfiles.d/safepckids.conf` é a única autoridade para seus grupos e
+   modos. Isso preserva `/run/safepckids-child` como `2750 root:<grupo-filhos>` e
    permite que o socket herde o grupo infantil sem `CAP_CHOWN`.
 2. O ícone Electron possuía somente o caminho do workspace. O processo agora
-   procura primeiro `../assets/facekids-256.png`, correto para a instalação em
-   `/opt/facekids/desktop`, e usa o caminho do workspace apenas no ambiente de
+   procura primeiro `../assets/safepckids-256.png`, correto para a instalação em
+   `/opt/safepckids/desktop`, e usa o caminho do workspace apenas no ambiente de
    desenvolvimento.
 3. O polling recursivo podia reagendar uma consulta depois da desmontagem ou
    troca de papel do componente. Um identificador de ciclo e um marcador de
@@ -616,7 +616,7 @@ fallback conservador.
 Validação posterior: 228 testes Python aprovados e 2 skips de plataforma; 5
 testes Vitest aprovados; Ruff aprovado nos módulos e testes Linux envolvidos;
 typecheck e build Vite/Electron aprovados; todos os scripts Bash aprovados em
-`bash -n`; `systemd-analyze verify` aceitou a unidade FaceKids. Os avisos
+`bash -n`; `systemd-analyze verify` aceitou a unidade SafePCKids. Os avisos
 restantes pertencem a unidades antigas do Regata OS.
 
 O primeiro CI do commit de correção passou no Ubuntu, nos checks Regata OS e
@@ -630,17 +630,17 @@ Ubuntu e Windows, Linux Regata OS checks e Windows live WTS diagnostic.
 ## Bundle Electron autocontido — 23/10/2026
 
 O commit `2372c39` concluiu o empacotamento da interface fora do workspace. O
-script `scripts/Empacotar-FaceKids-Desktop-Linux.sh` compila React/Electron e
-produz `artifacts/facekids-desktop-linux-x64.tar.gz`, contendo frontend,
+script `scripts/Empacotar-SafePCKids-Desktop-Linux.sh` compila React/Electron e
+produz `artifacts/safepckids-desktop-linux-x64.tar.gz`, contendo frontend,
 processo principal, ícones, runtime Electron 38.8.6 e lançadores. O diretório
 `artifacts/` permanece ignorado pelo Git para evitar versionar cerca de 110 MB
 de binários.
 
 O bundle inclui `VERSION`, manifesto SHA-256 de todos os arquivos e um
 `install.sh` independente. O instalador verifica integralmente o manifesto,
-prepara a nova árvore e troca `/opt/facekids/desktop` por renomeação, instala
+prepara a nova árvore e troca `/opt/safepckids/desktop` por renomeação, instala
 os wrappers em `/usr/local/bin` e atualiza os ícones do sistema. Ele não toca
-no serviço Python nem em `/var/lib/facekids`, portanto preserva biometria,
+no serviço Python nem em `/var/lib/safepckids`, portanto preserva biometria,
 quotas e histórico.
 
 Validação real do artefato: build aprovado; archive e manifesto interno
@@ -677,7 +677,7 @@ Regata OS checks e Windows live WTS diagnostic.
 - **Concluído:** navegação do painel, telas informativas com dados reais,
   histórico de sete dias, testes locais, rebuild do bundle e atualização do PR.
 - **Em andamento:** nenhuma etapa autônoma de software conhecida.
-- **Pendente:** instalar o novo bundle em `/opt/facekids/desktop` com `sudo`
+- **Pendente:** instalar o novo bundle em `/opt/safepckids/desktop` com `sudo`
   interativo e executar os testes físicos abaixo.
 - **Bloqueado por presença física:** captura biométrica, reconhecimento real,
   débito de quota, bloqueio/desbloqueio da sessão infantil, senha de recuperação
@@ -739,7 +739,7 @@ O PR draft #3 foi atualizado e o bundle autocontido foi reconstruído na versão
 
 A próxima frente autônoma foi inspecionada: testes funcionais da interface e
 robustez de instalação/rollback. O instalador autocontido faz troca atômica de
-`/opt/facekids/desktop`, mas o teste atual em `tests/test_linux_installer.py`
+`/opt/safepckids/desktop`, mas o teste atual em `tests/test_linux_installer.py`
 verifica apenas trechos do script; ele não executa cenários isolados de primeira
 instalação, atualização, manifesto corrompido ou restauração após falha. Não há
 mudança de código parcial nesta pausa e a árvore está limpa.
@@ -750,7 +750,7 @@ mudança de código parcial nesta pausa e a árvore está limpa.
    testes possam usar diretórios temporários sem root, preservando os caminhos
    fixos como padrão de produção.
 2. Criar testes funcionais para instalação limpa, atualização, checksum inválido,
-   rollback e preservação de dados externos a `/opt/facekids/desktop`.
+   rollback e preservação de dados externos a `/opt/safepckids/desktop`.
 3. Auditar manifesto e links simbólicos do runtime Electron, garantindo que todo
    conteúdo instalado seja coberto pela verificação de integridade.
 4. Adicionar testes de componente para confirmação de exclusão, limite livre,
@@ -766,22 +766,22 @@ para 01:13:15 de 24/10/2026, três minutos após a renovação informada para
 
 O ciclo planejado na auditoria anterior foi totalmente implementado e validado:
 
-1. **Parametrização e atomicidade do instalador autocontido ([`packaging/install-facekids-desktop-bundle`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packaging/install-facekids-desktop-bundle))**:
-   - Destinos parametrizados de forma segura via `FACEKIDS_TEST_DESTDIR`, permitindo testes isolados sem exigir `root`, enquanto o ambiente de produção preserva a exigência estrita de privilégios (`EUID == 0`) e caminhos `/opt/facekids/desktop`, `/usr/local/bin`, `/usr/share/...`.
+1. **Parametrização e atomicidade do instalador autocontido ([`packaging/install-safepckids-desktop-bundle`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/packaging/install-safepckids-desktop-bundle))**:
+   - Destinos parametrizados de forma segura via `SAFEPCKIDS_TEST_DESTDIR`, permitindo testes isolados sem exigir `root`, enquanto o ambiente de produção preserva a exigência estrita de privilégios (`EUID == 0`) e caminhos `/opt/safepckids/desktop`, `/usr/local/bin`, `/usr/share/...`.
    - Implementado rollback de desastre no manipulador `trap cleanup EXIT`: se qualquer falha ocorrer (durante substituição atômica ou instalação de wrappers e ícones), a versão anterior é restaurada imediatamente do backup para o destino sem deixar o sistema em estado inconsistente.
 
-2. **Auditoria de integridade e links simbólicos ([`scripts/Empacotar-FaceKids-Desktop-Linux.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Empacotar-FaceKids-Desktop-Linux.sh))**:
+2. **Auditoria de integridade e links simbólicos ([`scripts/Empacotar-SafePCKids-Desktop-Linux.sh`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/scripts/Empacotar-SafePCKids-Desktop-Linux.sh))**:
    - A geração do manifesto `SHA256SUMS` foi estendida para abranger tanto arquivos regulares quanto links simbólicos (`-type f -o -type l`), garantindo que nenhuma biblioteca ou recurso linkado do runtime Electron escape da verificação estrita.
 
-3. **Testes funcionais de ciclo de vida ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/tests/test_linux_installer.py))**:
+3. **Testes funcionais de ciclo de vida ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/tests/test_linux_installer.py))**:
    - Criado `test_desktop_bundle_installer_functional_lifecycle`, cobrindo 5 cenários reais:
      - Instalação limpa e criação de todos os binários e ícones.
-     - Preservação estrita de dados externos (como `/var/lib/facekids/criancas.sqlite3`).
+     - Preservação estrita de dados externos (como `/var/lib/safepckids/criancas.sqlite3`).
      - Atualização bem-sucedida substituindo a versão anterior de forma atômica.
      - Aborto preventivo sem tocar no alvo quando o checksum do manifesto é adulterado.
      - Rollback atômico restaurando a versão anterior quando uma falha simulada é acionada após o início da troca.
 
-4. **Validações de contratos adicionais ([`packages/contracts/src/index.test.ts`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packages/contracts/src/index.test.ts))**:
+4. **Validações de contratos adicionais ([`packages/contracts/src/index.test.ts`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/packages/contracts/src/index.test.ts))**:
    - Adicionados testes para validação estrita dos registros de histórico de uso (`usageHistory`), formato ISO de data e rejeição de segundos negativos.
 
 ### Validações executadas
@@ -790,34 +790,34 @@ O ciclo planejado na auditoria anterior foi totalmente implementado e validado:
 - `pnpm test:ui`: **7 testes Vitest aprovados** no pacote de contratos.
 - `pnpm typecheck`: 0 erros em todos os 4 pacotes TypeScript.
 - `pnpm build`: build de produção concluído com sucesso.
-- Rebuild do pacote executável autocontido: `artifacts/facekids-desktop-linux-x64.tar.gz` atualizado e gerado.
+- Rebuild do pacote executável autocontido: `artifacts/safepckids-desktop-linux-x64.tar.gz` atualizado e gerado.
 
 ## Sanidade CI Windows, Proteção de IPC e Script de Saúde — 23/10/2026 às 21:22
 
 Avanço autônomo focado na correção de runner cruzado, higienização de entradas IPC e diagnóstico automático:
 
-1. **Compatibilidade Cross-Platform no CI Windows ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/tests/test_linux_installer.py))**:
+1. **Compatibilidade Cross-Platform no CI Windows ([`tests/test_linux_installer.py`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/tests/test_linux_installer.py))**:
    - Adicionado `@unittest.skipIf(sys.platform == "win32", "Linux desktop bundle installer requires POSIX environment")` ao teste funcional de ciclo de vida do instalador em bash. O runner Windows CI passa a ignorar graciosamente este teste específico de shell POSIX, enquanto os runners Linux (`ubuntu-latest` e `linux-integration`) continuam executando-o com 100% de cobertura.
 
-2. **Higienização de Strings e Proteção Contra Injeção no IPC ([`facekids/linux_runtime.py`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/facekids/linux_runtime.py), [`packages/contracts/src/index.ts`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/packages/contracts/src/index.ts))**:
-   - Criada a função `sanitize_child_name` em `facekids/linux_runtime.py`: remove caracteres de controle (`\r`, `\n`, `\t`, sequências de escape ANSI), restringe tamanho a 1–80 caracteres e valida que o valor consiste apenas de caracteres imprimíveis.
+2. **Higienização de Strings e Proteção Contra Injeção no IPC ([`safepckids/linux_runtime.py`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/safepckids/linux_runtime.py), [`packages/contracts/src/index.ts`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/packages/contracts/src/index.ts))**:
+   - Criada a função `sanitize_child_name` em `safepckids/linux_runtime.py`: remove caracteres de controle (`\r`, `\n`, `\t`, sequências de escape ANSI), restringe tamanho a 1–80 caracteres e valida que o valor consiste apenas de caracteres imprimíveis.
    - Aplicada a sanitização tanto na criação (`add_child`, `add_child_and_start_enrollment`) quanto na renomeação de perfis (`rename_child`).
    - Atualizados os esquemas Zod em `packages/contracts` (`childNameSchema`, `dailyLimitMinutesSchema`, `bonusMinutesSchema`) para rejeitar caracteres de controle e garantir limites válidos (1 a 1440 min de limite, 1 a 480 min de bônus).
    - Adicionados testes de unidade cobrindo a sanitização e validação de nomes e intervalos numéricos.
 
-3. **Script de Diagnóstico Automatizado ([`scripts/Verificar-Saude-FaceKids-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Verificar-Saude-FaceKids-RegataOS.sh))**:
+3. **Script de Diagnóstico Automatizado ([`scripts/Verificar-Saude-SafePCKids-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/scripts/Verificar-Saude-SafePCKids-RegataOS.sh))**:
    - Criado script de diagnóstico não destrutivo e somente leitura para verificação rápida de:
      - Permissões de usuário e grupo administrativo (`wheel`/`sudo`).
-     - Status do serviço systemd (`facekids-linux.service`).
+     - Status do serviço systemd (`safepckids-linux.service`).
      - Presença e permissões dos modelos de IA (`YuNet` e `SFace`).
      - Permissões do banco de dados SQLite (`0600`/`0660`).
-     - Presença e permissões dos sockets IPC (`/run/facekids/admin.sock` e `/run/facekids-child/status.sock`).
+     - Presença e permissões dos sockets IPC (`/run/safepckids/admin.sock` e `/run/safepckids-child/status.sock`).
      - Consulta ativa ao daemon via socket Unix para telemetria de câmera (`probe`) e estado geral (`status`).
-     - Integridade do pacote desktop Electron em `/opt/facekids/desktop`.
+     - Integridade do pacote desktop Electron em `/opt/safepckids/desktop`.
      - Análise de erros recentes no journal do systemd.
 
 4. **Rebuild e Revalidação**:
-   - Reconstruído o pacote `artifacts/facekids-desktop-linux-x64.tar.gz` e atualizado o manifesto `.sha256`.
+   - Reconstruído o pacote `artifacts/safepckids-desktop-linux-x64.tar.gz` e atualizado o manifesto `.sha256`.
    - Suíte de testes:
      - Python: **233 testes aprovados** (2 Win32 pipe ignorados).
      - Vitest: **9 testes aprovados** no pacote de contratos.
@@ -828,15 +828,15 @@ Avanço autônomo focado na correção de runner cruzado, higienização de entr
 
 Implementada a Opção 2 de inicialização do sistema, onde ao ligar o notebook a conta `filhos` é automaticamente selecionada no login manager SDDM:
 
-1. **Script de Automação ([`scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/FaceControlKidsPC/scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh))**:
-   - Associa o avatar oficial FaceKids (`assets/facekids-256.png`) à conta `filhos` em `/usr/share/sddm/faces/filhos.face.icon` e `/home/filhos/.face.icon`.
-   - Adiciona configuração em `/etc/sddm.conf.d/10-facekids-user.conf` ativando `RememberLastUser=true` e `RememberLastSession=true`.
+1. **Script de Automação ([`scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh`](file:///home/marcos/Documentos/ChatGPT/SafePCKids/scripts/Configurar-Pre-Selecao-Filhos-RegataOS.sh))**:
+   - Associa o avatar oficial SafePCKids (`assets/safepckids-256.png`) à conta `filhos` em `/usr/share/sddm/faces/filhos.face.icon` e `/home/filhos/.face.icon`.
+   - Adiciona configuração em `/etc/sddm.conf.d/10-safepckids-user.conf` ativando `RememberLastUser=true` e `RememberLastSession=true`.
    - Inicializa `/var/lib/sddm/state.conf` com a sessão do Plasma 6 e usuário `filhos`, garantindo foco automático ao ligar.
    - Adicionado teste em `tests/test_linux_installer.py`.
 
 ### Prompt de continuidade
 
-> Continue no repositório `marquimRcc/FaceControlKidsPC`, branch
+> Continue no repositório `marquimRcc/SafePCKids`, branch
 > `feature/regataos-linux-implementation-20261022`, lendo primeiro
 > `docs/CONTINUIDADE-REGATAOS.md`. Todos os testes de unidade, integração, tipagem
 > e CI multiplataforma estão validados e verdes. O script de pré-seleção

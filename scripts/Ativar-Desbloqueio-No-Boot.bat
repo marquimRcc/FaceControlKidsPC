@@ -1,5 +1,5 @@
 @echo off
-title FaceKids - Ativar Desbloqueio Facial no Boot
+title SafePCKids - Ativar Desbloqueio Facial no Boot
 set "ROOT=%~dp0"
 if not exist "%ROOT%scripts\Ativar-Desbloqueio-No-Boot.ps1" (
     echo [ERRO] O script '%ROOT%scripts\Ativar-Desbloqueio-No-Boot.ps1' nao foi encontrado.

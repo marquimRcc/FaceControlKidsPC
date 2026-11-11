@@ -148,7 +148,7 @@ static bool verify_tile(ICredentialProviderCredential* c) {
 
 int wmain(int argc,wchar_t** argv) {
     if (argc!=2 && !(argc==3 && wcscmp(argv[2],L"--precheck")==0)) {
-        fwprintf(stderr,L"Usage: FaceKidsProviderHost.exe path-to-DLL [--precheck]\n");
+        fwprintf(stderr,L"Usage: SafePCKidsProviderHost.exe path-to-DLL [--precheck]\n");
         return 2;
     }
     HRESULT init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
@@ -159,9 +159,9 @@ int wmain(int argc,wchar_t** argv) {
     auto make=reinterpret_cast<FactoryEntry>(GetProcAddress(dll,"DllGetClassObject"));
     auto unload=reinterpret_cast<UnloadEntry>(GetProcAddress(dll,"DllCanUnloadNow"));
     auto setup=reinterpret_cast<HRESULT (STDAPICALLTYPE*)(PCWSTR)>(
-        GetProcAddress(dll,"FaceKidsSetDiagnosticSidForHost"));
+        GetProcAddress(dll,"SafePCKidsSetDiagnosticSidForHost"));
     auto precheck=reinterpret_cast<HRESULT (STDAPICALLTYPE*)(DWORD,DWORD)>(
-        GetProcAddress(dll,"FaceKidsDiagnosticPrecheckForHost"));
+        GetProcAddress(dll,"SafePCKidsDiagnosticPrecheckForHost"));
     if (!make || !unload || !setup || !precheck) result=5;
     else if (setup(L"S-1-5-21-101-202-303-1001")!=S_OK) result=15;
     else {

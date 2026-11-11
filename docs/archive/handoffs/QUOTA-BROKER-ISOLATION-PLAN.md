@@ -1,11 +1,11 @@
-# FaceKids — plano de isolamento do ledger de quotas
+# SafePCKids — plano de isolamento do ledger de quotas
 
 **Status: projeto de migração / prova de conceito, NÃO implantado.**
 
 ## O que existe nesta branch
 
-- `facekids/quota_broker_clock.py`: relógio de débito por criança e sessão WTS, com limite de amostragem e pausa quando a sessão não está ativa.
-- `facekids/quota_broker_policy.py`: motor de decisão e cobrança, sem listener IPC nem registro de serviço Windows.
+- `safepckids/quota_broker_clock.py`: relógio de débito por criança e sessão WTS, com limite de amostragem e pausa quando a sessão não está ativa.
+- `safepckids/quota_broker_policy.py`: motor de decisão e cobrança, sem listener IPC nem registro de serviço Windows.
 - `Storage.charge_up_to_available`: transação SQLite `BEGIN IMMEDIATE` que impede cobrar além do saldo mesmo com dois escritores cooperativos.
 - Testes em `tests/test_quota_broker_clock.py`, `tests/test_quota_broker_policy.py` e `tests/test_storage.py`.
 
@@ -16,7 +16,7 @@ Um processo da conta Filhos ainda pode escrever no SQLite, e o agente atual cont
 
 1. Processo confiável hospedado em uma conta dedicada (ou SYSTEM com permissões minimizadas), binários e scripts instalados em diretório sem permissão de escrita para Filhos.
 2. O serviço identifica a sessão interativa por **token real do Windows/WTS**. Mensagens de usuário NÃO podem escolher `child_id`, `session_id`, `seconds`, `day` ou estado de desbloqueio.
-3. Associação `child_id ↔ session_id` nasce de um evento de reconhecimento cuja origem foi autenticada; `last_unlock.json` e o protocolo `FACEKIDS_IPC_V1` **não** são provas de origem.
+3. Associação `child_id ↔ session_id` nasce de um evento de reconhecimento cuja origem foi autenticada; `last_unlock.json` e o protocolo `SAFEPCKIDS_IPC_V1` **não** são provas de origem.
 4. O serviço lê `time.monotonic()` e a data local no próprio processo. Somente ele chama `ServiceOwnedQuotaBroker.start_verified_session()` e `observe()`.
 5. IPC infantil para exibir saldo/alerta deve ser de **somente leitura**. Qualquer API de mutação aceita apenas comandos de administrador autenticados ou eventos do serviço validados.
 6. O SQLite, seu WAL/SHM, imagens de referência e diretórios ancestrais devem ter ACLs restritas e verificadas por acesso efetivo com o token Filhos. Logs e cache não devem permitir substituir scripts executáveis.

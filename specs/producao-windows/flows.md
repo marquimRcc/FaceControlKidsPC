@@ -1,4 +1,4 @@
-# Flows — Fluxos de Sequência de Produção (FaceControlKidsPC)
+# Flows — Fluxos de Sequência de Produção (SafePCKids)
 
 **Versão:** 1.0  
 **Data:** 2026-11-05  
@@ -13,14 +13,14 @@
       │
       ▼
 Agendador de Tarefas (SYSTEM)
-  └── Task "FaceKidsAuthService"
-        └── executa: python -m facekids.boot_auth
+  └── Task "SafePCKidsAuthService"
+        └── executa: python -m safepckids.boot_auth
               │
               ▼
         auth_service.py inicia
           ├── Carrega modelos YuNet + SFace (OpenCV DNN)
           ├── Abre banco kids.sqlite3 (SQLite WAL)
-          ├── Cria Named Pipe: \\.\pipe\FaceKidsAuthPipe
+          ├── Cria Named Pipe: \\.\pipe\SafePCKidsAuthPipe
           │     └── DACL: somente SID da conta Filhos pode conectar
           └── Loop: aguarda conexões de clientes no pipe
 ```
@@ -33,13 +33,13 @@ Agendador de Tarefas (SYSTEM)
 [Usuário seleciona conta "Filhos" na LogonUI]
       │
       ▼
-FaceKidsCredentialProvider.dll (C++ / COM)
+SafePCKidsCredentialProvider.dll (C++ / COM)
   ├── Verifica SID: só aplica à conta Filhos
   ├── Exibe tile de reconhecimento facial
   ├── Captura frame da webcam USB
   │     └── Fallback: se webcam indisponível → retorna ERROR_CAMERA
   │
-  ├── Conecta ao Named Pipe: \\.\pipe\FaceKidsAuthPipe
+  ├── Conecta ao Named Pipe: \\.\pipe\SafePCKidsAuthPipe
   │     └── Aguarda disponibilidade do pipe (WaitNamedPipe)
   │
   ├── Envia: "AUTH_QUERY\n" (ASCII, máx 512 bytes)
@@ -64,7 +64,7 @@ auth_service.py recebe AUTH_QUERY
   └── Resposta JSON serializada → pipe
       │
       ▼
-FaceKidsCredentialProvider.dll recebe resposta
+SafePCKidsCredentialProvider.dll recebe resposta
   ├── ALLOW → KerbInteractiveLogon(usuário="Filhos", senha="1") → AutoLogon
   ├── DENY_SPOOF → exibe mensagem "Foto ou tela estática detectada" e permanece bloqueado
   ├── DENY_QUOTA / DENY_CURFEW → exibe mensagem e permanece na LogonUI
@@ -81,13 +81,13 @@ FaceKidsCredentialProvider.dll recebe resposta
       │
       ▼
 Agendador de Tarefas (Sessão Interativa Filhos)
-  └── Task "FaceKidsFilhosAgent"
-        └── executa: pythonw -m facekids.filhos_agent
+  └── Task "SafePCKidsFilhosAgent"
+        └── executa: pythonw -m safepckids.filhos_agent
               │
               ▼
         filhos_agent.run_agent()
           ├── Verifica USERNAME == "filhos" (encerra se diferente)
-          ├── Cria Mutex "Local\FaceKidsFilhosAgentMutex" (encerra se duplicado)
+          ├── Cria Mutex "Local\SafePCKidsFilhosAgentMutex" (encerra se duplicado)
           ├── Aguarda console ativo == "filhos" (loop 2s se não for)
           ├── Carrega Storage(kids.sqlite3) + LegacyLedgerQuota
           ├── Lê last_unlock.json → child_id, child_name (UI-only)
@@ -182,7 +182,7 @@ AgentWatchdog.check_once():
   │     Heartbeat presente e age ≤ 45s → HEARTBEAT_OK, reset consecutive_failures
   │     Heartbeat ausente ou age > 45s:
   │       consecutive_failures += 1
-  │       falha == 1 → schtasks /run FaceKidsFilhosAgent → RECOVERY_TRIGGERED
+  │       falha == 1 → schtasks /run SafePCKidsFilhosAgent → RECOVERY_TRIGGERED
   │       falha ≥ 2 → LockWorkStation(session_id) + schtasks /run → PREVENTIVE_LOCK
   └── Aguarda 15s → repetir
 ```
@@ -240,7 +240,7 @@ filhos_agent detecta idle ≥ lock_sec
 ## Fluxo F-08 — Painel dos Pais (Admin Dashboard)
 
 ```
-[Pai executa abrir-facekids.bat]
+[Pai executa abrir-safepckids.bat]
       │
       ▼
 admin_auth.py → prompt de autenticação administrativa

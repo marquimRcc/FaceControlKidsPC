@@ -5,10 +5,10 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from facekids.parent_ui_state import (
+from safepckids.parent_ui_state import (
     filter_children, load_overview, screen_time_label, validate_schedule
 )
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 class ParentsOverviewTests(unittest.TestCase):

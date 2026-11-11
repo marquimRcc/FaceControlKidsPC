@@ -10,17 +10,17 @@ Instale Python 3.11 com Tkinter, execute na pasta do projeto:
 
     py -3.11 -m venv .venv
     .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-    .\.venv\Scripts\python.exe -m facekids.cli download-models
-    .\.venv\Scripts\python.exe -m facekids.gui
+    .\.venv\Scripts\python.exe -m safepckids.cli download-models
+    .\.venv\Scripts\python.exe -m safepckids.gui
 
 No painel, cadastre os filhos e cadastre os rostos separadamente. Feche
 o cadastro antes de iniciar a leitura. Em seguida:
 
-    .\.venv\Scripts\python.exe -m facekids.gate_webcam_preview
+    .\.venv\Scripts\python.exe -m safepckids.gate_webcam_preview
 
 Ou execute testar-webcam-gate.bat. Opcoes para diferentes dispositivos:
 
-    .\.venv\Scripts\python.exe -m facekids.gate_webcam_preview --camera-index 1 --interval 2
+    .\.venv\Scripts\python.exe -m safepckids.gate_webcam_preview --camera-index 1 --interval 2
 
 A primeira leitura identificada mostra verificacao; a segunda leitura
 consecutiva confirma e mostra liberacao visual. Uma pessoa ausente pausa
@@ -36,4 +36,4 @@ do Windows foi implementada. Pressione Esc para sair a qualquer momento.
 
 Para o modo totalmente simulado sem webcam, continue usando:
 
-    py -3.11 -m facekids.gate_preview
+    py -3.11 -m safepckids.gate_preview

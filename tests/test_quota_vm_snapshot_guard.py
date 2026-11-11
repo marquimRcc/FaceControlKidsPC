@@ -1,7 +1,7 @@
 """Regression tests: cutover must reject equal-count mutations and schema drift."""
 import sqlite3
 import unittest
-from facekids.quota_vm_snapshot_guard import assert_snapshot_matches
+from safepckids.quota_vm_snapshot_guard import assert_snapshot_matches
 
 
 class VmSnapshotGuardTests(unittest.TestCase):

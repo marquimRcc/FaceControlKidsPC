@@ -13,9 +13,9 @@
 Validar empiricamente o pipeline de captura por webcam USB, detecção (YuNet) e reconhecimento 1:N (SFace) em tempo real e durante o bloqueio de tela (Win+L), utilizando o rosto de um **adulto voluntário como perfil fictício único**.
 
 ### Limites e Garantias de Isolamento:
-- **Zero impacto na família:** O banco de produção `C:\ProgramData\FaceKids\kids.sqlite3` e as tarefas agendadas **não foram alterados**.
+- **Zero impacto na família:** O banco de produção `C:\ProgramData\SafePCKids\kids.sqlite3` e as tarefas agendadas **não foram alterados**.
 - **Isolamento de dados:** Todos os vetores foram gravados exclusivamente em:
-  `%LOCALAPPDATA%\FaceKids\laboratorio-adulto-filhos\adulto-teste.sqlite3`
+  `%LOCALAPPDATA%\SafePCKids\laboratorio-adulto-filhos\adulto-teste.sqlite3`
 - **Sem privilégios elevados:** O teste rodou em PowerShell normal na conta `Filhos`.
 - **Sem autologon:** O ensaio não modificou o Credential Provider nem o LogonUI; executou apenas diagnóstico observacional.
 
@@ -58,5 +58,5 @@ sample=50 wts=UNLOCKED locked_frames=14 locked_matches=14
 
 Para finalizar a limpeza da biometria efêmera de teste do responsável:
 ```powershell
-Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'FaceKids\laboratorio-adulto-filhos') -Recurse -Force
+Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'SafePCKids\laboratorio-adulto-filhos') -Recurse -Force
 ```

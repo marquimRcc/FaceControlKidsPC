@@ -18,11 +18,11 @@ ou recuperação validada no LogonUI. Não é um aplicativo de desbloqueio.
 Abra a branch feature/windows-native-unlock-poc no GitHub. O workflow
 "Credential Provider compile and host checks" compila ambos os executáveis
 no Windows e publica, após aprovação, o artifact
-FaceKidsCredentialProvider-DiagnosticHostOnly.
+SafePCKidsCredentialProvider-DiagnosticHostOnly.
 
 No seu PC, o host COM é seguro para executar sem instalar a DLL:
 
-    FaceKidsProviderHost.exe FaceKidsDiagnosticProvider.dll
+    SafePCKidsProviderHost.exe SafePCKidsDiagnosticProvider.dll
 
 Ele apenas carrega a DLL com LoadLibrary, instancia ICredentialProvider,
 consulta campos e chama GetSerialization, verificando que o resultado
@@ -31,9 +31,9 @@ consulta campos e chama GetSerialization, verificando que o resultado
 Também é possível compilar manualmente em Developer PowerShell x64 do
 Visual Studio (C++ Build Tools + Windows SDK), a partir da raiz do repo:
 
-    cl /nologo /std:c++17 /EHsc /W4 /LD native\credential_provider_poc\provider.cpp /link /OUT:FaceKidsDiagnosticProvider.dll /EXPORT:DllGetClassObject=FaceKidsGetClassObject /EXPORT:DllCanUnloadNow=FaceKidsCanUnloadNow Ole32.lib
-    cl /nologo /std:c++17 /EHsc /W4 native\credential_provider_poc\host.cpp /link /OUT:FaceKidsProviderHost.exe Ole32.lib
-    .\FaceKidsProviderHost.exe .\FaceKidsDiagnosticProvider.dll
+    cl /nologo /std:c++17 /EHsc /W4 /LD native\credential_provider_poc\provider.cpp /link /OUT:SafePCKidsDiagnosticProvider.dll /EXPORT:DllGetClassObject=SafePCKidsGetClassObject /EXPORT:DllCanUnloadNow=SafePCKidsCanUnloadNow Ole32.lib
+    cl /nologo /std:c++17 /EHsc /W4 native\credential_provider_poc\host.cpp /link /OUT:SafePCKidsProviderHost.exe Ole32.lib
+    .\SafePCKidsProviderHost.exe .\SafePCKidsDiagnosticProvider.dll
 
 ## Critérios de aprovação
 

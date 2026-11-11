@@ -1,4 +1,4 @@
-import type { ChildStatus } from "@facekids/contracts";
+import type { ChildStatus } from "@safepckids/contracts";
 import { CheckCircle2, Clock3, UserRoundCheck } from "lucide-react";
 import { formatTime, TimeRing } from "./TimeRing";
 

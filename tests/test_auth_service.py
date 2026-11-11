@@ -6,8 +6,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 import numpy as np
 
-from facekids.auth_service import FaceAuthenticator, create_security_attributes
-from facekids.storage import Storage
+from safepckids.auth_service import FaceAuthenticator, create_security_attributes
+from safepckids.storage import Storage
 
 
 class TestAuthService(unittest.TestCase):
@@ -15,7 +15,7 @@ class TestAuthService(unittest.TestCase):
         sa = create_security_attributes()
         self.assertIsNotNone(sa.nLength)
         self.assertFalse(sa.bInheritHandle)
-        from facekids.auth_service import SDDL_PERMISSIVE
+        from safepckids.auth_service import SDDL_PERMISSIVE
         # Verifica que usuarios interativos possuem apenas leitura e escrita, nao controle total
         self.assertIn("(A;;GRGW;;;IU)", SDDL_PERMISSIVE)
         self.assertNotIn("(A;;GA;;;IU)", SDDL_PERMISSIVE)
@@ -81,8 +81,8 @@ class TestAuthService(unittest.TestCase):
             mock_cap.read.return_value = (True, dummy_frame)
 
             with patch("cv2.VideoCapture", return_value=mock_cap), \
-                 patch("facekids.auth_service.save_child_photo"), \
-                 patch("facekids.auth_service.get_filhos_credentials", return_value=("Filhos", "1")):
+                 patch("safepckids.auth_service.save_child_photo"), \
+                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "1")):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             self.assertEqual(status, "ALLOW")
@@ -90,8 +90,8 @@ class TestAuthService(unittest.TestCase):
             self.assertEqual(data["password"], "1")
 
             with patch("cv2.VideoCapture", return_value=mock_cap), \
-                 patch("facekids.auth_service.save_child_photo"), \
-                 patch("facekids.auth_service.get_filhos_credentials", return_value=("Filhos", "CustomSecret123!")):
+                 patch("safepckids.auth_service.save_child_photo"), \
+                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "CustomSecret123!")):
                 status2, data2 = auth.evaluate(camera_index=0, timeout_seconds=1.0)
             self.assertEqual(status2, "ALLOW")
             self.assertEqual(data2["password"], "CustomSecret123!")
@@ -100,17 +100,17 @@ class TestAuthService(unittest.TestCase):
             self.assertGreater(data["remaining"], 0)
 
     def test_session_zero_and_camera_probe(self):
-        from facekids.auth_service import is_session_zero_or_system, probe_camera_access
+        from safepckids.auth_service import is_session_zero_or_system, probe_camera_access
         # Em plataformas nao-Windows, deve retornar False
-        with patch("facekids.auth_service.sys.platform", "linux"):
+        with patch("safepckids.auth_service.sys.platform", "linux"):
             self.assertFalse(is_session_zero_or_system())
 
         # No Windows como SYSTEM, deve retornar True
-        with patch("facekids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "SYSTEM"}):
+        with patch("safepckids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "SYSTEM"}):
             self.assertTrue(is_session_zero_or_system())
 
         # No Windows como usuario interativo comum, deve retornar False
-        with patch("facekids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "MarcosMiniPC"}):
+        with patch("safepckids.auth_service.sys.platform", "win32"), patch.dict("os.environ", {"USERNAME": "MarcosMiniPC"}):
             self.assertFalse(is_session_zero_or_system())
 
         with patch("cv2.VideoCapture") as mock_cap_cls:
@@ -152,7 +152,7 @@ class TestAuthService(unittest.TestCase):
             mock_cap.isOpened.return_value = True
             mock_cap.read.return_value = (True, dummy_frame)
 
-            with patch("cv2.VideoCapture", return_value=mock_cap), patch("facekids.auth_service.save_child_photo"):
+            with patch("cv2.VideoCapture", return_value=mock_cap), patch("safepckids.auth_service.save_child_photo"):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             # Deve ser barrado pelo Anti-Spoofing
@@ -191,7 +191,7 @@ class TestAuthService(unittest.TestCase):
             mock_cap.isOpened.return_value = True
             mock_cap.read.return_value = (True, dummy_frame)
 
-            with patch("cv2.VideoCapture", return_value=mock_cap), patch("facekids.auth_service.save_child_photo"):
+            with patch("cv2.VideoCapture", return_value=mock_cap), patch("safepckids.auth_service.save_child_photo"):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             self.assertEqual(status, "ALLOW")

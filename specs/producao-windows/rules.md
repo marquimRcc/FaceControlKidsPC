@@ -1,9 +1,9 @@
-# Rules — Regras de Negócio de Produção (FaceControlKidsPC)
+# Rules — Regras de Negócio de Produção (SafePCKids)
 
 **Versão:** 1.0  
 **Data:** 2026-11-05  
 **Escopo:** Produção Windows física — conta `Filhos`  
-**Fonte:** `facekids/filhos_agent.py`, `quota_agent_accounting.py`, `agent_watchdog.py`, `storage.py`, `session_transition_policy.py`
+**Fonte:** `safepckids/filhos_agent.py`, `quota_agent_accounting.py`, `agent_watchdog.py`, `storage.py`, `session_transition_policy.py`
 
 > [!NOTE]
 > Cada regra é identificada por código único `R-NN`. Referências a código incluem o módulo de origem. Regras de laboratório/VM são explicitamente excluídas desta lista.
@@ -14,11 +14,11 @@
 
 **R-01 — Conta exclusiva gerenciada**  
 O Credential Provider C++ intercepta o logon **exclusivamente** da conta `Filhos` (filtro por SID). Contas de administradores e demais usuários nunca passam pelo fluxo facial.  
-*Fonte: `native/credential_provider_facekids/`*
+*Fonte: `native/credential_provider_safepckids/`*
 
 **R-02 — SID Binding do Named Pipe**  
-O Named Pipe `\\.\pipe\FaceKidsAuthPipe` possui DACL configurada para aceitar conexões apenas do SID da conta `Filhos`. O serviço SYSTEM pode criar o pipe; a conta Filhos pode conectar-se.  
-*Fonte: `facekids/windows_pipe_api.py`, `facekids/auth_service.py`*
+O Named Pipe `\\.\pipe\SafePCKidsAuthPipe` possui DACL configurada para aceitar conexões apenas do SID da conta `Filhos`. O serviço SYSTEM pode criar o pipe; a conta Filhos pode conectar-se.  
+*Fonte: `safepckids/windows_pipe_api.py`, `safepckids/auth_service.py`*
 
 **R-03 — Fonte de identidade em sessão é o serviço, nunca o JSON**  
 O arquivo `last_unlock.json` é **UI-only** — serve apenas para disparar a tela de boas-vindas e lembretes visuais. A identidade da criança (child_id que debita quota) só pode ser alterada por uma resposta validada do `auth_service` via Named Pipe. Um processo da conta `Filhos` pode editar o JSON, portanto nunca atribui autoridade de quota.  
@@ -34,7 +34,7 @@ A conta `Filhos` usa senha fixa `"1"` exclusivamente para o mecanismo `KerbInter
 
 **R-06 — Validação de observação facial tipada**  
 Respostas do pipe em sessão (`SESSION_QUERY`) são validadas via `validated_face_observation()`. Respostas inconsistentes (status inválido, timestamp antigo > 60s, perfil não cadastrado) são descartadas sem ação.  
-*Fonte: `facekids/ipc_reply.py`, `filhos_agent.py`*
+*Fonte: `safepckids/ipc_reply.py`, `filhos_agent.py`*
 
 ---
 
@@ -92,7 +92,7 @@ O idle real é calculado como `min(get_user_idle_seconds(), active_duration)`, o
 *Fonte: `filhos_agent.py` linha ~655*
 
 **R-16 — Configuração de inatividade sobrescritível**  
-Os valores padrão de `lock_seconds` (120s) e `warn_seconds` (100s) podem ser sobrescritos em `C:\ProgramData\FaceKids\configuracoes.json` pelos campos `inactivity_lock_seconds` e `inactivity_warn_seconds`. Mínimos forçados: `lock ≥ 30s`, `warn ≥ 10s`.  
+Os valores padrão de `lock_seconds` (120s) e `warn_seconds` (100s) podem ser sobrescritos em `C:\ProgramData\SafePCKids\configuracoes.json` pelos campos `inactivity_lock_seconds` e `inactivity_warn_seconds`. Mínimos forçados: `lock ≥ 30s`, `warn ≥ 10s`.  
 *Fonte: `filhos_agent.py` `get_inactivity_settings()`*
 
 ---
@@ -132,7 +132,7 @@ Ao aprovar uma troca de perfil, `session_active_since_mono` e `last_welcome_remi
 ## Bloco 6 — Watchdog Anti-Burla
 
 **R-23 — Instância única via Mutex**  
-O `filhos_agent.py` cria o Mutex `Local\FaceKidsFilhosAgentMutex` ao iniciar. Se o erro `ERROR_ALREADY_EXISTS` (183) for retornado, a instância duplicada encerra imediatamente.  
+O `filhos_agent.py` cria o Mutex `Local\SafePCKidsFilhosAgentMutex` ao iniciar. Se o erro `ERROR_ALREADY_EXISTS` (183) for retornado, a instância duplicada encerra imediatamente.  
 *Fonte: `filhos_agent.py` linhas ~556–559*
 
 **R-24 — Heartbeat a cada 10s**  
@@ -140,7 +140,7 @@ O agente grava `agent_heartbeat.json` atomicamente (via `.tmp` + rename) a cada 
 *Fonte: `agent_watchdog.py` `write_agent_heartbeat()`; `filhos_agent.py` linhas ~607–652*
 
 **R-25 — Watchdog: recuperação na 1ª falha**  
-Se o heartbeat estiver ausente ou com idade > 45s enquanto a sessão `Filhos` estiver `ACTIVE`, o watchdog dispara a tarefa agendada `FaceKidsFilhosAgent` (1ª falha consecutiva = `RECOVERY_TRIGGERED`).  
+Se o heartbeat estiver ausente ou com idade > 45s enquanto a sessão `Filhos` estiver `ACTIVE`, o watchdog dispara a tarefa agendada `SafePCKidsFilhosAgent` (1ª falha consecutiva = `RECOVERY_TRIGGERED`).  
 *Fonte: `agent_watchdog.py` linhas ~224–227*
 
 **R-26 — Watchdog: bloqueio preventivo na 2ª+ falha**  
@@ -185,16 +185,16 @@ Nenhuma ACL restritiva de segurança (DACLs do pipe, permissões do banco, ACEs 
 
 **R-34 — Protocolo do Pipe: ASCII, sem nulos, máximo 512 bytes**  
 Comandos aceitos pelo pipe: `AUTH_QUERY`, `SESSION_QUERY`, `QUERY`, `PING`. Payloads com caracteres nulos, não-ASCII ou tamanho > 512 bytes resultam em `INVALID_REQUEST`.  
-*Fonte: `facekids/pipe_protocol.py`*
+*Fonte: `safepckids/pipe_protocol.py`*
 
 **R-35 — Detecção Passiva de Liveness**  
 A autenticação facial requer verificação de vivacidade baseada na variância temporal dos marcos faciais YuNet ao longo de frames consecutivos. Se a variância for nula ou inferior ao limiar mínimo de micro-movimento (foto estática ou tela fixa), o serviço emite `DENY_SPOOF` e bloqueia a concessão de acesso.  
-*Fonte: `facekids/liveness.py`, `facekids/auth_service.py`*
+*Fonte: `safepckids/liveness.py`, `safepckids/auth_service.py`*
 
 **R-36 — Reembolso Idempotente com Recibo e Session Epoch**  
 Cada transição para estado `ACTIVE` gera um `session_epoch` criptograficamente aleatório. O método `refund()` persiste um recibo único na tabela `quota_refund_receipts`. Chamadas repetidas com o mesmo `session_epoch` retornam o saldo atual sem duplicar o estorno de tempo, e estornos são limitados ao saldo efetivamente consumido.  
-*Fonte: `facekids/storage.py`, `facekids/filhos_agent.py`*
+*Fonte: `safepckids/storage.py`, `safepckids/filhos_agent.py`*
 
-**R-37 — Blindagem NTFS de ProgramData\FaceKids**  
-A pasta `C:\ProgramData\FaceKids` e seus arquivos devem possuir herança desabilitada (`/inheritance:d`) e permissões amplas de escrita para `Everyone` e `BUILTIN\Users` revogadas. SYSTEM e Administradores possuem Controle Total; binários e scripts executáveis são restritos contra adulteração por contas não privilegiadas.  
-*Fonte: `scripts/Blindar-Permissoes-FaceKids.ps1`, `scripts/Instalar-FaceKids-Nativo.ps1`*
+**R-37 — Blindagem NTFS de ProgramData\SafePCKids**  
+A pasta `C:\ProgramData\SafePCKids` e seus arquivos devem possuir herança desabilitada (`/inheritance:d`) e permissões amplas de escrita para `Everyone` e `BUILTIN\Users` revogadas. SYSTEM e Administradores possuem Controle Total; binários e scripts executáveis são restritos contra adulteração por contas não privilegiadas.  
+*Fonte: `scripts/Blindar-Permissoes-SafePCKids.ps1`, `scripts/Instalar-SafePCKids-Nativo.ps1`*

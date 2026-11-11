@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AdminDashboard } from "@facekids/admin";
-import { adminStateSchema, cameraProbeSchema, demoSnapshot, disconnectedSnapshot, profilePhotoSchema, type AdminState, type DesktopRole } from "@facekids/contracts";
+import { AdminDashboard } from "@safepckids/admin";
+import { adminStateSchema, cameraProbeSchema, demoSnapshot, disconnectedSnapshot, profilePhotoSchema, type AdminState, type DesktopRole } from "@safepckids/contracts";
 import { ChildWelcome } from "./ChildWelcome";
 
 function roleFromUrl(): DesktopRole {
@@ -10,7 +10,7 @@ function roleFromUrl(): DesktopRole {
 export function App() {
   const [role, setRole] = useState<DesktopRole>(roleFromUrl());
   const [adminState, setAdminState] = useState<AdminState>({
-    snapshot: window.facekids ? disconnectedSnapshot : demoSnapshot,
+    snapshot: window.safepckids ? disconnectedSnapshot : demoSnapshot,
     enrollment: null,
   });
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => { void window.facekids?.getContext().then(context => setRole(context.role)); }, []);
+  useEffect(() => { void window.safepckids?.getContext().then(context => setRole(context.role)); }, []);
 
   // Smooth local countdown every 1 second for present child without polling backend aggressively
   useEffect(() => {
@@ -51,9 +51,9 @@ export function App() {
   }, []);
 
   const refresh = useCallback(async (): Promise<boolean> => {
-    if (!window.facekids) return false;
+    if (!window.safepckids) return false;
     try {
-      const state = adminStateSchema.parse(await window.facekids.getAdminState());
+      const state = adminStateSchema.parse(await window.safepckids.getAdminState());
       if (!mountedRef.current) return false;
       setAdminState(state);
       setBackendError(null);
@@ -93,7 +93,7 @@ export function App() {
   }, [refresh, scheduleNextPoll]);
 
   useEffect(() => {
-    if (!window.facekids) return;
+    if (!window.safepckids) return;
     void triggerImmediateRefresh();
     return () => {
       pollCycleRef.current += 1;
@@ -105,14 +105,14 @@ export function App() {
   }, [role, triggerImmediateRefresh]);
 
   const enrollChild = async (name: string, minutes: number) => {
-    if (!window.facekids) throw new Error("Cadastro real disponível somente no aplicativo desktop");
-    const result = await window.facekids.enrollChild({ name, minutes });
+    if (!window.safepckids) throw new Error("Cadastro real disponível somente no aplicativo desktop");
+    const result = await window.safepckids.enrollChild({ name, minutes });
     void triggerImmediateRefresh();
     return result.childId;
   };
 
   return <div className="app-root">
-    {role === "child" ? <ChildWelcome snapshot={adminState.snapshot} /> : <AdminDashboard snapshot={adminState.snapshot} enrollment={adminState.enrollment} backendError={backendError} onEnrollChild={enrollChild} onCancelEnrollment={async () => { await window.facekids?.cancelEnrollment(); void triggerImmediateRefresh(); }} onStartEnrollment={async childId => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.startEnrollment(childId); void triggerImmediateRefresh(); }} onListPhotos={async childId => window.facekids ? profilePhotoSchema.array().parse(await window.facekids.listPhotos(childId)) : []} onSelectPhoto={async (childId, photoId) => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.selectPhoto(childId, photoId); void triggerImmediateRefresh(); }} onRenameChild={async (childId, name) => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.renameChild(childId, name); await triggerImmediateRefresh(); }} onDeleteChild={async childId => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.deleteChild(childId); await triggerImmediateRefresh(); }} onProbeCamera={async () => { if (!window.facekids) return cameraProbeSchema.parse({ opened: true, frames: 50, usable_frames: 49, faces_seen: 3, elapsed_seconds: 5, mean_brightness: 112 }); return cameraProbeSchema.parse(await window.facekids.probeCamera()); }} onSetDailyLimit={async (childId, minutes) => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.setDailyLimit(childId, minutes); void triggerImmediateRefresh(); }} onAddBonus={async (childId, minutes) => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.addBonus(childId, minutes); void triggerImmediateRefresh(); }} onSetCurfew={async input => { if (!window.facekids) throw new Error("Disponível somente no aplicativo"); await window.facekids.setCurfew(input); void triggerImmediateRefresh(); }} />}
-    {!window.facekids && <div className="prototype-switch" aria-label="Alternar protótipo"><button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>Painel</button><button className={role === "child" ? "active" : ""} onClick={() => setRole("child")}>Criança</button></div>}
+    {role === "child" ? <ChildWelcome snapshot={adminState.snapshot} /> : <AdminDashboard snapshot={adminState.snapshot} enrollment={adminState.enrollment} backendError={backendError} onEnrollChild={enrollChild} onCancelEnrollment={async () => { await window.safepckids?.cancelEnrollment(); void triggerImmediateRefresh(); }} onStartEnrollment={async childId => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.startEnrollment(childId); void triggerImmediateRefresh(); }} onListPhotos={async childId => window.safepckids ? profilePhotoSchema.array().parse(await window.safepckids.listPhotos(childId)) : []} onSelectPhoto={async (childId, photoId) => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.selectPhoto(childId, photoId); void triggerImmediateRefresh(); }} onRenameChild={async (childId, name) => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.renameChild(childId, name); await triggerImmediateRefresh(); }} onDeleteChild={async childId => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.deleteChild(childId); await triggerImmediateRefresh(); }} onProbeCamera={async () => { if (!window.safepckids) return cameraProbeSchema.parse({ opened: true, frames: 50, usable_frames: 49, faces_seen: 3, elapsed_seconds: 5, mean_brightness: 112 }); return cameraProbeSchema.parse(await window.safepckids.probeCamera()); }} onSetDailyLimit={async (childId, minutes) => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.setDailyLimit(childId, minutes); void triggerImmediateRefresh(); }} onAddBonus={async (childId, minutes) => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.addBonus(childId, minutes); void triggerImmediateRefresh(); }} onSetCurfew={async input => { if (!window.safepckids) throw new Error("Disponível somente no aplicativo"); await window.safepckids.setCurfew(input); void triggerImmediateRefresh(); }} />}
+    {!window.safepckids && <div className="prototype-switch" aria-label="Alternar protótipo"><button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>Painel</button><button className={role === "child" ? "active" : ""} onClick={() => setRole("child")}>Criança</button></div>}
   </div>;
 }

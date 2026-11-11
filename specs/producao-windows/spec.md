@@ -1,4 +1,4 @@
-# Spec — Produção Windows (FaceControlKidsPC)
+# Spec — Produção Windows (SafePCKids)
 
 **Versão:** 1.0  
 **Data:** 2026-11-05  
@@ -13,7 +13,7 @@
 
 ## 1. Escopo do Sistema
 
-O FaceControlKidsPC é um **sistema de controle parental biométrico** para Windows 10/11. Ele:
+O SafePCKids é um **sistema de controle parental biométrico** para Windows 10/11. Ele:
 
 - **Intercepta a tela de logon** (`LogonUI`) exclusivamente para a conta compartilhada `Filhos`.
 - **Autentica crianças por reconhecimento facial** usando webcam USB local (XWF-1080P ou compatível).
@@ -36,10 +36,10 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 | Atributo | Valor |
 |---|---|
-| Arquivo | `native/credential_provider_facekids/FaceKidsCredentialProvider.dll` |
-| Instalação | `C:\ProgramData\FaceKids\` (registrada via COM) |
+| Arquivo | `native/credential_provider_safepckids/SafePCKidsCredentialProvider.dll` |
+| Instalação | `C:\ProgramData\SafePCKids\` (registrada via COM) |
 | Visibilidade | Exclusivamente na tela de logon da conta `Filhos` (filtro por SID) |
-| Protocolo IPC | Conecta via Named Pipe `\\.\pipe\FaceKidsAuthPipe` |
+| Protocolo IPC | Conecta via Named Pipe `\\.\pipe\SafePCKidsAuthPipe` |
 | Autologon | `KerbInteractiveLogon` com senha fixa `"1"` ao receber status `ALLOW` |
 | Conta Admin | Transparente — o Credential Provider não interfere na conta Administrador |
 
@@ -47,20 +47,20 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 | Atributo | Valor |
 |---|---|
-| Módulo principal | `facekids/auth_service.py` |
+| Módulo principal | `safepckids/auth_service.py` |
 | Conta de execução | `SYSTEM` ou `Administrador` via Agendador de Tarefas no boot |
 | Modelos biométricos | YuNet (detecção facial) + SFace (embedding 1:N) via OpenCV DNN |
-| Banco de dados | SQLite local — `C:\ProgramData\FaceKids\kids.sqlite3` |
-| Named Pipe server | `\\.\pipe\FaceKidsAuthPipe` |
+| Banco de dados | SQLite local — `C:\ProgramData\SafePCKids\kids.sqlite3` |
+| Named Pipe server | `\\.\pipe\SafePCKidsAuthPipe` |
 | Segurança do Pipe | DACL com SID Binding exclusivo da conta `Filhos` |
 
 ### 2.3 Camada Python — Agente de Sessão (Filhos Agent)
 
 | Atributo | Valor |
 |---|---|
-| Módulo | `facekids/filhos_agent.py` |
+| Módulo | `safepckids/filhos_agent.py` |
 | Conta de execução | Sessão interativa da conta `Filhos` |
-| Scheduler | Agendador de Tarefas `FaceKidsFilhosAgent` |
+| Scheduler | Agendador de Tarefas `SafePCKidsFilhosAgent` |
 | Motor de quota | `LegacyLedgerQuota` em `quota_agent_accounting.py` — ÚNICO motor de débito |
 | Fonte de identidade | `last_unlock.json` (UI-only) + verificação facial periódica via IPC |
 | Aviso de inatividade | `warn_seconds` = `max(10, lock_seconds - 20)`, padrão 100s |
@@ -71,15 +71,15 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 | Módulo | Função |
 |---|---|
-| `facekids/agent_watchdog.py` | Watchdog anti-burla: monitora heartbeat do `filhos_agent.py` a cada 15s |
-| `facekids/welcome_screen.py` | Tela de boas-vindas Tkinter (avatar + saldo). Auto-fecha em 4s. |
-| `facekids/storage.py` | Acesso ao SQLite (`kids.sqlite3`): perfis, fotos, horários, quotas |
-| `facekids/recognition.py` | Modelos YuNet/SFace para identificação facial rápida e local |
-| `facekids/children_pilot.py` | Cadastro biométrico: captura 12 fotos sem retângulo sobreposto |
-| `facekids/session.py` | WTS Win32: detecta estado `ACTIVE` / `LOCKED` da sessão |
-| `facekids/locker.py` | `LockWorkStation()` Win32 seguro |
-| `facekids/pipe_protocol.py` | Decodificador de comandos do Named Pipe (bounded, ASCII-only) |
-| `facekids/liveness.py` | Detecção de vivacidade facial passiva: variância temporal de marcos faciais YuNet para rejeição de fotos estáticas |
+| `safepckids/agent_watchdog.py` | Watchdog anti-burla: monitora heartbeat do `filhos_agent.py` a cada 15s |
+| `safepckids/welcome_screen.py` | Tela de boas-vindas Tkinter (avatar + saldo). Auto-fecha em 4s. |
+| `safepckids/storage.py` | Acesso ao SQLite (`kids.sqlite3`): perfis, fotos, horários, quotas |
+| `safepckids/recognition.py` | Modelos YuNet/SFace para identificação facial rápida e local |
+| `safepckids/children_pilot.py` | Cadastro biométrico: captura 12 fotos sem retângulo sobreposto |
+| `safepckids/session.py` | WTS Win32: detecta estado `ACTIVE` / `LOCKED` da sessão |
+| `safepckids/locker.py` | `LockWorkStation()` Win32 seguro |
+| `safepckids/pipe_protocol.py` | Decodificador de comandos do Named Pipe (bounded, ASCII-only) |
+| `safepckids/liveness.py` | Detecção de vivacidade facial passiva: variância temporal de marcos faciais YuNet para rejeição de fotos estáticas |
 
 ---
 
@@ -102,12 +102,12 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 | Recurso | Caminho |
 |---|---|
-| Banco SQLite | `C:\ProgramData\FaceKids\kids.sqlite3` |
-| DLL Credential Provider | `C:\ProgramData\FaceKids\FaceKidsCredentialProvider.dll` |
-| Log do Agente | `C:\ProgramData\FaceKids\filhos_agent.log` |
-| Heartbeat do Agente | `C:\ProgramData\FaceKids\agent_heartbeat.json` |
-| Último desbloqueio (UI) | `C:\ProgramData\FaceKids\last_unlock.json` |
-| Configurações | `C:\ProgramData\FaceKids\configuracoes.json` |
+| Banco SQLite | `C:\ProgramData\SafePCKids\kids.sqlite3` |
+| DLL Credential Provider | `C:\ProgramData\SafePCKids\SafePCKidsCredentialProvider.dll` |
+| Log do Agente | `C:\ProgramData\SafePCKids\filhos_agent.log` |
+| Heartbeat do Agente | `C:\ProgramData\SafePCKids\agent_heartbeat.json` |
+| Último desbloqueio (UI) | `C:\ProgramData\SafePCKids\last_unlock.json` |
+| Configurações | `C:\ProgramData\SafePCKids\configuracoes.json` |
 | Modelos ML | `models/face_detection_yunet_*.onnx`, `models/face_recognition_sface_*.onnx` |
 
 ---
@@ -119,16 +119,16 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 | `Instalar-FaceUnlock.bat` | Instala DLL, registra COM, agenda serviço e agente |
 | `Desinstalar-FaceUnlock.bat` | Remove registro COM e tarefas agendadas (preserva banco e fotos) |
 | `Ativar-Desbloqueio-No-Boot.bat` | Habilita o serviço facial como SYSTEM antes do primeiro login |
-| `abrir-facekids.bat` | Abre o Painel dos Pais (`admin_dashboard.py`) |
+| `abrir-safepckids.bat` | Abre o Painel dos Pais (`admin_dashboard.py`) |
 | `scripts/Iniciar-Teste-Adulto-Filhos.ps1` | Teste presencial voluntário com rosto adulto (M1 — sem autologon) |
-| `scripts/Blindar-Permissoes-FaceKids.ps1` | Endurecimento NTFS de permissões (SYSTEM/Admin Full, remoção de Everyone/Users write, proteção da DLL, configs e scripts .bat) |
+| `scripts/Blindar-Permissoes-SafePCKids.ps1` | Endurecimento NTFS de permissões (SYSTEM/Admin Full, remoção de Everyone/Users write, proteção da DLL, configs e scripts .bat) |
 
 ---
 
 ## 6. Painel dos Pais (Admin Dashboard)
 
-- Módulo: `facekids/admin_dashboard.py` (Tkinter)
-- Autenticação: `facekids/admin_auth.py`
+- Módulo: `safepckids/admin_dashboard.py` (Tkinter)
+- Autenticação: `safepckids/admin_auth.py`
 - Funcionalidades: cadastro de crianças, configuração de quotas diárias, bônus de tempo, horários permitidos (curfew), galeria de fotos, 3 temas visuais (Catppuccin Macchiato padrão)
 
 ---
@@ -137,7 +137,7 @@ O FaceControlKidsPC é um **sistema de controle parental biométrico** para Wind
 
 1. **Webcam USB na Sessão 0 (SYSTEM):** A captura de frames em contexto SYSTEM (isolado do desktop) ainda não foi validada fisicamente. Risco de falha silenciosa de abertura da câmera. *(Bloqueador do M2)*
 2. **Autologon não ativado em produção:** O fluxo de `KerbInteractiveLogon` existe no C++, mas não está habilitado no PC familiar até M5 ser aprovado.
-3. **Reembolsos de inatividade com recibo:** Implementada geração de `session_epoch` e persistência idempotente na tabela `quota_refund_receipts` (`facekids/storage.py` e `facekids/filhos_agent.py`), prevenindo duplicação de saldo após suspensão/hibernação.
-4. **Liveness passivo ativo:** Implementada verificação de micro-movimento temporal sobre os marcos faciais do YuNet (`facekids/liveness.py`), rejeitando automaticamente tentativas de spoofing por fotos estáticas.
+3. **Reembolsos de inatividade com recibo:** Implementada geração de `session_epoch` e persistência idempotente na tabela `quota_refund_receipts` (`safepckids/storage.py` e `safepckids/filhos_agent.py`), prevenindo duplicação de saldo após suspensão/hibernação.
+4. **Liveness passivo ativo:** Implementada verificação de micro-movimento temporal sobre os marcos faciais do YuNet (`safepckids/liveness.py`), rejeitando automaticamente tentativas de spoofing por fotos estáticas.
 5. **Generalização 1+ de perfis:** O piloto foi generalizado, mas scripts e instalador antigos podem conter suposições de exatamente 3 perfis. Auditoria necessária antes de M4.
 6. **PR #4 é draft:** O branch de security hardening não foi mergeado à `main`. Integração exige análise e testes.

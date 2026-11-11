@@ -2,8 +2,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from facekids.session import SessionState
-from facekids.windows_lock_probe import (
+from safepckids.session import SessionState
+from safepckids.windows_lock_probe import (
     ProbeSample, assess_sample, observe, run_probe, summarize,
 )
 

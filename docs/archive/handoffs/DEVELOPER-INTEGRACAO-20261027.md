@@ -21,9 +21,9 @@ Preservar a experiência doméstica atual como *baseline funcional*:
 | Componente | Operação | Resultado |
 |---|---|---|
 | 93 arquivos novos de segurança | Importação de blobs, sem substituir caminhos já existentes na main | Broker SCM/VM, protocolos IPC, validação de SID, migração, rollback, leitores, testes e documentação disponíveis em paralelo |
-| `facekids/storage.py` | Portadas validação de débitos, transação `BEGIN IMMEDIATE`, owner `vm-service-only`, cobrança limitada e recibos idempotentes | Métodos de fotos, remoção, bônus, reembolso e schema existentes mantidos |
-| `facekids/filhos_agent.py` | Leitura estrita do JSON e metadados de unlock, confirmação de rosto e adapter explícito `LegacyLedgerQuota` | Mantidas as condições da main; serviço novo **não assume** cobrança doméstica |
-| `facekids/auth_service.py` | Rejeição de clientes remotos no pipe; framing ASCII estrito; falha segura se DACL explícita indisponível | `FaceAuthenticator.evaluate` multi-face e fallback de câmera da main preservados |
+| `safepckids/storage.py` | Portadas validação de débitos, transação `BEGIN IMMEDIATE`, owner `vm-service-only`, cobrança limitada e recibos idempotentes | Métodos de fotos, remoção, bônus, reembolso e schema existentes mantidos |
+| `safepckids/filhos_agent.py` | Leitura estrita do JSON e metadados de unlock, confirmação de rosto e adapter explícito `LegacyLedgerQuota` | Mantidas as condições da main; serviço novo **não assume** cobrança doméstica |
+| `safepckids/auth_service.py` | Rejeição de clientes remotos no pipe; framing ASCII estrito; falha segura se DACL explícita indisponível | `FaceAuthenticator.evaluate` multi-face e fallback de câmera da main preservados |
 | Credential Provider C++ | JSON delimitado, sem chaves duplicadas, saldo positivo e SID do servidor por política opcional | Preservados testes e código de repetição automática da main; **sem registrar DLL** |
 | `build.ps1` e workflow nativo | Testes JSON/SID sintéticos adicionados aos testes existentes | Nenhum instalador ou serviço de usuário executado |
 | `tests/test_boot_auth.py`, `TestCredentialRetry.cpp` | Fixtures corrigidas para simular DACL e saldo consistente com a nova regra | Não foi enfraquecida a validação de produção |
@@ -31,9 +31,9 @@ Preservar a experiência doméstica atual como *baseline funcional*:
 
 ## Testes já concluídos na rodada
 
-- [`bb993052` Windows/Ubuntu unitários](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495102640): **success** nas duas plataformas; [integração Linux](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495102773): **success**.
-- [`af426dcd` Credential Provider/host](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40494994283): **success** nos jobs de compilação e host.
-- Último commit de código com regressões integradas `c6d2eb71`: [Windows e Ubuntu](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495237694) **success, 439 testes descobertos por plataforma**, além de [Linux](https://github.com/marquimRcc/FaceControlKidsPC/actions/runs/40495237800) **success**. Não são testes de webcam ou Winlogon. O commit documental subsequente não altera código.
+- [`bb993052` Windows/Ubuntu unitários](https://github.com/marquimRcc/SafePCKids/actions/runs/40495102640): **success** nas duas plataformas; [integração Linux](https://github.com/marquimRcc/SafePCKids/actions/runs/40495102773): **success**.
+- [`af426dcd` Credential Provider/host](https://github.com/marquimRcc/SafePCKids/actions/runs/40494994283): **success** nos jobs de compilação e host.
+- Último commit de código com regressões integradas `c6d2eb71`: [Windows e Ubuntu](https://github.com/marquimRcc/SafePCKids/actions/runs/40495237694) **success, 439 testes descobertos por plataforma**, além de [Linux](https://github.com/marquimRcc/SafePCKids/actions/runs/40495237800) **success**. Não são testes de webcam ou Winlogon. O commit documental subsequente não altera código.
 
 ## Não integrado / próximo passo
 

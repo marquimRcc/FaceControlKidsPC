@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <string>
 
-namespace facekids_face {
+namespace safepckids_face {
 
 enum class EvidenceOrigin { Unknown, ProtectedWorker };
 enum class Decision {
@@ -51,7 +51,7 @@ class InternalFacePolicy {
     bool synthetic_diagnostics_only_ = false;
     // Only this translation-unit self-test can construct a bypass-enabled
     // policy. Runtime broker and IPC have NO method to enable it.
-    friend bool self_test(facekids_quota::Store& quota);
+    friend bool self_test(safepckids_quota::Store& quota);
     explicit InternalFacePolicy(bool diagnostics) :
         synthetic_diagnostics_only_(diagnostics) {}
     std::mutex lock_;
@@ -73,9 +73,9 @@ public:
     }
 
     Decision observe(const WorkerObservation& evidence,
-                     const facekids_guard::Snapshot& os_snapshot,
+                     const safepckids_guard::Snapshot& os_snapshot,
                      const std::wstring& expected_sid,
-                     facekids_quota::Store& quota,
+                     safepckids_quota::Store& quota,
                      const char* trusted_day, ULONGLONG now_ms) {
         std::lock_guard<std::mutex> guard(lock_);
         // Unknown or switched faces cancel all prior candidates.
@@ -92,9 +92,9 @@ public:
         if (!valid_observation(evidence, now_ms))
             return Decision::DeniedCameraOrFace;
         if (evidence.session_id != os_snapshot.requested_id ||
-            facekids_gate::check(os_snapshot, expected_sid, quota,
+            safepckids_gate::check(os_snapshot, expected_sid, quota,
                                  evidence.child_id, trusted_day) !=
-                facekids_gate::GatePrerequisite::ReadyForFacialPolicy)
+                safepckids_gate::GatePrerequisite::ReadyForFacialPolicy)
             return Decision::DeniedNoQuotaOrSession;
         pending_child_ = evidence.child_id;
         pending_session_ = evidence.session_id;
@@ -102,9 +102,9 @@ public:
         return Decision::PendingInternalRecheck;
     }
 
-    Decision consume_pending(const facekids_guard::Snapshot& current_snapshot,
+    Decision consume_pending(const safepckids_guard::Snapshot& current_snapshot,
                              const std::wstring& expected_sid,
-                             facekids_quota::Store& quota,
+                             safepckids_quota::Store& quota,
                              const char* trusted_day, ULONGLONG now_ms) {
         std::lock_guard<std::mutex> guard(lock_);
         const int child = pending_child_;
@@ -116,9 +116,9 @@ public:
             current_snapshot.requested_id != session ||
             current_snapshot.actual_id != session)
             return Decision::DeniedExpiredOrWrongSession;
-        if (facekids_gate::check(current_snapshot, expected_sid, quota,
+        if (safepckids_gate::check(current_snapshot, expected_sid, quota,
                                  child, trusted_day) !=
-            facekids_gate::GatePrerequisite::ReadyForFacialPolicy)
+            safepckids_gate::GatePrerequisite::ReadyForFacialPolicy)
             return Decision::DeniedNoQuotaOrSession;
         return Decision::ReadyForAdditionalControls;
     }
@@ -128,12 +128,12 @@ public:
 static_assert(!std::is_constructible_v<InternalFacePolicy, bool>,
               "Synthetic policy constructor must remain private");
 
-inline bool self_test(facekids_quota::Store& quota) {
-    constexpr auto Locked = facekids_wts::LockView::Locked;
+inline bool self_test(safepckids_quota::Store& quota) {
+    constexpr auto Locked = safepckids_wts::LockView::Locked;
     const std::wstring child_sid = L"S-1-5-21-100-200-300-1005";
     const std::wstring parent_sid = L"S-1-5-21-100-200-300-1001";
     const char* day = "2026-10-20";
-    facekids_guard::Snapshot os = {7, 7, Locked, child_sid, true};
+    safepckids_guard::Snapshot os = {7, 7, Locked, child_sid, true};
     WorkerObservation face = {1, 7, 1, 3, true, true,
                               EvidenceOrigin::ProtectedWorker, 1000};
     InternalFacePolicy production;
@@ -177,7 +177,7 @@ inline bool self_test(facekids_quota::Store& quota) {
     os.token_sid=parent_sid;
     if (arm()!=Decision::DeniedNoQuotaOrSession) return false;
     os.token_sid=child_sid;
-    os.state=facekids_wts::LockView::Unlocked;
+    os.state=safepckids_wts::LockView::Unlocked;
     if (arm()!=Decision::DeniedNoQuotaOrSession) return false;
     os.state=Locked;
 
@@ -209,4 +209,4 @@ inline bool self_test(facekids_quota::Store& quota) {
     return true;
 }
 
-} // namespace facekids_face
+} // namespace safepckids_face

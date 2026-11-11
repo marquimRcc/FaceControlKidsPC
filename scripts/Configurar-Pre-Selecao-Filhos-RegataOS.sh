@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# FaceKids Linux - Configurar Pré-Seleção da Conta Filhos no SDDM (Regata OS)
+# SafePCKids Linux - Configurar Pré-Seleção da Conta Filhos no SDDM (Regata OS)
 # ==============================================================================
 set -euo pipefail
 
@@ -16,7 +16,7 @@ if ! id -u "${CHILD_USER}" >/dev/null 2>&1; then
 fi
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-ICON_SRC="${ROOT_DIR}/assets/facekids-256.png"
+ICON_SRC="${ROOT_DIR}/assets/safepckids-256.png"
 
 echo "Configurando conta '${CHILD_USER}' como padrão na tela de login (SDDM)..."
 
@@ -30,18 +30,18 @@ if [[ -f "${ICON_SRC}" ]]; then
     CHILD_GID=$(id -g "${CHILD_USER}")
     install -m 0644 -o "${CHILD_USER}" -g "${CHILD_GID}" "${ICON_SRC}" "${CHILD_HOME}/.face.icon"
   fi
-  echo "[OK] Ícone do FaceKids configurado como avatar da conta '${CHILD_USER}'."
+  echo "[OK] Ícone do SafePCKids configurado como avatar da conta '${CHILD_USER}'."
 fi
 
 # 2. Configurar diretiva de usuários no SDDM
 install -d -m 0755 /etc/sddm.conf.d
-cat <<'EOF' > /etc/sddm.conf.d/10-facekids-user.conf
+cat <<'EOF' > /etc/sddm.conf.d/10-safepckids-user.conf
 [Users]
 RememberLastUser=true
 RememberLastSession=true
 EOF
-chmod 0644 /etc/sddm.conf.d/10-facekids-user.conf
-echo "[OK] Diretiva RememberLastUser configurada em /etc/sddm.conf.d/10-facekids-user.conf."
+chmod 0644 /etc/sddm.conf.d/10-safepckids-user.conf
+echo "[OK] Diretiva RememberLastUser configurada em /etc/sddm.conf.d/10-safepckids-user.conf."
 
 # 3. Pré-definir 'filhos' no estado do SDDM (state.conf)
 STATE_DIR="/var/lib/sddm"

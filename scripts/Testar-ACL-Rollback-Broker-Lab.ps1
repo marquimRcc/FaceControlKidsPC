@@ -9,7 +9,7 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
-$root = Join-Path ([IO.Path]::GetTempPath()) ('facekids-quota-acl-lab-' + [guid]::NewGuid().ToString('N'))
+$root = Join-Path ([IO.Path]::GetTempPath()) ('safepckids-quota-acl-lab-' + [guid]::NewGuid().ToString('N'))
 $original = $null
 $file = $null
 $restored = $false

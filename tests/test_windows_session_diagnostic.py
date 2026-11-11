@@ -1,6 +1,6 @@
 import unittest
 
-from facekids.windows_session_diagnostic import (
+from safepckids.windows_session_diagnostic import (
     LockView, SessionObservation, classify, summarize,
 )
 

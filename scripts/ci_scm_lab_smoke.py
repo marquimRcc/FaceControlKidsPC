@@ -20,12 +20,12 @@ import time
 import uuid
 import winreg
 
-from facekids.quota_broker_client_win import query_lab_balance
-from facekids.filhos_quota_vm_readonly import run_vm_lab_probe
-from facekids.quota_broker_scm_win import (
-    REGISTRY_PATH, SERVICE_NAME, FaceKidsQuotaLabService,
+from safepckids.quota_broker_client_win import query_lab_balance
+from safepckids.filhos_quota_vm_readonly import run_vm_lab_probe
+from safepckids.quota_broker_scm_win import (
+    REGISTRY_PATH, SERVICE_NAME, SafePCKidsQuotaLabService,
 )
-from facekids.storage import Storage
+from safepckids.storage import Storage
 
 
 def _require_ephemeral_host() -> None:
@@ -33,7 +33,7 @@ def _require_ephemeral_host() -> None:
         "GITHUB_ACTIONS": "true",
         "RUNNER_ENVIRONMENT": "github-hosted",
         "RUNNER_OS": "Windows",
-        "GITHUB_REPOSITORY": "marquimRcc/FaceControlKidsPC",
+        "GITHUB_REPOSITORY": "marquimRcc/SafePCKids",
     }
     if os.name != "nt" or any(os.environ.get(k) != v for k, v in expected.items()):
         raise RuntimeError("SCM lifecycle test is restricted to GitHub-hosted Windows runners")
@@ -95,10 +95,10 @@ def main() -> int:
     if _query_state(SERVICE_NAME) is not None:
         raise RuntimeError("Refusing to touch pre-existing service")
 
-    root = Path(os.environ["RUNNER_TEMP"]) / "facekids-quota-lab"
+    root = Path(os.environ["RUNNER_TEMP"]) / "safepckids-quota-lab"
     if root.exists():
         raise RuntimeError("Refusing to reuse an existing lab data directory")
-    parent_key = r"SOFTWARE\FaceControlKidsPC"
+    parent_key = r"SOFTWARE\SafePCKids"
     original_parent_exists = _registry_exists(parent_key)
     pth = None
     policy_created = False
@@ -144,23 +144,23 @@ def main() -> int:
         candidates = [Path(x) for x in site.getsitepackages() if Path(x).is_dir()]
         if not candidates:
             raise RuntimeError("No site-packages for SCM import fixture")
-        pth = candidates[0] / ("_facekids_scm_ci_" + suffix + ".pth")
+        pth = candidates[0] / ("_safepckids_scm_ci_" + suffix + ".pth")
         pth.write_text(str(Path(__file__).resolve().parents[1]) + "\n", encoding="utf-8")
 
         # This process is GitHub-hosted and disposable. There is deliberately
-        # no user-accessible service registration action in the FaceKids app.
+        # no user-accessible service registration action in the SafePCKids app.
         service_creation_attempted = True
         win32serviceutil.InstallService(
-            "facekids.quota_broker_scm_win.FaceKidsQuotaLabService",
+            "safepckids.quota_broker_scm_win.SafePCKidsQuotaLabService",
             SERVICE_NAME,
-            FaceKidsQuotaLabService._svc_display_name_,
+            SafePCKidsQuotaLabService._svc_display_name_,
             startType=win32service.SERVICE_DEMAND_START,
-            description=FaceKidsQuotaLabService._svc_description_,
+            description=SafePCKidsQuotaLabService._svc_description_,
         )
         win32serviceutil.StartService(SERVICE_NAME)
         _await_state(SERVICE_NAME, win32service.SERVICE_RUNNING)
 
-        pipe = r"\\.\pipe\FaceKidsQuotaBrokerLab-" + suffix
+        pipe = r"\\.\pipe\SafePCKidsQuotaBrokerLab-" + suffix
         denied = query_lab_balance(pipe)
         if denied != {"status": "DENY"}:
             raise AssertionError("Lab service accepted unauthorized runner account")
