@@ -109,7 +109,7 @@ def save_filhos_credentials(username: str = "Filhos", password: str = "1") -> bo
                 pass
 
         # 3. Sincroniza com o arquivo de segredo legadado/compativel (TOKEN_FILE)
-        save_secure_secret(password)
+        save_secure_secret(password, token_file=TOKEN_FILE, security_dir=SECURITY_DIR)
         logger.info(f"Credenciais da conta '{username}' gravadas com sucesso no cofre DPAPI.")
         return True
     except Exception as e:

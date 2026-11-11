@@ -29,6 +29,12 @@ def _run_win_cmd(
 ) -> subprocess.CompletedProcess:
     """Executa comando do Windows com seguranca: sem heranca de handles e sem travar em pipes."""
     creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+    startupinfo = None
+    if sys.platform == "win32":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
     if not capture:
         try:
             p = subprocess.Popen(
@@ -37,6 +43,7 @@ def _run_win_cmd(
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=True,
+                startupinfo=startupinfo,
                 creationflags=creation_flags,
             )
             p.wait(timeout=timeout)
@@ -57,6 +64,7 @@ def _run_win_cmd(
             timeout=timeout,
             stdin=subprocess.DEVNULL,
             close_fds=True,
+            startupinfo=startupinfo,
             creationflags=creation_flags,
             check=False,
         )
@@ -79,11 +87,17 @@ def generate_secure_secret(length: int = 32) -> str:
             return candidate
 
 
-def save_secure_secret(secret: str) -> None:
+def save_secure_secret(
+    secret: str,
+    token_file: Optional[Path] = None,
+    security_dir: Optional[Path] = None,
+) -> None:
     """Salva o segredo gerado em diretorio blindado acessivel pelo sistema e administradores."""
     try:
-        SECURITY_DIR.mkdir(parents=True, exist_ok=True)
-        TOKEN_FILE.write_text(secret, encoding="utf-8")
+        sec_dir = security_dir or SECURITY_DIR
+        tok_file = token_file or TOKEN_FILE
+        sec_dir.mkdir(parents=True, exist_ok=True)
+        tok_file.write_text(secret, encoding="utf-8")
         if sys.platform == "win32":
             try:
                 current_user = None
@@ -95,7 +109,7 @@ def save_secure_secret(secret: str) -> None:
                 # Concede controle total explicitamente para SYSTEM (*S-1-5-18) e Administradores (*S-1-5-32-544)
                 # e para o usuario atual da sessao para evitar perda de permissao de leitura
                 cmd_dir = [
-                    "icacls", str(SECURITY_DIR),
+                    "icacls", str(sec_dir),
                     "/grant", "*S-1-5-18:(OI)(CI)(F)",
                     "*S-1-5-32-544:(OI)(CI)(F)",
                 ]
@@ -103,9 +117,9 @@ def save_secure_secret(secret: str) -> None:
                     cmd_dir.extend([f"{current_user}:(OI)(CI)(F)"])
                 _run_win_cmd(cmd_dir, timeout=10.0)
 
-                if TOKEN_FILE.exists():
+                if tok_file.exists():
                     cmd_token = [
-                        "icacls", str(TOKEN_FILE),
+                        "icacls", str(tok_file),
                         "/grant", "*S-1-5-18:F",
                         "*S-1-5-32-544:F",
                     ]

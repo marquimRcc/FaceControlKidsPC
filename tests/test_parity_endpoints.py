@@ -25,6 +25,7 @@ import urllib.error
 from safepckids.app_server import SafePCKidsApiHandler
 import safepckids.credential_store as cred_store
 import safepckids.installer_engine as installer_engine
+import safepckids.session_secret as session_secret
 
 
 class TestParityEndpoints(unittest.TestCase):
@@ -255,11 +256,17 @@ class TestCredentialStoreDPAPI(unittest.TestCase):
         """Valida o ciclo completo de gravacao e leitura com DPAPI / fallback."""
         with tempfile.TemporaryDirectory() as td:
             mock_progdata = Path(td)
+            mock_token = mock_progdata / "security" / "filhos_session.token"
+            mock_sec_dir = mock_progdata / "security"
+            mock_cred = mock_progdata / "credentials.bin"
             with patch.object(cred_store, "PROGRAMDATA_DIR", mock_progdata), \
-                 patch.object(cred_store, "CREDENTIALS_FILE", mock_progdata / "credentials.bin"), \
-                 patch.object(cred_store, "SECURITY_DIR", mock_progdata / "security"), \
-                 patch.object(cred_store, "TOKEN_FILE", mock_progdata / "security" / "filhos_session.token"), \
-                 patch.object(cred_store, "_run_win_cmd"):
+                 patch.object(cred_store, "CREDENTIALS_FILE", mock_cred), \
+                 patch.object(cred_store, "SECURITY_DIR", mock_sec_dir), \
+                 patch.object(cred_store, "TOKEN_FILE", mock_token), \
+                 patch.object(session_secret, "TOKEN_FILE", mock_token), \
+                 patch.object(session_secret, "SECURITY_DIR", mock_sec_dir), \
+                 patch.object(cred_store, "_run_win_cmd"), \
+                 patch.object(session_secret, "_run_win_cmd"):
                 ok = cred_store.save_filhos_credentials("Criancas", "MinhaSenhaSuperSegura123!")
                 self.assertTrue(ok)
                 user, pwd = cred_store.get_filhos_credentials()

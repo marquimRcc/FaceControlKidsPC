@@ -48,7 +48,7 @@ def is_admin() -> bool:
 
 
 def _run_powershell(script: str, timeout: float = 20.0) -> Tuple[bool, str]:
-    """Executa script PowerShell diretamente."""
+    """Executa script PowerShell diretamente e de forma totalmente silenciosa sem janela."""
     if sys.platform != "win32":
         return False, "Plataforma nao suportada."
     try:
@@ -56,12 +56,30 @@ def _run_powershell(script: str, timeout: float = 20.0) -> Tuple[bool, str]:
             "powershell.exe",
             "-NoProfile",
             "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
             script,
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        startupinfo = None
+        creation_flags = 0
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            startupinfo=startupinfo,
+            creationflags=creation_flags,
+        )
         if res.returncode == 0:
             return True, res.stdout.strip()
         return False, res.stderr.strip() or res.stdout.strip()
@@ -99,11 +117,22 @@ def _run_powershell_elevated(script: str, timeout: float = 30.0) -> Tuple[bool, 
             f"Start-Process powershell.exe -Wait -WindowStyle Hidden "
             f"-ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{script_file}\"' -Verb RunAs"
         )
+        startupinfo = None
+        creation_flags = 0
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         res = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launcher],
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", launcher],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
+            startupinfo=startupinfo,
+            creationflags=creation_flags,
         )
 
         for _ in range(25):
@@ -187,6 +216,7 @@ def enable_adguard_family_protection() -> Tuple[bool, str]:
     """
 
     ok, msg = _run_powershell_elevated(enable_script)
+    invalidate_protection_cache()
     if not ok:
         logger.warning("Falha ao ativar Protecao AdGuard: %s", msg)
         return False, f"Falha ao ativar proteção: {msg}"
@@ -212,7 +242,7 @@ def disable_adguard_family_protection() -> Tuple[bool, str]:
     # 3. Remove politicas de navegador
     $browsers = @(
         "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
-        "HKLM:\\SOFTWARE\\Policies\Google\\Chrome",
+        "HKLM:\\SOFTWARE\\Policies\\Google\\Chrome",
         "HKLM:\\SOFTWARE\\Policies\\BraveSoftware\\Brave"
     )
     $props = @("ForceGoogleSafeSearch", "ForceYouTubeRestrict", "ForceBingSafeSearch", "DnsOverHttpsMode", "DnsOverHttpsTemplates")
@@ -230,16 +260,33 @@ def disable_adguard_family_protection() -> Tuple[bool, str]:
     """
 
     ok, msg = _run_powershell_elevated(disable_script)
+    invalidate_protection_cache()
     if not ok:
         logger.warning("Falha ao desativar Protecao AdGuard: %s", msg)
         return False, f"Falha ao desativar proteção: {msg}"
     return True, "Proteção Global AdGuard desativada e configurações padrão restauradas."
 
 
-def get_protection_status() -> Dict[str, Any]:
+_protection_status_cache: Dict[str, Any] = {}
+_protection_status_cache_time: float = 0.0
+
+
+def invalidate_protection_cache() -> None:
+    """Limpa o cache de status da protecao de rede."""
+    global _protection_status_cache, _protection_status_cache_time
+    _protection_status_cache = {}
+    _protection_status_cache_time = 0.0
+
+
+def get_protection_status(force_refresh: bool = False) -> Dict[str, Any]:
     """Verifica se a protecao AdGuard Family esta ativa e saudavel."""
+    global _protection_status_cache, _protection_status_cache_time
     if sys.platform != "win32":
         return {"active": False, "details": "Nao disponivel fora do Windows."}
+
+    now = time.time()
+    if not force_refresh and _protection_status_cache and (now - _protection_status_cache_time < 15.0):
+        return dict(_protection_status_cache)
 
     ps_check = f"""
     $dns = (Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {{ $_.ServerAddresses -contains '{ADGUARD_IPV4_PRIMARY}' }}).Count -gt 0
@@ -256,7 +303,7 @@ def get_protection_status() -> Dict[str, Any]:
             fw_active = parts[1] == "true"
 
     is_active = dns_active or fw_active
-    return {
+    status = {
         "active": is_active,
         "dns_configured": dns_active,
         "firewall_rules_present": fw_active,
@@ -264,3 +311,6 @@ def get_protection_status() -> Dict[str, Any]:
         "doh_template": ADGUARD_DOH_TEMPLATE,
         "details": "Ativo com DoH Criptografado, SafeSearch e Firewall Anti-Burla" if is_active else "Inativo (Usando DNS padrão da operadora)",
     }
+    _protection_status_cache = status
+    _protection_status_cache_time = now
+    return dict(status)

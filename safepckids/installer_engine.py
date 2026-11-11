@@ -577,18 +577,18 @@ def verify_runtime_health() -> Dict[str, Any]:
         p = _run_win_cmd(["schtasks", "/query", "/tn", "SafePCKidsAuthService", "/fo", "csv"], timeout=5.0)
         if p.returncode == 0:
             health["auth_service"]["registered"] = True
-            if "Running" in p.stdout or "Em execução" in p.stdout:
+            if any(w in p.stdout for w in ("Running", "Em execução", "Executando")):
                 health["auth_service"]["running"] = True
 
-        # Se nao estiver rodando via tarefa, checa se processo python auth_service existe
+        # Se nao estiver rodando via tarefa, checa se named pipe do auth_service responde
         if not health["auth_service"]["running"]:
-            p_proc = _run_win_cmd(
-                ["powershell", "-NoProfile", "-Command",
-                 "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*auth_service*' } | Select-Object -ExpandProperty ProcessId"],
-                timeout=5.0
-            )
-            if p_proc.stdout.strip():
-                health["auth_service"]["running"] = True
+            try:
+                pipe_res = ctypes.windll.kernel32.WaitNamedPipeW(r"\\.\pipe\SafePCKidsAuthPipe", 50)
+                pipe_err = ctypes.GetLastError()
+                if pipe_res or pipe_err != 2:  # 2 = ERROR_FILE_NOT_FOUND
+                    health["auth_service"]["running"] = True
+            except Exception:
+                pass
 
         # 2. Consulta SafePCKidsFilhosAgent
         p_agent = _run_win_cmd(["schtasks", "/query", "/tn", "SafePCKidsFilhosAgent", "/fo", "csv"], timeout=5.0)
@@ -600,14 +600,14 @@ def verify_runtime_health() -> Dict[str, Any]:
         p_user = _run_win_cmd(["net", "user", "Filhos"], timeout=5.0)
         health["filhos_user"]["exists"] = p_user.returncode == 0
 
-        # 3. Consulta Registro do Credential Provider
-        p_reg = _run_win_cmd(
-            ["powershell", "-NoProfile", "-Command",
-             f"Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\{CREDENTIAL_PROVIDER_GUID}'"],
-            timeout=5.0
-        )
-        if "True" in p_reg.stdout:
-            health["credential_provider"]["registered"] = True
+        # 3. Consulta Registro do Credential Provider via winreg nativo (sem processo PowerShell)
+        try:
+            import winreg
+            reg_path = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{CREDENTIAL_PROVIDER_GUID}"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path):
+                health["credential_provider"]["registered"] = True
+        except (OSError, ImportError):
+            health["credential_provider"]["registered"] = False
 
     except Exception as e:
         logger.debug(f"Aviso ao consultar runtime health: {e}")
