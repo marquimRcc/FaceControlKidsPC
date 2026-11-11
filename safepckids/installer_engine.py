@@ -758,8 +758,27 @@ def setup_system(
 
     notify("Copiando driver de desbloqueio facial (DLL)...", 45)
     try:
-        if sys.platform == "win32" and dll_source != dll_target:
-            shutil.copy2(dll_source, dll_target)
+        if sys.platform == "win32" and dll_source.resolve() != dll_target.resolve():
+            should_copy = True
+            if dll_target.exists():
+                try:
+                    if dll_source.exists() and dll_target.stat().st_size == dll_source.stat().st_size:
+                        with open(dll_source, "rb") as f_src, open(dll_target, "rb") as f_dst:
+                            if f_src.read() == f_dst.read():
+                                should_copy = False
+                except Exception:
+                    pass
+            if should_copy:
+                try:
+                    shutil.copy2(dll_source, dll_target)
+                except (PermissionError, OSError) as pe:
+                    if dll_target.exists():
+                        logger.warning(
+                            "SafePCKidsCredentialProvider.dll em uso pelo Windows. Mantendo versao existente ativa: %s",
+                            pe,
+                        )
+                    else:
+                        raise
     except Exception as e:
         return False, f"Nao foi possivel instalar a DLL de login facial: {e}"
 
