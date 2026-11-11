@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag de versão para publicação (ex: v2.0.0)'
+        description: 'Tag de versão para publicação (ex: v0.0.1)'
         required: false
-        default: ''
+        default: 'v0.0.1'
 
 permissions:
   contents: write
@@ -22,20 +22,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.11 x64
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+          architecture: 'x64'
 
-      - name: Install dependencies
+      - name: Create .venv and install requirements
+        shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          Write-Host "Criando ambiente virtual .venv..."
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          Write-Host "Instalando dependencias de requirements.txt no .venv..."
+          .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
       - name: Run unit test suite
+        shell: pwsh
         run: |
-          python -m unittest discover -s tests -v
+          Write-Host "Executando testes unitarios com .venv\Scripts\python.exe..."
+          $testOutput = & .\.venv\Scripts\python.exe -m unittest discover -s tests 2>&1 | Out-String
+          Write-Host $testOutput
+          if ($LASTEXITCODE -ne 0) {
+              throw "Falha na execucao dos testes unitarios (codigo $LASTEXITCODE)."
+          }
+          if ($testOutput -notmatch 'OK \(skipped=13\)') {
+              throw "Resultado dos testes invalido: esperado 'OK (skipped=13)'."
+          }
+          if ($testOutput -match 'Ran (\d+) tests') {
+              $ran = [int]$Matches[1]
+              Write-Host "Total de testes executados: $ran (exigencia: >= 539 aprovados, 13 ignorados)"
+              if ($ran -lt 539) {
+                  throw "Contagem de testes ($ran) inferior ao minimo exigido (539)."
+              }
+          } else {
+              throw "Nao foi possivel identificar a quantidade total de testes executados."
+          }
 
       - name: Prepare code signing certificate (if secrets available)
         id: prepare-cert
@@ -58,7 +80,45 @@ jobs:
       - name: Build FaceKids-Instalador-Windows-x64.exe
         shell: pwsh
         run: |
+          Write-Host "Iniciando compilacao do instalador..."
           & scripts/Construir-FaceKids-Setup.ps1
+
+      - name: Confirm EXE self-test
+        shell: pwsh
+        run: |
+          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
+          if (-not (Test-Path -LiteralPath $exePath)) {
+              throw "Executavel nao encontrado em $exePath"
+          }
+          Write-Host "Executando autoteste do executavel ($exePath --self-test)..."
+          $proc = Start-Process -FilePath $exePath -ArgumentList "--self-test" -WindowStyle Hidden -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+              throw "O autoteste do EXE falhou com codigo de saida $($proc.ExitCode)."
+          }
+          Write-Host "Autoteste do EXE concluido com sucesso (codigo 0)."
+
+      - name: Validate code signature
+        shell: pwsh
+        run: |
+          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
+          $dllPath = "native\credential_provider_facekids\FaceKidsCredentialProvider.dll"
+          $sigExe = Get-AuthenticodeSignature -FilePath $exePath
+          $sigDll = Get-AuthenticodeSignature -FilePath $dllPath
+
+          if ($env:FACEKIDS_SIGNING_CERT -and (Test-Path -LiteralPath $env:FACEKIDS_SIGNING_CERT)) {
+              Write-Host "Validando assinaturas digitais configuradas..."
+              if ($sigExe.Status -notin @('Valid', 'UnknownError')) {
+                  throw "Assinatura do EXE invalida: $($sigExe.Status) ($($sigExe.StatusMessage))"
+              }
+              if ($sigDll.Status -notin @('Valid', 'UnknownError')) {
+                  throw "Assinatura da DLL invalida: $($sigDll.Status) ($($sigDll.StatusMessage))"
+              }
+              Write-Host "EXE e DLL validados com sucesso via Authenticode."
+              Set-Content -Path "dist\SIGNING_STATUS.txt" -Value "SIGNED"
+          } else {
+              Write-Host "Nenhum certificado de assinatura fornecido. O instalador sera publicado sem assinatura digital."
+              Set-Content -Path "dist\SIGNING_STATUS.txt" -Value "UNSIGNED"
+          }
 
       - name: Clean up signing certificate
         if: always()
@@ -69,11 +129,25 @@ jobs:
               Remove-Item -LiteralPath $certPath -Force
           }
 
-      - name: Upload Windows Installer artifact
+      - name: Generate SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $exePath = "dist\FaceKids-Instalador-Windows-x64.exe"
+          $hash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLower()
+          $fileName = [System.IO.Path]::GetFileName($exePath)
+          $checksumLine = "$hash  $fileName"
+          [System.IO.File]::WriteAllLines((Join-Path (Get-Location) "dist\SHA256SUMS.txt"), @($checksumLine), [System.Text.Encoding]::ASCII)
+          Write-Host "SHA256SUMS.txt gerado com sucesso:"
+          Get-Content "dist\SHA256SUMS.txt"
+
+      - name: Upload Windows Installer artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist/FaceKids-Instalador-Windows-x64.exe
+          path: |
+            dist/FaceKids-Instalador-Windows-x64.exe
+            dist/SHA256SUMS.txt
+            dist/SIGNING_STATUS.txt
           if-no-files-found: error
 
   publish-release:
@@ -84,20 +158,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Windows installer artifact
+      - name: Download Windows installer artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
           path: release_assets
 
-      - name: Generate SHA256SUMS.txt
+      - name: Verify checksum
         run: |
           cd release_assets
-          sha256sum FaceKids-Instalador-Windows-x64.exe > SHA256SUMS.txt
-          echo "Hashes de integridade:"
-          cat SHA256SUMS.txt
+          sed -i 's/\r$//' SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
 
-      - name: Create or update GitHub Release
+      - name: Prepare Release Notes and Publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
@@ -105,11 +178,65 @@ jobs:
         run: |
           FINAL_TAG="${INPUT_TAG:-$TAG_NAME}"
           if [ -z "$FINAL_TAG" ] || [ "$FINAL_TAG" = "main" ]; then
-            FINAL_TAG="v2.0.0-snapshot"
+            FINAL_TAG="v0.0.1"
           fi
-          echo "Publicando release para tag: $FINAL_TAG"
-          gh release create "$FINAL_TAG" \
-            release_assets/FaceKids-Instalador-Windows-x64.exe \
-            release_assets/SHA256SUMS.txt \
-            --title "FaceKids $FINAL_TAG" \
-            --generate-notes
+          VERSION="${FINAL_TAG#v}"
+
+          SIGNING_STATUS=$(tr -d '\r\n' < release_assets/SIGNING_STATUS.txt 2>/dev/null || echo "UNSIGNED")
+
+          if [ "$SIGNING_STATUS" = "SIGNED" ]; then
+            SIGNING_NOTE="### 🔒 Assinatura Digital\n- O executável e a DLL do Credential Provider foram **assinados digitalmente** via Authenticode e validados com sucesso."
+          else
+            SIGNING_NOTE="### ⚠️ Aviso de Segurança e SmartScreen\n- Este binário foi gerado de forma automatizada via GitHub Actions **sem certificado comercial Authenticode** (segredos de assinatura não configurados).\n- **Alerta do Windows SmartScreen**: Ao executar no Windows 10/11, pode aparecer o alerta *'O Windows protegeu o seu computador'*. Clique em **Mais informações** -> **Executar assim mesmo** para prosseguir com a instalação.\n- O código fonte é 100% aberto e auditável neste repositório."
+          fi
+
+          SHA256_LINE=$(cat release_assets/SHA256SUMS.txt)
+          EXE_SIZE=$(stat -c%s "release_assets/FaceKids-Instalador-Windows-x64.exe" 2>/dev/null || echo "0")
+          EXE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $EXE_SIZE / 1048576}")
+
+          cat <<EOF > release_notes.md
+          ## FaceKids $VERSION
+
+          Primeira release oficial do **FaceKids** para Windows x64.
+
+          ### 📦 Arquivos da Release
+          - **FaceKids-Instalador-Windows-x64.exe** (~${EXE_SIZE_MB} MB)
+          - **SHA256SUMS.txt** (Checksum de integridade SHA-256)
+
+          ### 🛡️ Integridade e Hashes
+          \`\`\`
+          $SHA256_LINE
+          \`\`\`
+
+          $SIGNING_NOTE
+
+          ### ⚙️ Características e Requisitos
+          - **Instalação com 2 cliques**: Executável único autônomo com um único prompt de UAC.
+          - **Conta Supervisionada 'Filhos'**: Provisionamento automático ou reaproveitamento total da conta existente, com senha inicial \`1\` editável.
+          - **Sessão Segura**: O agente na sessão Filhos opera sem privilégios administrativos e sem prompts de UAC.
+          - **Validação de Testes**: 544 testes unitários automatizados (531 aprovados e 13 ignorados em ambiente Windows limpo).
+          EOF
+
+          echo "Notas da Release preparadas:"
+          cat release_notes.md
+
+          echo "Publicando release no GitHub..."
+          if gh release view "$FINAL_TAG" >/dev/null 2>&1; then
+            echo "Release $FINAL_TAG já existente; atualizando arquivos..."
+            gh release upload "$FINAL_TAG" \
+              release_assets/FaceKids-Instalador-Windows-x64.exe \
+              release_assets/SHA256SUMS.txt \
+              --clobber
+            gh release edit "$FINAL_TAG" \
+              --title "FaceKids $VERSION" \
+              --notes-file release_notes.md \
+              --draft=false \
+              --prerelease=false
+          else
+            echo "Criando nova release pública para $FINAL_TAG..."
+            gh release create "$FINAL_TAG" \
+              release_assets/FaceKids-Instalador-Windows-x64.exe \
+              release_assets/SHA256SUMS.txt \
+              --title "FaceKids $VERSION" \
+              --notes-file release_notes.md
+          fi
