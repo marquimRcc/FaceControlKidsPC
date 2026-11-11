@@ -73,7 +73,7 @@ try {
     $recModel = Join-Path $modelsDir 'face_recognition_sface_2021dec.onnx'
     if (-not (Test-Path -LiteralPath $detModel) -or -not (Test-Path -LiteralPath $recModel)) {
         Write-Host "[FaceKids] Baixando modelos faciais ONNX (YuNet e SFace)..." -ForegroundColor Cyan
-        & $python -m facekids.cli download-models --models $modelsDir
+        & $python -m facekids.cli --models $modelsDir download-models
         if ($LASTEXITCODE -ne 0) { throw 'Falha ao baixar modelos faciais.' }
     }
     foreach ($name in @('facekids', 'assets', 'models')) {
