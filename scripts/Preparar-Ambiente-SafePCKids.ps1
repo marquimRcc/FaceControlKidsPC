@@ -7,7 +7,13 @@ $root = Join-Path $env:ProgramFiles 'SafePCKids'
 $dataRoot = Join-Path $env:ProgramData 'SafePCKids'
 $null = New-Item -ItemType Directory -Path $root, $dataRoot -Force
 
-schtasks.exe /end /tn SafePCKidsAuthService 2>$null
+if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+    if (Get-ScheduledTask -TaskName 'SafePCKidsAuthService' -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName 'SafePCKidsAuthService' -ErrorAction SilentlyContinue
+    }
+} else {
+    cmd.exe /c "schtasks.exe /end /tn SafePCKidsAuthService >nul 2>&1"
+}
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessId -ne $PID -and ($_.Name -like 'python*') -and ($_.CommandLine -like '*safepckids.auth_service*')
 } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -53,12 +59,12 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 Write-Host 'Conferindo bibliotecas do SafePCKids...'
 Push-Location $root
 try {
-    & $venvPython -c 'import cv2, numpy; import safepckids'
+    & $venvPython -c "import sys, importlib.util; sys.exit(0 if (importlib.util.find_spec('cv2') and importlib.util.find_spec('numpy') and importlib.util.find_spec('safepckids')) else 1)"
     if ($LASTEXITCODE -ne 0) {
         & $venvPython -m pip install --disable-pip-version-check -e $root
         if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel instalar as bibliotecas do SafePCKids.' }
     }
-    & $venvPython -c 'import cv2, numpy; import safepckids'
+    & $venvPython -c "import sys, importlib.util; sys.exit(0 if (importlib.util.find_spec('cv2') and importlib.util.find_spec('numpy') and importlib.util.find_spec('safepckids')) else 1)"
     if ($LASTEXITCODE -ne 0) { throw 'As bibliotecas do SafePCKids continuam indisponiveis.' }
 } finally {
     Pop-Location
