@@ -699,7 +699,7 @@ def run_agent():
                                     show_toast("👋 Perfil Alternado",
                                                f"Olá, {registered_name}! Seu perfil foi carregado.",
                                                icon="👤", color="#A6E3A1", duration_ms=6000)
-                            elif observed.status in ("DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW"):
+                            elif observed.status in ("DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW", "DENY_PAUSED"):
                                 is_current = (tracker.current_child_id is not None and observed.child_id == tracker.current_child_id)
                                 is_switch = (transition is TransitionDecision.SWITCH_CHILD)
                                 if is_current or is_switch:
@@ -710,7 +710,7 @@ def run_agent():
                                                icon="🔒", color="#F38BA8")
                                     time.sleep(1.2)
                                     lock_current_session()
-                    elif status in ("ALLOW", "DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW"):
+                    elif status in ("ALLOW", "DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW", "DENY_PAUSED"):
                         logger.warning("Decisao facial ignorada: resposta inconsistente ou antiga")
                     elif status == "ERROR_CAMERA":
                         if tracker.current_child_id is not None:
@@ -729,6 +729,29 @@ def run_agent():
 
                 # Agenda a proxima checagem facial
                 identifier.trigger_if_due()
+
+                # Checar se pausa remota esta ativa
+                if hasattr(store, "get_remote_pause_state"):
+                    is_paused, pause_reason, pause_remaining = store.get_remote_pause_state()
+                    if is_paused:
+                        logger.warning("Pausa remota ativa: %s (restam %ds). Bloqueando sessao...", pause_reason, pause_remaining)
+                        rem_text = f" (restam {pause_remaining // 60} min)" if pause_remaining > 0 else ""
+                        show_toast(
+                            "⏸️ Computador Pausado",
+                            f"{pause_reason}{rem_text}. Sessão bloqueada pelos pais.",
+                            icon="⏸️",
+                            color="#F38BA8",
+                            duration_ms=4500,
+                        )
+                        time.sleep(1.2)
+                        try:
+                            lock_current_session()
+                        except Exception as e:
+                            logger.error("Erro ao bloquear sessao por pausa remota: %s", e)
+                        time.sleep(5.0)
+                        last_active_time = time.monotonic()
+                        session_active_since_mono = time.monotonic()
+                        continue
 
                 # Checar se horario de dormir / curfew esta ativo
                 is_curfew, curfew_msg = store.is_curfew_active()

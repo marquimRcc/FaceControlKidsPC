@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafePCKids - Protótipo de Bloqueio Remoto (Pause)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070b14;
+      --card-bg: rgba(15, 23, 42, 0.85);
+      --border: rgba(56, 189, 248, 0.2);
+      --cyan-glow: rgba(34, 211, 238, 0.35);
+      --red-glow: rgba(239, 68, 68, 0.4);
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-dark);
+      color: #f8fafc;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px -4px var(--cyan-glow);
+    }
+    .glow-red {
+      box-shadow: 0 0 30px -3px var(--red-glow);
+    }
+    .pulse-slow {
+      animation: pulse 2.5s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
+    }
+    /* Estilos do Mockup Mobile */
+    .mobile-frame {
+      width: 380px;
+      height: 740px;
+      border-radius: 44px;
+      border: 10px solid #1e293b;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 30px rgba(56, 189, 248, 0.15);
+      overflow: hidden;
+      position: relative;
+      background: #090e1a;
+    }
+    .notch {
+      width: 140px;
+      height: 24px;
+      background: #1e293b;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      z-index: 50;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.3);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
+
+  <!-- ================= TOP BAR & CONCEITOS SELECTOR ================= -->
+  <header class="max-w-7xl mx-auto w-full mb-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl glass-card border border-cyan-500/20">
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/30">
+            🔒
+          </div>
+          <div>
+            <h1 class="text-xl font-bold bg-gradient-to-r from-white via-cyan-100 to-cyan-400 bg-clip-text text-transparent">
+              SafePCKids // Laboratório de Bloqueio Remoto (Pause)
+            </h1>
+            <p class="text-xs text-slate-400">
+              Controle remoto instantâneo via Celular ou outro PC com suspensão do desbloqueio facial
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Abas dos 4 Layouts -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-xl border border-slate-800 overflow-x-auto text-xs">
+        <button onclick="setLayout(1)" id="tab-1" class="px-3.5 py-2 rounded-lg font-medium transition-all bg-cyan-500 text-slate-950 font-semibold shadow-md shadow-cyan-500/20">
+          Layout 1: Quick Switch
+        </button>
+        <button onclick="setLayout(2)" id="tab-2" class="px-3.5 py-2 rounded-lg font-medium transition-all text-slate-400 hover:text-white">
+          Layout 2: Modular Cards
+        </button>
+        <button onclick="setLayout(3)" id="tab-3" class="px-3.5 py-2 rounded-lg font-medium transition-all text-slate-400 hover:text-white">
+          Layout 3: Radial Gamer
+        </button>
+        <button onclick="setLayout(4)" id="tab-4" class="px-3.5 py-2 rounded-lg font-medium transition-all text-slate-400 hover:text-white">
+          Layout 4: Mobile Sheet (PWA)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CORPO PRINCIPAL COM TESTE BIDIRECIONAL ================= -->
+  <main class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8">
+
+    <!-- COLUNA 1: SMARTPHONE DO PAI (SIMULADOR DO APP REMOTO) -->
+    <div class="lg:col-span-5 flex flex-col items-center">
+      <div class="flex items-center justify-between w-[380px] mb-2 px-2">
+        <span class="text-xs font-semibold tracking-wider text-cyan-400 uppercase flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          Celular do Pai (Visão Remota)
+        </span>
+        <span class="text-[11px] font-mono text-slate-500">Wi-Fi Casa (192.168.1.15)</span>
+      </div>
+
+      <!-- Smartphone Shell -->
+      <div class="mobile-frame flex flex-col justify-between">
+        <div class="notch"></div>
+
+        <!-- Barra de Status do Celular -->
+        <div class="pt-7 px-6 pb-2 flex justify-between items-center text-[11px] font-mono text-slate-400 z-40 bg-[#090e1a]/90">
+          <span id="mobile-clock">12:50</span>
+          <div class="flex items-center gap-1.5">
+            <span>5G</span>
+            <span>📶</span>
+            <span>🔋 92%</span>
+          </div>
+        </div>
+
+        <!-- ================= CONTAINER DINÂMICO DOS 4 LAYOUTS ================= -->
+        <div id="layout-container" class="flex-1 overflow-y-auto px-4 py-2">
+
+          <!-- ================= LAYOUT 1: QUICK SWITCH (MINIMALISTA 1-TOQUE) ================= -->
+          <div id="layout-1-view" class="space-y-4">
+            <!-- Header do App -->
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-300 font-bold text-sm">
+                  SPK
+                </div>
+                <div>
+                  <h2 class="text-sm font-bold text-white">SafePCKids Remote</h2>
+                  <p class="text-[10px] text-slate-400">PC-SALA (Conta: Filhos)</p>
+                </div>
+              </div>
+              <span id="badge-status-1" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                ● EM USO
+              </span>
+            </div>
+
+            <!-- Card Resumo da Criança -->
+            <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full bg-slate-800 border-2 border-cyan-400/50 flex items-center justify-center text-lg overflow-hidden">
+                  👦
+                </div>
+                <div>
+                  <div class="text-sm font-bold text-white flex items-center gap-1.5">
+                    Enzo Gabriel
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-normal">Ativo</span>
+                  </div>
+                  <p class="text-xs text-slate-400">Saldo restante: <strong class="text-cyan-300 font-mono">1h 15min</strong></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Grande Botão de Ação / Switch Central -->
+            <div class="p-5 rounded-3xl bg-gradient-to-b from-slate-900/90 to-slate-950 border border-slate-800 text-center flex flex-col items-center justify-center space-y-4 relative overflow-hidden">
+              <div id="btn-glow-1" class="absolute inset-0 bg-cyan-500/5 pointer-events-none transition-all"></div>
+
+              <div class="space-y-1">
+                <span class="text-[11px] font-bold tracking-wider uppercase text-slate-400">Estado da Tela do PC</span>
+                <div id="state-label-1" class="text-lg font-extrabold text-emerald-400">
+                  Computador Liberado
+                </div>
+              </div>
+
+              <!-- Grande Botão Redondo / Switch -->
+              <button onclick="togglePauseAction()" id="main-pause-btn-1" class="w-32 h-32 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 text-white font-extrabold text-base shadow-xl shadow-red-500/30 hover:scale-105 active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border-4 border-slate-900">
+                <span id="btn-icon-1" class="text-3xl">⏸️</span>
+                <span id="btn-text-1">PAUSAR PC</span>
+              </button>
+
+              <p id="subtext-1" class="text-[11px] text-slate-400 max-w-[240px]">
+                Bloqueia imediatamente e impede o desbloqueio facial na webcam.
+              </p>
+            </div>
+
+            <!-- Seletores Rápidos de Duração do Pause -->
+            <div class="space-y-2">
+              <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Duração da Pausa
+              </label>
+              <div class="grid grid-cols-4 gap-2">
+                <button onclick="selectDuration(15)" class="dur-btn py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold hover:border-cyan-400 transition-all text-slate-300">
+                  15 min
+                </button>
+                <button onclick="selectDuration(30)" class="dur-btn py-2.5 rounded-xl bg-slate-900 border border-cyan-400 text-xs font-bold text-cyan-300 bg-cyan-500/10 shadow-sm transition-all">
+                  30 min
+                </button>
+                <button onclick="selectDuration(60)" class="dur-btn py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold hover:border-cyan-400 transition-all text-slate-300">
+                  1 hora
+                </button>
+                <button onclick="selectDuration(0)" class="dur-btn py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold hover:border-rose-400 transition-all text-slate-300">
+                  Definitivo
+                </button>
+              </div>
+
+              <!-- Minutos Personalizados -->
+              <div class="flex items-center gap-2 pt-1">
+                <input type="number" id="custom-minutes-input-1" placeholder="Outro (min)..." min="1" max="600" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-400">
+                <button onclick="applyCustomDuration(1)" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white rounded-xl transition-all">
+                  Aplicar
+                </button>
+              </div>
+            </div>
+
+            <!-- Mensagem ao Desbloquear com Senha -->
+            <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-900 text-[10px] text-slate-500 flex items-start gap-2">
+              <span>💡</span>
+              <span>Pais podem desbloquear no próprio PC a qualquer instante digitando o PIN ou senha normal do Windows.</span>
+            </div>
+          </div>
+
+          <!-- ================= LAYOUT 2: MODULAR CARDS (COMMAND CENTER) ================= -->
+          <div id="layout-2-view" class="space-y-3.5 hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+              <span class="text-xs font-bold text-cyan-400 tracking-wider font-mono">DASHBOARD // PARENTAL</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">Online</span>
+            </div>
+
+            <!-- Card 1: Status da Sessão em Tempo Real -->
+            <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-400 uppercase">Sessão Windows</span>
+                <span id="badge-status-2" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                  Sessão Ativa
+                </span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-2xl shadow-md">
+                  👦
+                </div>
+                <div class="flex-1">
+                  <div class="text-sm font-bold text-white">Enzo Gabriel</div>
+                  <div class="text-[11px] text-slate-400 flex items-center gap-2">
+                    <span>Uso hoje: <strong>1h 45m</strong></span>
+                    <span>•</span>
+                    <span class="text-cyan-400">Resta: 1h 15m</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Controle de Pausa com Presets -->
+            <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xs font-bold text-white">Pausa Imediata</h3>
+                  <p class="text-[10px] text-slate-400">Suspende webcam e trava tela</p>
+                </div>
+                <button onclick="togglePauseAction()" id="main-pause-btn-2" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/20 transition-all flex items-center gap-1.5">
+                  <span>⏸️</span>
+                  <span id="btn-text-2">PAUSAR</span>
+                </button>
+              </div>
+
+              <!-- Seletor de tempo rápido estilo Pills -->
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <button onclick="selectDuration(15)" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-500 text-left transition-all">
+                  <div class="font-bold text-white text-[11px]">15 minutos</div>
+                  <div class="text-[9px] text-slate-500">Pausa para lanche</div>
+                </button>
+                <button onclick="selectDuration(30)" class="p-2 rounded-xl bg-slate-950 border border-cyan-400/80 bg-cyan-500/5 text-left transition-all">
+                  <div class="font-bold text-cyan-300 text-[11px]">30 minutos</div>
+                  <div class="text-[9px] text-cyan-400/70">Banho / Descanso</div>
+                </button>
+                <button onclick="selectDuration(60)" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-500 text-left transition-all">
+                  <div class="font-bold text-white text-[11px]">1 hora</div>
+                  <div class="text-[9px] text-slate-500">Hora do almoço</div>
+                </button>
+                <button onclick="selectDuration(0)" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-rose-500 text-left transition-all">
+                  <div class="font-bold text-rose-400 text-[11px]">Definitivo</div>
+                  <div class="text-[9px] text-slate-500">Até eu liberar</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 3: Mensagem Personalizada na Tela do Computador -->
+            <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <span class="text-[11px] font-bold text-slate-400 uppercase block">Motivo exibido no PC da Criança</span>
+              <div class="flex flex-wrap gap-1.5">
+                <button onclick="setQuickMessage('Hora do almoço! 🍽️')" class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-300 hover:border-slate-600">
+                  🍽️ Almoço
+                </button>
+                <button onclick="setQuickMessage('Vem fazer a lição de casa! 📚')" class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-300 hover:border-slate-600">
+                  📚 Lição de Casa
+                </button>
+                <button onclick="setQuickMessage('Pausa para o banho! 🚿')" class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-300 hover:border-slate-600">
+                  🚿 Banho
+                </button>
+              </div>
+              <input type="text" id="custom-screen-msg" placeholder="Ou digite o motivo..." value="Hora do almoço! 🍽️" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-400">
+            </div>
+
+            <!-- Card 4: Histórico Rápido de Ações -->
+            <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-900 text-[11px] space-y-1.5">
+              <div class="font-semibold text-slate-400 text-[10px] uppercase">Registro Recente</div>
+              <div class="flex justify-between text-slate-400">
+                <span>12:20 - Reconhecimento Facial</span>
+                <span class="text-emerald-400">Permitido</span>
+              </div>
+              <div class="flex justify-between text-slate-400">
+                <span>11:45 - Inatividade reembolsada</span>
+                <span class="text-cyan-400">+120s</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ================= LAYOUT 3: RADIAL GAMER (FOCADO EM TEMPO & SLIDER) ================= -->
+          <div id="layout-3-view" class="space-y-4 hidden">
+            <!-- Header Futurista -->
+            <div class="flex items-center justify-between pb-2 border-b border-cyan-500/20">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-extrabold text-cyan-400 font-mono tracking-widest">FOCUS BOSS</span>
+                <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">V2.4</span>
+              </div>
+              <span id="badge-status-3" class="text-[10px] font-mono text-emerald-400">STATUS: LIBERADO</span>
+            </div>
+
+            <!-- Radial Dial Mockup -->
+            <div class="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
+              <!-- SVG Radial Gauge -->
+              <div class="relative w-44 h-44 flex items-center justify-center">
+                <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#1e293b" stroke-width="8"></circle>
+                  <circle id="radial-progress-bar" cx="50" cy="50" r="42" fill="none" stroke="#06b6d4" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="66" stroke-linecap="round" class="transition-all duration-700"></circle>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span class="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Duração</span>
+                  <span id="radial-time-display" class="text-2xl font-black font-mono text-white tracking-tight">30 MIN</span>
+                  <span id="radial-status-label" class="text-[9px] text-cyan-400 font-mono mt-0.5">SELECIONADO</span>
+                </div>
+              </div>
+
+              <!-- Slider de Tempo (Giro / Arrastar) -->
+              <div class="w-full mt-4 space-y-1">
+                <div class="flex justify-between text-[10px] font-mono text-slate-400">
+                  <span>10m</span>
+                  <span>30m</span>
+                  <span>1h</span>
+                  <span>2h</span>
+                  <span>Definitivo</span>
+                </div>
+                <input type="range" id="timer-slider" min="5" max="125" step="5" value="30" oninput="handleSliderChange(this.value)" class="w-full accent-cyan-400 cursor-pointer">
+              </div>
+            </div>
+
+            <!-- Botão de Ação Estilo Cyberpunk -->
+            <button onclick="togglePauseAction()" id="main-pause-btn-3" class="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 font-extrabold text-sm text-white tracking-wider shadow-lg shadow-red-600/30 uppercase flex items-center justify-center gap-2 border border-red-500/30 transition-all active:scale-[0.98]">
+              <span class="text-lg">⛔</span>
+              <span id="btn-text-3">ATIVAR PAUSA AGORA</span>
+            </button>
+
+            <!-- Modo Foco Rápido -->
+            <div class="p-3 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs">
+              <div>
+                <div class="font-bold text-white text-xs">Modo Pomodoro Escolar</div>
+                <div class="text-[10px] text-slate-400">Pausa automática após 45 min</div>
+              </div>
+              <button class="px-3 py-1.5 rounded-lg bg-slate-800 text-[10px] font-bold text-cyan-300 border border-cyan-500/30">
+                Ativar
+              </button>
+            </div>
+          </div>
+
+          <!-- ================= LAYOUT 4: NATIVE MOBILE SHEET (PWA ERGONOMIA) ================= -->
+          <div id="layout-4-view" class="h-full flex flex-col justify-between space-y-3 hidden">
+            <!-- Top App Bar -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></div>
+                  <span class="text-xs font-bold text-white">SafePCKids Mobile</span>
+                </div>
+                <span class="text-[10px] text-slate-400">PC-Filhos</span>
+              </div>
+
+              <!-- Cartão de Visão Geral -->
+              <div class="p-4 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 space-y-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-2xl">
+                    👦
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-bold text-white">Enzo Gabriel</h3>
+                    <p id="badge-status-4" class="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                      <span>●</span> Computador Desbloqueado
+                    </p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-center">
+                  <div class="p-2 rounded-xl bg-slate-950/80">
+                    <span class="text-[10px] text-slate-400 block">Quota Restante</span>
+                    <strong class="text-sm text-cyan-300 font-mono">1h 15m</strong>
+                  </div>
+                  <div class="p-2 rounded-xl bg-slate-950/80">
+                    <span class="text-[10px] text-slate-400 block">Status da Webcam</span>
+                    <strong class="text-sm text-emerald-400 font-mono">Facial OK</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom Sheet Simulado (Pronto para Uso com Uma Mão) -->
+            <div class="p-4 rounded-3xl bg-slate-900 border-2 border-slate-800 space-y-3 shadow-2xl">
+              <div class="w-10 h-1 bg-slate-700 rounded-full mx-auto mb-1"></div>
+              
+              <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-white uppercase tracking-wider">Ação Rápida de Bloqueio</span>
+                <span id="sheet-selected-dur" class="text-xs font-mono font-bold text-cyan-300">30 MIN</span>
+              </div>
+
+              <!-- Segmented Control de Duração -->
+              <div class="flex p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold">
+                <button onclick="selectDuration(15)" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all text-center">
+                  15m
+                </button>
+                <button onclick="selectDuration(30)" class="flex-1 py-1.5 rounded-lg bg-cyan-500 text-slate-950 font-bold shadow-sm transition-all text-center">
+                  30m
+                </button>
+                <button onclick="selectDuration(60)" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all text-center">
+                  1h
+                </button>
+                <button onclick="selectDuration(0)" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition-all text-center">
+                  Infinito
+                </button>
+              </div>
+
+              <!-- Botão Deslizante Anti-Toque Acidental (Slider de Confirmação) -->
+              <div class="pt-1">
+                <button onclick="togglePauseAction()" id="main-pause-btn-4" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white font-extrabold text-xs tracking-wider uppercase shadow-lg shadow-red-500/25 flex items-center justify-center gap-2 transition-all active:scale-95">
+                  <span id="btn-icon-4">🔒</span>
+                  <span id="btn-text-4">DESLIZE PARA PAUSAR PC</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Barra de Navegação Inferior do Celular -->
+        <div class="py-2.5 border-t border-slate-800/80 bg-[#090e1a] flex justify-around text-slate-500 text-xs">
+          <div class="flex flex-col items-center text-cyan-400">
+            <span>📱</span>
+            <span class="text-[9px] font-bold">Controle</span>
+          </div>
+          <div class="flex flex-col items-center hover:text-slate-300 cursor-pointer">
+            <span>⏱️</span>
+            <span class="text-[9px]">Quotas</span>
+          </div>
+          <div class="flex flex-col items-center hover:text-slate-300 cursor-pointer">
+            <span>⚙️</span>
+            <span class="text-[9px]">Ajustes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLUNA 2: MONITOR DO PC DA CRIANÇA (FEEDBACK EM TEMPO REAL) -->
+    <div class="lg:col-span-7 flex flex-col space-y-4">
+      <div class="flex items-center justify-between px-2">
+        <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400" id="pc-status-led"></span>
+          Monitor do Computador da Criança (Simulação Windows)
+        </span>
+        <span class="text-xs font-mono text-cyan-400" id="pc-mode-label">MODO ATUAL: DESKTOP NORMAL</span>
+      </div>
+
+      <!-- Moldura do Monitor de Computador -->
+      <div class="w-full aspect-[16/10] bg-slate-950 rounded-2xl border-4 border-slate-800 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+        <!-- Webcam Física no topo do monitor -->
+        <div class="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-40 bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800">
+          <div id="cam-led" class="w-2 h-2 rounded-full bg-emerald-400"></div>
+          <span class="text-[9px] font-mono text-slate-400">Webcam YuNet + SFace: <span id="cam-status" class="text-emerald-300 font-bold">ATIVA</span></span>
+        </div>
+
+        <!-- ================= ESTADO A: CRIANÇA USANDO O PC NORMALMENTE ================= -->
+        <div id="pc-screen-active" class="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 p-6 flex flex-col justify-between transition-all duration-500">
+          <!-- Topo da tela do Windows -->
+          <div class="flex justify-between items-start pt-6">
+            <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center font-bold text-white text-xs">
+                ▶️
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white">YouTube Kids / Minecraft</div>
+                <div class="text-[10px] text-slate-400">Sessão da Criança em execução</div>
+              </div>
+            </div>
+
+            <!-- Mini Toast Flutuante de Saldo SafePCKids -->
+            <div class="p-2.5 px-4 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-xs flex items-center gap-2 shadow-lg">
+              <span class="text-cyan-400">👤 Enzo Gabriel:</span>
+              <strong class="text-white font-mono">1h 15m restantes</strong>
+            </div>
+          </div>
+
+          <!-- Centro do Desktop -->
+          <div class="flex flex-col items-center justify-center space-y-2 opacity-80">
+            <div class="text-5xl">🎮</div>
+            <p class="text-xs text-slate-400">A criança está usando o computador tranquilamente...</p>
+          </div>
+
+          <!-- Barra de Tarefas do Windows -->
+          <div class="h-10 bg-slate-900/90 border-t border-slate-800 -mx-6 -mb-6 px-4 flex items-center justify-between text-xs text-slate-400">
+            <div class="flex items-center gap-3">
+              <span class="text-cyan-400 font-bold">⊞ Iniciar</span>
+              <span class="text-slate-500">|</span>
+              <span>🌐 Brave</span>
+              <span>📁 Arquivos</span>
+            </div>
+            <div class="font-mono text-[11px]">12:50 • Filhos</div>
+          </div>
+        </div>
+
+        <!-- ================= ESTADO B: TELA DE BLOQUEIO (LOCKSCREEN COM PAUSE ATIVO) ================= -->
+        <div id="pc-screen-locked" class="absolute inset-0 bg-[#050914] p-6 flex flex-col items-center justify-center text-center opacity-0 pointer-events-none transition-all duration-500 z-30">
+          
+          <!-- Fundo de vidro com aviso de pausa -->
+          <div class="max-w-md w-full p-8 rounded-3xl bg-slate-900/90 border-2 border-rose-500/40 shadow-2xl space-y-5 relative overflow-hidden">
+            <div class="absolute -top-12 -left-12 w-32 h-32 bg-rose-500/20 rounded-full blur-2xl"></div>
+
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-600 to-red-500 mx-auto flex items-center justify-center text-3xl shadow-xl shadow-rose-500/30 border border-rose-400/30">
+              ⏸️
+            </div>
+
+            <div class="space-y-1">
+              <span class="text-[11px] font-mono uppercase tracking-widest text-rose-400 font-bold">
+                🔒 SafePCKids // Pausa Parental Ativa
+              </span>
+              <h2 class="text-2xl font-black text-white">Computador Pausado</h2>
+              <p id="pc-lock-reason" class="text-xs text-slate-300 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                "Hora do almoço! 🍽️"
+              </p>
+            </div>
+
+            <!-- Contador Regressivo da Pausa -->
+            <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+              <span class="text-[10px] uppercase font-mono text-slate-400">Tempo restante de pausa</span>
+              <div id="pc-countdown" class="text-3xl font-black font-mono text-cyan-300 tracking-wider">
+                29:58
+              </div>
+              <span class="text-[10px] text-slate-500 block">O desbloqueio facial está temporariamente desativado</span>
+            </div>
+
+            <!-- Tentativa da Criança de Sentar na Frente da Câmera -->
+            <div class="p-3 rounded-xl bg-rose-950/30 border border-rose-900/50 text-[11px] text-rose-200 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🚫</span>
+                <span>Rosto da criança reconhecido:</span>
+              </div>
+              <span class="font-bold text-rose-400 font-mono">DENY_PAUSED</span>
+            </div>
+
+            <!-- Instrução para Desbloqueio por Senha (Se souber a senha pode desbloquear) -->
+            <div class="pt-1 text-[11px] text-slate-400 border-t border-slate-800/80">
+              <span>🔑 Tem a senha do Windows? </span>
+              <button onclick="simulatePasswordUnlock()" class="text-cyan-400 underline font-semibold hover:text-cyan-300">
+                Clique aqui para digitar senha/PIN
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Painel de Detalhes Técnicos e Validação -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="p-3 rounded-xl glass-card border border-slate-800">
+          <span class="text-[10px] uppercase font-mono text-slate-400 block mb-1">Ação Imediata</span>
+          <div class="text-xs font-bold text-white flex items-center gap-1.5">
+            <span class="text-cyan-400">⚡</span> LockWorkStation()
+          </div>
+          <p class="text-[10px] text-slate-500 mt-1">O agente Windows bloqueia a sessão sem fechar os apps.</p>
+        </div>
+
+        <div class="p-3 rounded-xl glass-card border border-slate-800">
+          <span class="text-[10px] uppercase font-mono text-slate-400 block mb-1">Bloqueio Facial</span>
+          <div class="text-xs font-bold text-white flex items-center gap-1.5">
+            <span class="text-rose-400">🛡️</span> Status DENY_PAUSED
+          </div>
+          <p class="text-[10px] text-slate-500 mt-1">Auth Service impede auto-logon enquanto pausado.</p>
+        </div>
+
+        <div class="p-3 rounded-xl glass-card border border-slate-800">
+          <span class="text-[10px] uppercase font-mono text-slate-400 block mb-1">Quota Congelada</span>
+          <div class="text-xs font-bold text-white flex items-center gap-1.5">
+            <span class="text-emerald-400">⏱️</span> Sem desconto
+          </div>
+          <p class="text-[10px] text-slate-500 mt-1">O saldo da criança fica 100% preservado no pause.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= RESUMO COMPARATIVO DOS 4 LAYOUTS ================= -->
+  <footer class="max-w-7xl mx-auto w-full glass-card rounded-2xl p-4 md:p-6 border border-slate-800 space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <h3 class="text-sm font-bold text-white flex items-center gap-2">
+        <span>📋</span> Quadro Comparativo dos 4 Layouts Propostos
+      </h3>
+      <span class="text-xs text-slate-400">Escolha o conceito que melhor se adapta à sua rotina</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+      <!-- Opção 1 -->
+      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+        <div class="font-bold text-cyan-400">1. Quick Switch</div>
+        <p class="text-slate-400 text-[11px]">
+          Foco em 1 toque na palma da mão. Grande botão central vermelho/verde com botões de 15m, 30m, 1h e definitivo logo abaixo.
+        </p>
+        <span class="inline-block text-[10px] text-emerald-400 font-medium">Melhor para: Ação instantânea</span>
+      </div>
+
+      <!-- Opção 2 -->
+      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+        <div class="font-bold text-cyan-400">2. Modular Cards</div>
+        <p class="text-slate-400 text-[11px]">
+          Estilo dashboard com cards separados: tempo restante da criança, seletor de pause e envio de mensagem ("Hora do almoço").
+        </p>
+        <span class="inline-block text-[10px] text-blue-400 font-medium">Melhor para: Visão informativa completa</span>
+      </div>
+
+      <!-- Opção 3 -->
+      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+        <div class="font-bold text-cyan-400">3. Radial Gamer</div>
+        <p class="text-slate-400 text-[11px]">
+          Knob radial circular onde o pai arrasta o timer com o polegar. Visual escuro neon com modos pré-programados de estudo.
+        </p>
+        <span class="inline-block text-[10px] text-purple-400 font-medium">Melhor para: Controle fino de minutos</span>
+      </div>
+
+      <!-- Opção 4 -->
+      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+        <div class="font-bold text-cyan-400">4. Mobile Sheet (PWA)</div>
+        <p class="text-slate-400 text-[11px]">
+          Padrão moderno de aplicativo móvel (Bottom Sheet com gesto deslizante). Elimina 100% de toques acidentais no bolso.
+        </p>
+        <span class="inline-block text-[10px] text-amber-400 font-medium">Melhor para: Ergonomia máxima no smartphone</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= LÓGICA JAVASCRIPT DO PROTÓTIPO ================= -->
+  <script>
+    // Estado do Protótipo
+    let isPaused = false;
+    let selectedDurationMinutes = 30; // 0 significa definitivo
+    let countdownRemainingSeconds = 30 * 60;
+    let countdownInterval = null;
+    let currentLayout = 1;
+
+    // Atualiza relógio do celular
+    function updateMobileClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('mobile-clock').innerText = `${h}:${m}`;
+    }
+    setInterval(updateMobileClock, 1000);
+    updateMobileClock();
+
+    // Alternar Layouts (1 a 4)
+    function setLayout(layoutNum) {
+      currentLayout = layoutNum;
+      for (let i = 1; i <= 4; i++) {
+        const view = document.getElementById(`layout-${i}-view`);
+        const tab = document.getElementById(`tab-${i}`);
+        if (i === layoutNum) {
+          view.classList.remove('hidden');
+          tab.className = 'px-3.5 py-2 rounded-lg font-medium transition-all bg-cyan-500 text-slate-950 font-semibold shadow-md shadow-cyan-500/20';
+        } else {
+          view.classList.add('hidden');
+          tab.className = 'px-3.5 py-2 rounded-lg font-medium transition-all text-slate-400 hover:text-white';
+        }
+      }
+      syncUI();
+    }
+
+    // Selecionar Duração
+    function selectDuration(minutes) {
+      selectedDurationMinutes = minutes;
+      countdownRemainingSeconds = minutes > 0 ? minutes * 60 : 0;
+      
+      // Atualiza no Radial (Layout 3)
+      if (minutes > 0) {
+        document.getElementById('radial-time-display').innerText = minutes >= 60 ? `${minutes/60} HORA` : `${minutes} MIN`;
+        document.getElementById('timer-slider').value = minutes;
+      } else {
+        document.getElementById('radial-time-display').innerText = 'INFINITO';
+        document.getElementById('timer-slider').value = 125;
+      }
+
+      // Atualiza no Sheet (Layout 4)
+      document.getElementById('sheet-selected-dur').innerText = minutes > 0 ? `${minutes} MIN` : 'DEFINITIVO';
+
+      syncUI();
+    }
+
+    // Input customizado
+    function applyCustomDuration(layoutId) {
+      const input = document.getElementById(`custom-minutes-input-${layoutId}`);
+      const val = parseInt(input.value, 10);
+      if (val && val > 0) {
+        selectDuration(val);
+        input.value = '';
+      }
+    }
+
+    // Slider do Layout 3
+    function handleSliderChange(val) {
+      const v = parseInt(val, 10);
+      if (v >= 125) {
+        selectDuration(0);
+      } else {
+        selectDuration(v);
+      }
+    }
+
+    // Mensagem Rápida (Layout 2)
+    function setQuickMessage(msg) {
+      document.getElementById('custom-screen-msg').value = msg;
+      document.getElementById('pc-lock-reason').innerText = `"${msg}"`;
+    }
+
+    // Ação Principal: Alternar Pausa (PAUSAR / DESPAUSAR)
+    function togglePauseAction() {
+      isPaused = !isPaused;
+
+      if (isPaused) {
+        // Iniciar Pausa
+        if (selectedDurationMinutes > 0) {
+          countdownRemainingSeconds = selectedDurationMinutes * 60;
+          startCountdown();
+        } else {
+          countdownRemainingSeconds = 0;
+          clearInterval(countdownInterval);
+        }
+
+        // Pega mensagem se houver
+        const customMsg = document.getElementById('custom-screen-msg')?.value || 'Pausa solicitada pelos pais';
+        document.getElementById('pc-lock-reason').innerText = `"${customMsg}"`;
+
+      } else {
+        // Despausar
+        clearInterval(countdownInterval);
+      }
+
+      syncUI();
+    }
+
+    // Contagem Regressiva
+    function startCountdown() {
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        if (!isPaused) {
+          clearInterval(countdownInterval);
+          return;
+        }
+        if (countdownRemainingSeconds > 0) {
+          countdownRemainingSeconds--;
+          updateCountdownDisplay();
+        } else {
+          // Pausa encerrada por tempo!
+          clearInterval(countdownInterval);
+          isPaused = false;
+          syncUI();
+        }
+      }, 1000);
+      updateCountdownDisplay();
+    }
+
+    function updateCountdownDisplay() {
+      const el = document.getElementById('pc-countdown');
+      if (selectedDurationMinutes === 0) {
+        el.innerText = 'PAUSA DEFINITIVA (AGUARDANDO LIBERAÇÃO)';
+        return;
+      }
+      const m = Math.floor(countdownRemainingSeconds / 60);
+      const s = countdownRemainingSeconds % 60;
+      el.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    // Simulação de desbloqueio com senha no Windows
+    function simulatePasswordUnlock() {
+      alert("🔑 Senha do Windows digitada com sucesso! A sessão foi desbloqueada manualmente no computador.");
+      isPaused = false;
+      clearInterval(countdownInterval);
+      syncUI();
+    }
+
+    // Sincronizar todos os elementos visuais
+    function syncUI() {
+      // 1. Monitor do PC
+      const pcActive = document.getElementById('pc-screen-active');
+      const pcLocked = document.getElementById('pc-screen-locked');
+      const pcMode = document.getElementById('pc-mode-label');
+      const pcLed = document.getElementById('pc-status-led');
+      const camStatus = document.getElementById('cam-status');
+      const camLed = document.getElementById('cam-led');
+
+      if (isPaused) {
+        pcActive.classList.add('opacity-0', 'pointer-events-none');
+        pcLocked.classList.remove('opacity-0', 'pointer-events-none');
+        pcMode.innerText = 'MODO ATUAL: BLOQUEADO POR PAUSE REMOTO';
+        pcMode.className = 'text-xs font-mono text-rose-400 font-bold';
+        pcLed.className = 'w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse';
+        camStatus.innerText = 'BLOQUEADA (DENY_PAUSED)';
+        camStatus.className = 'text-rose-400 font-bold';
+        camLed.className = 'w-2 h-2 rounded-full bg-rose-500';
+        updateCountdownDisplay();
+      } else {
+        pcActive.classList.remove('opacity-0', 'pointer-events-none');
+        pcLocked.classList.add('opacity-0', 'pointer-events-none');
+        pcMode.innerText = 'MODO ATUAL: DESKTOP NORMAL';
+        pcMode.className = 'text-xs font-mono text-cyan-400';
+        pcLed.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+        camStatus.innerText = 'ATIVA';
+        camStatus.className = 'text-emerald-300 font-bold';
+        camLed.className = 'w-2 h-2 rounded-full bg-emerald-400';
+      }
+
+      // 2. Elementos do Celular (Layout 1)
+      const b1 = document.getElementById('badge-status-1');
+      const state1 = document.getElementById('state-label-1');
+      const btn1 = document.getElementById('main-pause-btn-1');
+      const btnText1 = document.getElementById('btn-text-1');
+      const btnIcon1 = document.getElementById('btn-icon-1');
+
+      if (isPaused) {
+        b1.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+        b1.innerText = '● PAUSADO';
+        state1.innerText = 'Computador Pausado';
+        state1.className = 'text-lg font-extrabold text-rose-400';
+        btn1.className = 'w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-extrabold text-base shadow-xl shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border-4 border-slate-900';
+        btnText1.innerText = 'DESPAUSAR';
+        btnIcon1.innerText = '▶️';
+      } else {
+        b1.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+        b1.innerText = '● EM USO';
+        state1.innerText = 'Computador Liberado';
+        state1.className = 'text-lg font-extrabold text-emerald-400';
+        btn1.className = 'w-32 h-32 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 text-white font-extrabold text-base shadow-xl shadow-red-500/30 hover:scale-105 active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border-4 border-slate-900';
+        btnText1.innerText = 'PAUSAR PC';
+        btnIcon1.innerText = '⏸️';
+      }
+
+      // 3. Elementos do Celular (Layout 2)
+      const b2 = document.getElementById('badge-status-2');
+      const btn2 = document.getElementById('main-pause-btn-2');
+      const btnText2 = document.getElementById('btn-text-2');
+      if (isPaused) {
+        b2.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300';
+        b2.innerText = 'Tela Pausada';
+        btn2.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5';
+        btnText2.innerText = 'DESPAUSAR';
+      } else {
+        b2.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300';
+        b2.innerText = 'Sessão Ativa';
+        btn2.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/20 transition-all flex items-center gap-1.5';
+        btnText2.innerText = 'PAUSAR';
+      }
+
+      // 4. Elementos do Celular (Layout 3)
+      const b3 = document.getElementById('badge-status-3');
+      const btn3 = document.getElementById('main-pause-btn-3');
+      const btnText3 = document.getElementById('btn-text-3');
+      if (isPaused) {
+        b3.className = 'text-[10px] font-mono text-rose-400 font-bold';
+        b3.innerText = 'STATUS: PAUSA ATIVA';
+        btn3.className = 'w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 font-extrabold text-sm text-white tracking-wider shadow-lg shadow-emerald-600/30 uppercase flex items-center justify-center gap-2 border border-emerald-500/30 transition-all active:scale-[0.98]';
+        btnText3.innerText = 'RETOMAR / LIBERAR PC';
+      } else {
+        b3.className = 'text-[10px] font-mono text-emerald-400';
+        b3.innerText = 'STATUS: LIBERADO';
+        btn3.className = 'w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 font-extrabold text-sm text-white tracking-wider shadow-lg shadow-red-600/30 uppercase flex items-center justify-center gap-2 border border-red-500/30 transition-all active:scale-[0.98]';
+        btnText3.innerText = 'ATIVAR PAUSA AGORA';
+      }
+
+      // 5. Elementos do Celular (Layout 4)
+      const b4 = document.getElementById('badge-status-4');
+      const btn4 = document.getElementById('main-pause-btn-4');
+      const btnText4 = document.getElementById('btn-text-4');
+      if (isPaused) {
+        b4.className = 'text-xs font-semibold text-rose-400 flex items-center gap-1';
+        b4.innerHTML = '<span>⏸️</span> Computador Pausado';
+        btn4.className = 'w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white font-extrabold text-xs tracking-wider uppercase shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all active:scale-95';
+        btnText4.innerText = 'DESLIZAR PARA LIBERAR PC';
+      } else {
+        b4.className = 'text-xs font-semibold text-emerald-400 flex items-center gap-1';
+        b4.innerHTML = '<span>●</span> Computador Desbloqueado';
+        btn4.className = 'w-full py-3.5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white font-extrabold text-xs tracking-wider uppercase shadow-lg shadow-red-500/25 flex items-center justify-center gap-2 transition-all active:scale-95';
+        btnText4.innerText = 'DESLIZE PARA PAUSAR PC';
+      }
+    }
+
+    // Inicialização
+    syncUI();
+  </script>
+</body>
+</html>

@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import os
 
+import json
+
 import math
 
 import sqlite3
+
+import time
 
 from datetime import date
 
@@ -1459,4 +1463,56 @@ class Storage:
         from .admin_auth import verify_pin
 
         return verify_pin(pin.strip(), stored)
+
+    def set_remote_pause(self, duration_seconds: Optional[int] = None, reason: str = "") -> dict:
+        """Define ou atualiza a pausa remota da sessão.
+
+        Args:
+            duration_seconds: Duração em segundos (<= 0 ou None para pausa definitiva).
+            reason: Mensagem/motivo opcional exibido no bloqueio.
+        """
+        now = time.time()
+        dur = int(duration_seconds) if duration_seconds and int(duration_seconds) > 0 else 0
+        pause_until = (now + dur) if dur > 0 else 0.0
+        data = {
+            "is_paused": True,
+            "pause_until": pause_until,
+            "duration_seconds": dur,
+            "reason": reason.strip() if reason else "Pausa solicitada pelos pais",
+            "created_at": now,
+        }
+        self.set_setting("remote_pause", json.dumps(data, ensure_ascii=False))
+        return data
+
+    def clear_remote_pause(self) -> None:
+        """Encerra a pausa remota e restaura a autorizacao facial."""
+        with self.db:
+            self.db.execute("DELETE FROM settings WHERE key='remote_pause'")
+
+    def get_remote_pause_state(self) -> tuple[bool, str, int]:
+        """Retorna (is_paused, reason, remaining_seconds).
+
+        Se a pausa era temporaria e o tempo expirou, limpa automaticamente do banco.
+        """
+        val = self.get_setting("remote_pause")
+        if not val:
+            return False, "", 0
+        try:
+            data = json.loads(val)
+            if not data.get("is_paused"):
+                return False, "", 0
+            pause_until = float(data.get("pause_until", 0.0))
+            reason = str(data.get("reason", "Pausa solicitada pelos pais"))
+            now = time.time()
+            if pause_until > 0.0:
+                if now >= pause_until:
+                    self.clear_remote_pause()
+                    return False, "", 0
+                remaining = int(pause_until - now)
+                return True, reason, remaining
+            else:
+                return True, reason, 0
+        except Exception:
+            return False, "", 0
+
 

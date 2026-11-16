@@ -121,7 +121,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
-            if path == "/api/status":
+            if path in ("/remote", "/remote/", "/remote.html"):
+                self.serve_static(path)
+            elif path == "/api/remote/status":
+                self.handle_remote_status()
+            elif path == "/api/status":
                 self.handle_status()
             elif path == "/api/diagnostics":
                 self.handle_diagnostics()
@@ -209,6 +213,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_camera_enroll_start(body)
             elif path == "/api/settings/pin":
                 self.handle_settings_pin(body)
+            elif path == "/api/remote/pause":
+                self.handle_remote_pause(body)
+            elif path == "/api/remote/resume":
+                self.handle_remote_resume(body)
             elif path == "/api/shutdown":
                 if not SafePCKidsApiHandler.is_installing:
                     SafePCKidsApiHandler.shutdown_requested = True
@@ -879,6 +887,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         target_dir = get_ui_dir()
         if path in ("/", "/index.html"):
             target = target_dir / "app.html"
+        elif path in ("/remote", "/remote/", "/remote.html"):
+            target = target_dir / "remote.html"
         else:
             rel = path.lstrip("/ui/")
             target = target_dir / rel
@@ -905,22 +915,161 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             logger.debug(f"Erro ao servir arquivo estatico: {e}")
             self.send_error(500, "Erro ao servir arquivo")
 
+    def handle_remote_status(self) -> None:
+        has_db = DEFAULT_DB_FILE.exists()
+        is_paused = False
+        pause_reason = ""
+        pause_remaining = 0
+        child_info = None
+        has_pin = False
 
-def find_free_port(start: int = 14220) -> int:
+        if has_db:
+            try:
+                store = Storage(DEFAULT_DB_FILE)
+                has_pin = bool(store.get_parent_pin())
+                is_paused, pause_reason, pause_remaining = store.get_remote_pause_state()
+                children = store.people()
+                if children:
+                    from datetime import date
+                    today = date.today().isoformat()
+                    c_id, c_name, c_quota = children[0][0], children[0][1], children[0][2]
+                    rem = store.remaining(c_id, today)
+                    child_info = {
+                        "id": c_id,
+                        "name": c_name,
+                        "daily_limit_minutes": int(c_quota // 60),
+                        "remaining_seconds": int(rem),
+                        "remaining_minutes": int(rem // 60),
+                    }
+                store.close()
+            except Exception as e:
+                logger.debug(f"Erro ao ler status remoto do banco: {e}")
+
+        session_active = False
+        try:
+            from .session import current_session_state, SessionState
+            session_active = (current_session_state() is SessionState.ACTIVE)
+        except Exception:
+            pass
+
+        self.send_json({
+            "ok": True,
+            "is_paused": is_paused,
+            "pause_reason": pause_reason,
+            "pause_remaining_seconds": pause_remaining,
+            "child": child_info,
+            "session_active": session_active,
+            "has_pin": has_pin,
+            "local_ip": get_local_ip(),
+            "server_time": time.time(),
+        })
+
+    def handle_remote_pause(self, data: Dict[str, Any]) -> None:
+        if not DEFAULT_DB_FILE.exists():
+            self.send_json({"ok": False, "error": "Sistema ainda nao configurado"}, 400)
+            return
+
+        store = Storage(DEFAULT_DB_FILE)
+        try:
+            has_pin = bool(store.get_parent_pin())
+            pin = str(data.get("pin", "")).strip()
+            if has_pin and not store.verify_parent_pin(pin):
+                self.send_json({"ok": False, "error": "PIN incorreto"}, 401)
+                return
+
+            dur_min = data.get("duration_minutes")
+            if dur_min is None or int(dur_min) <= 0:
+                duration_seconds = 0
+            else:
+                duration_seconds = int(dur_min) * 60
+
+            reason = str(data.get("reason", "Pausa solicitada pelos pais")).strip()
+            pause_data = store.set_remote_pause(duration_seconds, reason)
+
+            if sys.platform == "win32":
+                try:
+                    from .locker import lock_current_session
+                    threading.Thread(target=lock_current_session, daemon=True).start()
+                except Exception as e:
+                    logger.debug(f"Aviso ao solicitar bloqueio imediato: {e}")
+
+            self.send_json({"ok": True, "message": "Pausa ativada com sucesso", "pause": pause_data})
+        finally:
+            store.close()
+
+    def handle_remote_resume(self, data: Dict[str, Any]) -> None:
+        if not DEFAULT_DB_FILE.exists():
+            self.send_json({"ok": False, "error": "Sistema ainda nao configurado"}, 400)
+            return
+
+        store = Storage(DEFAULT_DB_FILE)
+        try:
+            has_pin = bool(store.get_parent_pin())
+            pin = str(data.get("pin", "")).strip()
+            if has_pin and not store.verify_parent_pin(pin):
+                self.send_json({"ok": False, "error": "PIN incorreto"}, 401)
+                return
+
+            store.clear_remote_pause()
+            self.send_json({"ok": True, "message": "Pausa cancelada. Computador liberado."})
+        finally:
+            store.close()
+
+
+def get_local_ip() -> str:
+    """Detecta o IP local da maquina na rede Wi-Fi / Ethernet."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+
+
+def find_free_port(start: int = 8765) -> int:
     for port in range(start, start + 50):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(("127.0.0.1", port))
+                s.bind(("0.0.0.0", port))
                 return port
             except OSError:
-                continue
+                try:
+                    s.bind(("127.0.0.1", port))
+                    return port
+                except OSError:
+                    continue
     return start
 
 
-def run_app_server(port: Optional[int] = None) -> Tuple[ThreadingHTTPServer, int]:
+def run_app_server(port: Optional[int] = None, host: str = "0.0.0.0") -> Tuple[ThreadingHTTPServer, int]:
     port = port or find_free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), SafePCKidsApiHandler)
+    try:
+        server = ThreadingHTTPServer((host, port), SafePCKidsApiHandler)
+    except OSError:
+        server = ThreadingHTTPServer(("127.0.0.1", port), SafePCKidsApiHandler)
+        host = "127.0.0.1"
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    logger.info(f"Servidor SafePCKids ativo em http://127.0.0.1:{port}")
+    logger.info(f"Servidor SafePCKids ativo em http://{host}:{port}")
     return server, port
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="SafePCKids Remote Server")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--host", type=str, default="0.0.0.0")
+    args = parser.parse_args()
+    server, active_p = run_app_server(port=args.port, host=args.host)
+    local_ip = get_local_ip()
+    print(f"[OK] Servidor SafePCKids ativo em http://{args.host}:{active_p}/")
+    print(f"[CELULAR] Acesse no smartphone: http://{local_ip}:{active_p}/remote")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        server.shutdown()
+

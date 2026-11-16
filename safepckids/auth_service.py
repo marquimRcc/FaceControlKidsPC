@@ -313,7 +313,23 @@ class FaceAuthenticator:
                     "face_count": best_face_count or 1,
                 }
 
-            # 2. Verificar quota diaria restante
+            # 2. Verificar pausa remota (bloqueio remoto sob demanda)
+            if hasattr(store, "get_remote_pause_state"):
+                is_paused, pause_reason, pause_remaining = store.get_remote_pause_state()
+                if is_paused:
+                    logger.info("Filho identificado (%s), mas bloqueado por pausa remota: %s (restam %ds)",
+                                child_name, pause_reason, pause_remaining)
+                    return "DENY_PAUSED", {
+                        "child_id": best_candidate,
+                        "child_name": child_name,
+                        "remaining": 0,
+                        "message": pause_reason or "Computador pausado remotamente pelos pais",
+                        "pause_remaining": pause_remaining,
+                        "detected_ids": best_detected_ids or [best_candidate],
+                        "face_count": best_face_count or 1,
+                    }
+
+            # 3. Verificar quota diaria restante
             remaining_seconds = int(store.remaining(best_candidate, today))
 
             if remaining_seconds <= 0:
@@ -505,9 +521,24 @@ def run_pipe_server(models_dir: Optional[Path] = None, db_path: Optional[Path] =
         watchdog = AgentWatchdog()
         watchdog_thread = AgentWatchdogThread(watchdog, check_interval=15.0)
         watchdog_thread.start()
+
+        # Inicia o servidor HTTP de Controle Remoto e API em segundo plano
+        http_server = None
+        try:
+            from .app_server import run_app_server
+            http_server, http_port = run_app_server(port=8765, host="0.0.0.0")
+            logger.info("Servidor de Controle Remoto SafePCKids ativo em http://0.0.0.0:%d/remote", http_port)
+        except Exception as e:
+            logger.warning("Aviso ao iniciar servidor HTTP no AuthService: %s", e)
+
         try:
             _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdog=watchdog)
         finally:
+            if http_server is not None:
+                try:
+                    http_server.shutdown()
+                except Exception:
+                    pass
             watchdog_thread.stop()
         return 0
     finally:
@@ -602,7 +633,7 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdo
             }
             if status == "ALLOW":
                 response_payload["password"] = filhos_pass
-            if status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
+            if status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW", "DENY_PAUSED"):
                 response_payload["child_id"] = data.get("child_id")
                 response_payload["child_name"] = data.get("child_name")
                 response_payload["remaining"] = data.get("remaining")

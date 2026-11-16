@@ -11,8 +11,18 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import urllib.request
 
 from .app_server import run_app_server, find_free_port, SafePCKidsApiHandler
+
+
+def is_server_listening(port: int = 8765) -> bool:
+    """Verifica se o servidor SafePCKids já está respondendo na porta indicada."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/heartbeat", timeout=0.8) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
 
 
 EDGE_PATHS = [
@@ -31,7 +41,12 @@ def find_edge_executable() -> str | None:
 
 def open_app_window(mode: str = "auto", port: int | None = None) -> int:
     """Inicia o servidor e exibe a janela da aplicacao mantendo o servidor ativo."""
-    server, active_port = run_app_server(port)
+    server = None
+    target_port = port or 8765
+    if port is None and is_server_listening(target_port):
+        active_port = target_port
+    else:
+        server, active_port = run_app_server(port)
     url = f"http://127.0.0.1:{active_port}/"
     if mode in ("wizard", "install"):
         url += "?mode=wizard"
@@ -106,7 +121,11 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        server.shutdown()
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:
+                pass
 
     return 0
 

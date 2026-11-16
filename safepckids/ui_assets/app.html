@@ -347,6 +347,10 @@
               <span>🗑️</span>
               <span>Manutenção & Desinstalação</span>
             </button>
+            <button onclick="openRemoteModal()" class="nav-item w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all mt-2">
+              <span>📱</span>
+              <span>Controle Remoto (Celular)</span>
+            </button>
           </nav>
         </div>
 
@@ -418,6 +422,24 @@
               <span class="text-xs text-slate-400">Perfis Ativos</span>
               <p id="statActiveCount" class="text-base font-bold text-white">0</p>
               <span class="text-[10px] text-slate-400">Configurados com cota</span>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/60 border border-cyan-500/30 space-y-3 shadow-lg">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-xl">
+                  📱
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-white">Controle Remoto & Bloqueio Imediato (Pause)</h3>
+                  <p class="text-xs text-slate-300">Pause o computador pelo celular ou outro PC e suspenda a webcam temporária ou definitivamente.</p>
+                </div>
+              </div>
+              <button onclick="openRemoteModal()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center space-x-1.5 shadow-md shadow-cyan-500/20">
+                <span>📱</span>
+                <span>Conectar Celular</span>
+              </button>
             </div>
           </div>
 
@@ -644,6 +666,56 @@
 
   </main>
 
+
+  <!-- ======================================================== -->
+  <!-- MODAL: CONTROLE REMOTO PELO CELULAR (QR CODE & LINK)     -->
+  <!-- ======================================================== -->
+  <div id="remoteAccessModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="w-full max-w-md glass-panel rounded-3xl p-6 border border-cyan-500/30 space-y-5 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <span class="text-xl">📱</span>
+          <div>
+            <h3 class="text-base font-bold text-white">Controle Remoto (Focus Boss)</h3>
+            <p class="text-xs text-slate-400">Acesse do celular ou de outro PC na mesma rede Wi-Fi</p>
+          </div>
+        </div>
+        <button onclick="closeRemoteModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- QR Code e Instrucoes -->
+      <div class="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-3 text-center">
+        <div class="w-44 h-44 p-2 bg-white rounded-2xl shadow-lg flex items-center justify-center">
+          <img id="remoteQrCodeImg" src="" alt="QR Code" class="w-full h-full object-contain">
+        </div>
+        <p class="text-xs text-slate-300">
+          Aponte a câmera do seu celular para abrir o controle imediatamente.
+        </p>
+      </div>
+
+      <!-- Endereco Web Local -->
+      <div class="space-y-1.5">
+        <label class="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">Endereço na Rede Local Wi-Fi:</label>
+        <div class="flex items-center space-x-2">
+          <input type="text" id="remoteUrlDisplay" readonly class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-cyan-300 select-all focus:outline-none">
+          <button onclick="copyRemoteUrl()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-700 transition-all flex items-center space-x-1">
+            <span>📋</span>
+            <span>Copiar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Acoes -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+        <button onclick="window.open('/remote', '_blank')" class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold">
+          Abrir neste PC ↗️
+        </button>
+        <button onclick="closeRemoteModal()" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ======================================================== -->
   <!-- MODAL: GALERIA DE 12 FOTOS E ESCOLHA DE AVATAR ATIVO     -->
@@ -1458,6 +1530,40 @@
       if (modalEnrollTimer) {
         clearInterval(modalEnrollTimer);
         modalEnrollTimer = null;
+      }
+    }
+
+    // Controle Remoto Modal
+    async function openRemoteModal() {
+      try {
+        const resp = await fetch('/api/remote/status');
+        const data = await resp.json();
+        const port = window.location.port || '14220';
+        const ip = data.local_ip || window.location.hostname || '127.0.0.1';
+        const remoteUrl = `http://${ip}:${port}/remote`;
+        const urlInput = document.getElementById('remoteUrlDisplay');
+        if (urlInput) urlInput.value = remoteUrl;
+        const qrImg = document.getElementById('remoteQrCodeImg');
+        if (qrImg) {
+          qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(remoteUrl)}`;
+        }
+        const m = document.getElementById('remoteAccessModal');
+        if (m) m.classList.remove('hidden');
+      } catch (e) {
+        console.error("Erro ao abrir modal remoto:", e);
+      }
+    }
+
+    function closeRemoteModal() {
+      const m = document.getElementById('remoteAccessModal');
+      if (m) m.classList.add('hidden');
+    }
+
+    function copyRemoteUrl() {
+      const urlInput = document.getElementById('remoteUrlDisplay');
+      if (urlInput && urlInput.value) {
+        navigator.clipboard.writeText(urlInput.value);
+        showToast("Link copiado para a área de transferência!");
       }
     }
 
