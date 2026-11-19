@@ -50,6 +50,13 @@
     .pulse-card {
       animation: pulse-subtle 3s infinite ease-in-out;
     }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
     /* Estilo do slider */
     input[type=range] {
       height: 8px;
@@ -86,11 +93,27 @@
   <!-- ================= CONTEÚDO PRINCIPAL (LAYOUT 3: RADIAL GAMER) ================= -->
   <main class="w-full max-w-md mx-auto my-auto space-y-4 py-3">
 
-    <!-- Card da Criança e Sessão -->
-    <div class="p-3.5 rounded-2xl glass-card flex items-center justify-between">
+    <!-- Seletor de Perfis (Horizontal Scroll / Chips) -->
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between px-1">
+        <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
+          <span>👥</span> PERFIS CADASTRADOS
+        </span>
+        <span class="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20" id="profiles-count-badge">
+          Carregando...
+        </span>
+      </div>
+      <div id="profiles-carousel" class="flex gap-2.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
+        <!-- Injetado dinamicamente via JS -->
+      </div>
+    </div>
+
+    <!-- Card da Criança Selecionada e Sessão -->
+    <div class="p-3.5 rounded-2xl glass-card flex items-center justify-between border border-slate-800">
       <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-xl shadow-md border border-cyan-400/40">
-          👦
+        <div id="child-avatar-container" class="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-xl shadow-md border border-cyan-400/40 overflow-hidden relative flex-shrink-0">
+          <span id="child-avatar-fallback">👦</span>
+          <img id="child-avatar-img" src="" alt="Avatar" class="w-full h-full object-cover hidden">
         </div>
         <div>
           <div class="text-sm font-bold text-white flex items-center gap-1.5" id="child-display-name">
@@ -98,7 +121,7 @@
             <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono" id="session-badge">Em uso</span>
           </div>
           <p class="text-xs text-slate-400">
-            Saldo restante: <strong class="text-cyan-300 font-mono" id="child-remaining-display">--</strong>
+            Saldo de hoje: <strong class="text-cyan-300 font-mono" id="child-remaining-display">--</strong>
           </p>
         </div>
       </div>
@@ -216,11 +239,15 @@
     let countdownInterval = null;
     let pauseRemainingSeconds = 0;
     let isSubmitting = false;
+    let selectedChildId = null;
+    let profilesList = [];
 
     // Elementos da UI
     const headerStatusBadge = document.getElementById('header-status-badge');
     const childDisplayName = document.getElementById('child-display-name');
     const childRemainingDisplay = document.getElementById('child-remaining-display');
+    const childAvatarImg = document.getElementById('child-avatar-img');
+    const childAvatarFallback = document.getElementById('child-avatar-fallback');
     const webcamStatusLabel = document.getElementById('webcam-status-label');
     const radialCircle = document.getElementById('radial-progress-circle');
     const dialMainTime = document.getElementById('dial-main-time');
@@ -259,12 +286,39 @@
     function updateFromBackend(data) {
       isPaused = Boolean(data.is_paused);
       pauseRemainingSeconds = data.pause_remaining_seconds || 0;
+      profilesList = (data.children && data.children.length > 0) ? data.children : (data.child ? [data.child] : []);
 
-      // Criança
-      if (data.child) {
-        childDisplayName.innerHTML = `${data.child.name} <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">${data.session_active ? 'Em uso' : 'Bloqueado'}</span>`;
-        const m = data.child.remaining_minutes || 0;
+      // Se nenhum perfil selecionado ainda, prioriza o ativo na máquina ou o primeiro
+      if (!selectedChildId && profilesList.length > 0) {
+        selectedChildId = data.active_child_id || profilesList[0].id;
+      }
+
+      // Renderiza os botões do carrossel de perfis
+      renderProfilesCarousel(profilesList, data.session_active, data.active_child_id);
+
+      // Criança Selecionada
+      const selected = profilesList.find(c => c.id === selectedChildId) || profilesList[0];
+      if (selected) {
+        const isCurrentActive = Boolean(selected.is_active && data.session_active);
+        const statusText = isPaused ? 'Pausado' : (isCurrentActive ? 'Em uso' : (data.session_active ? 'Disponível' : 'Aguardando'));
+        const badgeColor = isPaused ? 'bg-rose-500/20 text-rose-300' : (isCurrentActive ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-700/40 text-slate-400');
+        
+        childDisplayName.innerHTML = `${selected.name} <span class="text-[9px] px-1.5 py-0.5 rounded ${badgeColor} font-mono">${statusText}</span>`;
+        const m = selected.remaining_minutes || 0;
         childRemainingDisplay.innerText = m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m} min`;
+
+        if (selected.avatar_url) {
+          if (childAvatarImg.dataset.src !== selected.avatar_url) {
+            childAvatarImg.src = selected.avatar_url;
+            childAvatarImg.dataset.src = selected.avatar_url;
+          }
+          childAvatarImg.classList.remove('hidden');
+          childAvatarFallback.classList.add('hidden');
+        } else {
+          childAvatarImg.classList.add('hidden');
+          childAvatarFallback.classList.remove('hidden');
+          childAvatarFallback.innerText = "👦";
+        }
       }
 
       if (isPaused) {
@@ -330,6 +384,63 @@
       }
     }
 
+    function renderProfilesCarousel(children, sessionActive, activeId) {
+      const container = document.getElementById('profiles-carousel');
+      const countBadge = document.getElementById('profiles-count-badge');
+      if (!container) return;
+
+      countBadge.innerText = `${children.length} ${children.length === 1 ? 'perfil' : 'perfis'}`;
+
+      container.innerHTML = children.map(c => {
+        const isSelected = (c.id === selectedChildId);
+        const isUsing = (c.id === activeId && sessionActive);
+        const m = c.remaining_minutes || 0;
+        const timeStr = m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+
+        const borderClass = isSelected 
+          ? "border-cyan-400 bg-cyan-950/50 shadow-md shadow-cyan-500/20 ring-1 ring-cyan-400" 
+          : "border-slate-800 bg-slate-900/60 hover:border-slate-700 opacity-75 hover:opacity-100";
+
+        const activeBadge = isUsing 
+          ? `<span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>` 
+          : '';
+
+        const avatarMarkup = c.avatar_url 
+          ? `<img src="${c.avatar_url}" alt="${c.name}" class="w-8 h-8 rounded-lg object-cover border border-cyan-400/30">`
+          : `<div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-xs">👦</div>`;
+
+        return `
+          <button type="button" onclick="selectProfile(${c.id})" class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-left ${borderClass}">
+            <div class="relative">
+              ${avatarMarkup}
+              <div class="absolute -top-1 -right-1">${activeBadge}</div>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white flex items-center gap-1 leading-tight">
+                ${c.name}
+              </div>
+              <div class="text-[10px] font-mono text-cyan-400 leading-tight">
+                ${timeStr}
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectProfile(id) {
+      selectedChildId = id;
+      const selected = profilesList.find(c => c.id === id);
+      if (selected) {
+        if (!reasonInput.value || reasonInput.value.includes("almoço") || reasonInput.value.includes("Hora")) {
+          reasonInput.value = `${selected.name}, hora do almoço! 🍽️`;
+        }
+      }
+      renderProfilesCarousel(profilesList, true, selectedChildId);
+      fetchStatus();
+    }
+    window.selectProfile = selectProfile;
+
     // Seletores de Duração
     function setDurationPreset(min) {
       selectedDurationMinutes = min;
@@ -350,7 +461,12 @@
     }
 
     function setReasonText(msg) {
-      reasonInput.value = msg;
+      const selected = profilesList.find(c => c.id === selectedChildId);
+      const name = selected ? selected.name : "Filhos";
+      if (msg === "Almoço") reasonInput.value = `${name}, hora do almoço! 🍽️`;
+      else if (msg === "Lição") reasonInput.value = `${name}, hora da lição de casa! 📚`;
+      else if (msg === "Banho") reasonInput.value = `${name}, hora do banho! 🚀`;
+      else reasonInput.value = msg;
     }
 
     function updatePresetPills() {

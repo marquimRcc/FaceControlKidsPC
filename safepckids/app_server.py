@@ -920,27 +920,53 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         is_paused = False
         pause_reason = ""
         pause_remaining = 0
+        children_list = []
         child_info = None
         has_pin = False
+
+        active_child_id = None
+        try:
+            last_unlock_file = unlock_metadata_path()
+            if last_unlock_file.exists():
+                meta = json.loads(last_unlock_file.read_text(encoding="utf-8"))
+                active_child_id = meta.get("child_id")
+        except Exception:
+            pass
 
         if has_db:
             try:
                 store = Storage(DEFAULT_DB_FILE)
                 has_pin = bool(store.get_parent_pin())
                 is_paused, pause_reason, pause_remaining = store.get_remote_pause_state()
-                children = store.people()
-                if children:
+                people = store.people()
+                if people:
                     from datetime import date
                     today = date.today().isoformat()
-                    c_id, c_name, c_quota = children[0][0], children[0][1], children[0][2]
-                    rem = store.remaining(c_id, today)
-                    child_info = {
-                        "id": c_id,
-                        "name": c_name,
-                        "daily_limit_minutes": int(c_quota // 60),
-                        "remaining_seconds": int(rem),
-                        "remaining_minutes": int(rem // 60),
-                    }
+                    fotos_dir = _fotos_dir()
+
+                    valid_ids = [p[0] for p in people]
+                    if active_child_id not in valid_ids:
+                        active_child_id = valid_ids[0]
+
+                    for c_id, c_name, c_quota in people:
+                        rem = store.remaining(c_id, today)
+                        avatar_file = fotos_dir / f"crianca_{c_id}_avatar.png"
+                        item = {
+                            "id": c_id,
+                            "name": c_name,
+                            "daily_limit_minutes": int(c_quota // 60),
+                            "remaining_seconds": int(rem),
+                            "remaining_minutes": int(rem // 60),
+                            "has_avatar": avatar_file.exists(),
+                            "avatar_url": f"/api/child/{c_id}/avatar" if avatar_file.exists() else None,
+                            "is_active": (c_id == active_child_id),
+                        }
+                        children_list.append(item)
+                        if c_id == active_child_id:
+                            child_info = item
+
+                    if not child_info and children_list:
+                        child_info = children_list[0]
                 store.close()
             except Exception as e:
                 logger.debug(f"Erro ao ler status remoto do banco: {e}")
@@ -958,6 +984,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             "pause_reason": pause_reason,
             "pause_remaining_seconds": pause_remaining,
             "child": child_info,
+            "children": children_list,
+            "active_child_id": active_child_id,
             "session_active": session_active,
             "has_pin": has_pin,
             "local_ip": get_local_ip(),

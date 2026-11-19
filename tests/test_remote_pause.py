@@ -20,8 +20,14 @@ class TestRemotePauseStorage(unittest.TestCase):
         self.store = Storage(self.db_path)
 
     def tearDown(self):
-        self.store.close()
-        self.temp_dir.cleanup()
+        try:
+            self.store.close()
+        except Exception:
+            pass
+        try:
+            self.temp_dir.cleanup()
+        except Exception:
+            pass
 
     def test_remote_pause_initial_state(self):
         """Inicialmente não deve haver pausa ativa."""
@@ -87,8 +93,14 @@ class TestRemotePauseAuthService(unittest.TestCase):
         self.store = Storage(self.db_path)
 
     def tearDown(self):
-        self.store.close()
-        self.temp_dir.cleanup()
+        try:
+            self.store.close()
+        except Exception:
+            pass
+        try:
+            self.temp_dir.cleanup()
+        except Exception:
+            pass
 
     def test_auth_service_denies_when_paused(self):
         """Quando o sistema estiver em pausa remota, deve responder DENY_PAUSED."""
@@ -108,12 +120,21 @@ class TestRemotePauseApi(unittest.TestCase):
         self.store.set_parent_pin("1234")
 
     def tearDown(self):
-        self.store.close()
-        self.temp_dir.cleanup()
+        try:
+            self.store.close()
+        except Exception:
+            pass
+        try:
+            self.temp_dir.cleanup()
+        except Exception:
+            pass
 
     @patch("safepckids.app_server.DEFAULT_DB_FILE")
     def test_remote_status_endpoint(self, mock_db_file):
         mock_db_file.exists.return_value = True
+        self.store.add_person("Miguel", 60)
+        self.store.add_person("Elena", 120)
+
         from safepckids.app_server import SafePCKidsApiHandler
         handler = SafePCKidsApiHandler.__new__(SafePCKidsApiHandler)
         handler.headers = {}
@@ -132,6 +153,13 @@ class TestRemotePauseApi(unittest.TestCase):
         self.assertTrue(sent_data["data"]["ok"])
         self.assertFalse(sent_data["data"]["is_paused"])
         self.assertTrue(sent_data["data"]["has_pin"])
+        self.assertIn("children", sent_data["data"])
+        self.assertEqual(len(sent_data["data"]["children"]), 2)
+        names = [c["name"] for c in sent_data["data"]["children"]]
+        self.assertIn("Miguel", names)
+        self.assertIn("Elena", names)
+        self.assertIsNotNone(sent_data["data"]["child"])
+        self.assertIsNotNone(sent_data["data"]["active_child_id"])
 
     @patch("safepckids.app_server.DEFAULT_DB_FILE")
     def test_remote_pause_endpoint_wrong_pin(self, mock_db_file):
