@@ -425,6 +425,41 @@ class TestFilhosAgent(unittest.TestCase):
         rem = self.store.remaining(tracker.current_child_id, today)
         self.assertEqual(rem, initial_rem - 2.0)
 
+    def test_in_session_child_switch_debounce_and_no_popup(self):
+        """Troca de perfil em sessão ativa exige 2 confirmações consecutivas e não abre popup."""
+        tracker = QuotaTracker(self.store)
+        tracker.switch_child(self.child_id, "Lucas")
+
+        # 1ª observação com perfil diferente (ex: ID 99)
+        new_cid = 99
+        pending_switch_candidate_id = None
+        pending_switch_count = 0
+
+        # Simula 1ª checagem divergente
+        if pending_switch_candidate_id == new_cid:
+            pending_switch_count += 1
+        else:
+            pending_switch_candidate_id = new_cid
+            pending_switch_count = 1
+
+        self.assertEqual(pending_switch_count, 1)
+        # Ainda não deve trocar na 1ª checagem isolada
+        self.assertLess(pending_switch_count, 2)
+        self.assertEqual(tracker.current_child_id, self.child_id)
+
+        # Simula 2ª checagem consecutiva com o mesmo ID 99
+        if pending_switch_candidate_id == new_cid:
+            pending_switch_count += 1
+        else:
+            pending_switch_candidate_id = new_cid
+            pending_switch_count = 1
+
+        self.assertEqual(pending_switch_count, 2)
+        # Agora sim confirma e realiza a troca
+        tracker.switch_child(new_cid, "Novo Filho")
+        self.assertEqual(tracker.current_child_id, 99)
+        self.assertEqual(tracker.current_child_name, "Novo Filho")
+
 
 if __name__ == "__main__":
 

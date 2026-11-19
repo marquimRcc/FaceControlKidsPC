@@ -616,6 +616,8 @@ def run_agent():
     inactivity_warned = False
     previous_session_state = None
     current_session_epoch = secrets.token_hex(16)
+    pending_switch_candidate_id: Optional[int] = None
+    pending_switch_count: int = 0
 
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
     write_agent_heartbeat()
@@ -690,15 +692,37 @@ def run_agent():
                                 idle_threshold_seconds=0.0)
                             if observed.status == "ALLOW":
                                 if transition is TransitionDecision.SWITCH_CHILD:
-                                    logger.info("Troca de perfil validada: %s -> %s",
-                                                tracker.current_child_name, registered_name)
-                                    tracker.switch_child(observed.child_id, registered_name)
-                                    session_active_since_mono = time.monotonic()
-                                    last_welcome_reminder_mono = time.monotonic()
-                                    trigger_welcome_screen()
-                                    show_toast("👋 Perfil Alternado",
-                                               f"Olá, {registered_name}! Seu perfil foi carregado.",
-                                               icon="👤", color="#A6E3A1", duration_ms=6000)
+                                    # Se a sessão já possui uma criança identificada, exige confirmação consecutiva
+                                    # para evitar oscilações por iluminação ou poses semelhantes enquanto assiste a vídeos.
+                                    if tracker.current_child_id is not None:
+                                        if pending_switch_candidate_id == observed.child_id:
+                                            pending_switch_count += 1
+                                        else:
+                                            pending_switch_candidate_id = observed.child_id
+                                            pending_switch_count = 1
+
+                                        if pending_switch_count < 2:
+                                            logger.debug(
+                                                "Candidato a troca de perfil detectado: %s (confirmacao %d/2); mantendo operador atual.",
+                                                registered_name, pending_switch_count,
+                                            )
+                                            transition = TransitionDecision.KEEP_CURRENT
+
+                                    if transition is TransitionDecision.SWITCH_CHILD:
+                                        pending_switch_candidate_id = None
+                                        pending_switch_count = 0
+                                        logger.info("Troca de perfil validada: %s -> %s",
+                                                    tracker.current_child_name, registered_name)
+                                        tracker.switch_child(observed.child_id, registered_name)
+                                        session_active_since_mono = time.monotonic()
+                                        last_welcome_reminder_mono = time.monotonic()
+                                        # Notificação discreta via toast: não interrompe vídeos, jogos ou navegação
+                                        show_toast("👋 Perfil Alternado",
+                                                   f"Olá, {registered_name}! Seu perfil foi carregado.",
+                                                   icon="👤", color="#A6E3A1", duration_ms=6000)
+                                else:
+                                    pending_switch_candidate_id = None
+                                    pending_switch_count = 0
                             elif observed.status in ("DENY_QUOTA", "DENY_NO_QUOTA", "DENY_CURFEW", "DENY_PAUSED"):
                                 is_current = (tracker.current_child_id is not None and observed.child_id == tracker.current_child_id)
                                 is_switch = (transition is TransitionDecision.SWITCH_CHILD)
@@ -819,11 +843,17 @@ def run_agent():
                     rem = tick.remaining_seconds
                     tracker.update_balance(rem)
 
-                    # Lembrete a cada 30 minutos (1800s) de uso ativo: exibe card por 4 segundos
+                    # Lembrete a cada 30 minutos (1800s) de uso ativo: exibe aviso discreto (toast) sem interromper a tela
                     if (now_mono - last_welcome_reminder_mono) >= 1800.0 and rem > 60:
                         last_welcome_reminder_mono = now_mono
-                        logger.info("Lembrete de 30 minutos: exibindo card de tempo para %s", tracker.current_child_name)
-                        trigger_welcome_screen()
+                        logger.info("Lembrete de 30 minutos: exibindo aviso de tempo para %s", tracker.current_child_name)
+                        show_toast(
+                            "⏳ Tempo de Tela",
+                            f"{tracker.current_child_name}: restam {int(rem // 60)} min hoje.",
+                            icon="⏳",
+                            color="#89DCEB",
+                            duration_ms=5000,
+                        )
 
                     # Shadow may observe this child, but NEVER change rem,
                     # trigger a lock, or select a facial identity.
