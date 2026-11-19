@@ -16,6 +16,7 @@ echo ========================================================
 cd /d "%~dp0.."
 
 echo [1/3] Parando servicos anteriores...
+schtasks /end /tn SafePCKidsBootAuth 2>nul
 schtasks /end /tn SafePCKidsAuthService 2>nul
 
 echo [2/3] Sincronizando arquivos e bibliotecas...
@@ -26,9 +27,11 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [3/3] Aplicando reparo e ativando AdGuard Family...
+echo [3/3] Aplicando reparo e ativando servicos...
 cd /d "%ProgramFiles%\SafePCKids"
 ".venv\Scripts\python.exe" -m safepckids.repair
+schtasks /run /tn SafePCKidsBootAuth 2>nul
+schtasks /run /tn SafePCKidsAuthService 2>nul
 
 echo.
 echo ========================================================
