@@ -21,7 +21,11 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
 if ($sourceRoot -ne $root) {
     foreach ($folder in @('safepckids', 'models', 'scripts', 'assets', 'native')) {
         $source = Join-Path $sourceRoot $folder
+        $dest = Join-Path $root $folder
         if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            if ($folder -eq 'models' -and (Test-Path -LiteralPath $dest -PathType Container)) {
+                continue
+            }
             throw "Componente do instalador ausente: $source"
         }
         Copy-Item -LiteralPath $source -Destination $root -Recurse -Force
