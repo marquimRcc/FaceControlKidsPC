@@ -29,6 +29,10 @@ if ($sourceRoot -ne $root) {
     foreach ($file in @('pyproject.toml', 'README.md', 'requirements.txt')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination $root -Force
     }
+    $dllSource = Join-Path $sourceRoot 'native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll'
+    if (Test-Path -LiteralPath $dllSource) {
+        Copy-Item -LiteralPath $dllSource -Destination (Join-Path $dataRoot 'SafePCKidsCredentialProvider.dll') -Force
+    }
 }
 
 $venvPython = Join-Path $root '.venv\Scripts\python.exe'

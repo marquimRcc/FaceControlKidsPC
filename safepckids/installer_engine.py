@@ -248,7 +248,15 @@ def get_production_pythonw(root: Path) -> Path:
 def provider_dll(root: Path) -> Path:
     if (root / "runtime" / "pythonw.exe").is_file():
         return root / "native" / "credential_provider_safepckids" / "SafePCKidsCredentialProvider.dll"
-    return PROGRAMDATA_DIR / "SafePCKidsCredentialProvider.dll"
+    installed = PROGRAMDATA_DIR / "SafePCKidsCredentialProvider.dll"
+    source = root / "native" / "credential_provider_safepckids" / "SafePCKidsCredentialProvider.dll"
+    if not installed.exists() and source.exists():
+        try:
+            PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, installed)
+        except Exception as e:
+            logger.warning(f"Aviso ao sincronizar DLL para ProgramData: {e}")
+    return installed
 
 
 def _require_win_cmd(command: list[str], step: str, timeout: float = 15.0) -> None:
@@ -439,6 +447,14 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
         _require_win_cmd(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_agent], "Tarefa SafePCKidsFilhosAgent")
 
         # 9. Registro da DLL do Credential Provider no Registro
+        dll_source = root / "native" / "credential_provider_safepckids" / "SafePCKidsCredentialProvider.dll"
+        installed_dll = PROGRAMDATA_DIR / "SafePCKidsCredentialProvider.dll"
+        if dll_source.exists() and not (root / "runtime" / "pythonw.exe").is_file():
+            try:
+                PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dll_source, installed_dll)
+            except Exception as e:
+                logger.warning(f"Aviso ao sincronizar DLL para ProgramData: {e}")
         dll_target = provider_dll(root)
         if not dll_target.exists():
             raise RuntimeError(f"DLL do Credential Provider nao encontrada: {dll_target}")
