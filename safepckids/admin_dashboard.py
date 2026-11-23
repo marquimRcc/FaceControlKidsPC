@@ -454,6 +454,8 @@ class ProgramsConfigDialog(tk.Toplevel):
 
     def _save(self):
         if save_programs_config(self.config_data):
+            if hasattr(self.master, "refresh") and callable(self.master.refresh):
+                self.master.refresh()
             messagebox.showinfo("Sucesso", "Configuração de programas salva com sucesso!", parent=self)
             self.destroy()
         else:
@@ -497,35 +499,9 @@ class ProgramsConfigDialog(tk.Toplevel):
         )
         cb.pack(anchor="w", pady=(0, 10))
 
-        # Lista de Programas com scrollbar
-        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
-        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
-
-        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
-        self.canvas = canvas
-        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.items_container = tk.Frame(canvas, bg=BG_BOX, padx=10, pady=10)
-        self.win_id = canvas.create_window((0, 0), window=self.items_container, anchor="nw")
-
-        def _on_configure(evt):
-            canvas.itemconfig(self.win_id, width=evt.width)
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        canvas.bind("<Configure>", _on_configure)
-        self.items_container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-
-        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_container)
-
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self._refresh_programs_list()
-
-        # Botoes de Acao
+        # Botoes de Acao (ancorados no rodape para nunca serem ocultados)
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
-        btn_bar.pack(fill=tk.X)
+        btn_bar.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
 
         detect_btn = tk.Button(
             btn_bar,
@@ -570,6 +546,32 @@ class ProgramsConfigDialog(tk.Toplevel):
             command=self._save,
         )
         save_btn.pack(side=tk.RIGHT)
+
+        # Lista de Programas com scrollbar (preenche o centro)
+        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+
+        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        self.canvas = canvas
+        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.items_container = tk.Frame(canvas, bg=BG_BOX, padx=10, pady=10)
+        self.win_id = canvas.create_window((0, 0), window=self.items_container, anchor="nw")
+
+        def _on_configure(evt):
+            canvas.itemconfig(self.win_id, width=evt.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_configure)
+        self.items_container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_container)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self._refresh_programs_list()
 
     def _on_master_toggle(self):
         self.config_data["enabled"] = self.master_var.get()
@@ -779,35 +781,9 @@ class ChildProgramsDialog(tk.Toplevel):
             justify="left",
         ).pack(anchor="w", pady=(0, 12))
 
-        # Lista de Programas com scrollbar
-        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
-        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
-
-        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
-        self.canvas = canvas
-        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.items_frame = tk.Frame(canvas, bg=BG_BOX, padx=12, pady=10)
-        self.win_id = canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
-
-        def _on_configure(evt):
-            canvas.itemconfig(self.win_id, width=evt.width)
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        canvas.bind("<Configure>", _on_configure)
-        self.items_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-
-        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_frame)
-
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self._refresh_list()
-
-        # Botoes de Acao
+        # Botoes de Acao (ancorados no rodape para nunca serem ocultados)
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
-        btn_bar.pack(fill=tk.X)
+        btn_bar.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
 
         detect_btn = tk.Button(
             btn_bar,
@@ -852,6 +828,32 @@ class ChildProgramsDialog(tk.Toplevel):
             command=self._save,
         )
         save_btn.pack(side=tk.RIGHT)
+
+        # Lista de Programas com scrollbar (preenche o centro)
+        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+
+        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        self.canvas = canvas
+        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.items_frame = tk.Frame(canvas, bg=BG_BOX, padx=12, pady=10)
+        self.win_id = canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
+
+        def _on_configure(evt):
+            canvas.itemconfig(self.win_id, width=evt.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_configure)
+        self.items_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_frame)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self._refresh_list()
 
     def _auto_detect(self):
         discovered = discover_installed_programs()
@@ -970,6 +972,8 @@ class ChildProgramsDialog(tk.Toplevel):
 
     def _save(self):
         if save_programs_config(self.config_data):
+            if hasattr(self.parent, "refresh") and callable(self.parent.refresh):
+                self.parent.refresh()
             messagebox.showinfo("Sucesso", f"Permissões de programas para {self.child_name} salvas com sucesso!", parent=self)
             self.destroy()
         else:
@@ -1370,7 +1374,7 @@ class AdminDashboard(tk.Tk):
 
         programs_btn = tk.Button(
             top_btn_frame,
-            text="🚀 Programas",
+            text="🚀 Catálogo de Programas",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_CYAN,
@@ -1801,7 +1805,32 @@ class AdminDashboard(tk.Tk):
             pady=2,
             command=lambda cid=child_id, cname=name: self._rename_child(cid, cname),
         )
-        rename_btn.pack(side=tk.LEFT, padx=(12, 0))
+        rename_btn.pack(side=tk.LEFT, padx=(12, 8))
+
+        # Programas Liberados para este perfil especifico
+        prog_cfg = load_programs_config()
+        all_progs = prog_cfg.get("programs", [])
+        total_p = len(all_progs)
+        allowed_p = sum(1 for p in all_progs if is_program_allowed_for_child(p, child_id))
+        prog_txt = f"🎮 Programas Liberados ({allowed_p}/{total_p})" if total_p > 0 else "🎮 Programas Liberados"
+
+        programs_btn = tk.Button(
+            name_row,
+            text=prog_txt,
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_CYAN,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_CYAN,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=3,
+            highlightbackground=ACCENT_CYAN,
+            highlightthickness=1,
+            command=lambda cid=child_id, cname=name: self._open_child_programs(cid, cname),
+        )
+        programs_btn.pack(side=tk.LEFT, padx=(4, 0))
 
         change_lbl = tk.Label(
             avatar_col,
@@ -1850,22 +1879,6 @@ class AdminDashboard(tk.Tk):
             command=lambda cid=child_id: self._enroll_webcam(cid),
         )
         webcam_btn.pack(side=tk.LEFT, padx=(0, 8))
-
-        programs_btn = tk.Button(
-            photo_btn_row,
-            text="🎮 Programas",
-            font=("Segoe UI", 9, "bold"),
-            bg=BG_BOX,
-            fg=ACCENT_CYAN,
-            activebackground=BG_BOX_HOVER,
-            activeforeground=ACCENT_CYAN,
-            relief=tk.FLAT,
-            cursor="hand2",
-            padx=10,
-            pady=5,
-            command=lambda cid=child_id, cname=name: self._open_child_programs(cid, cname),
-        )
-        programs_btn.pack(side=tk.LEFT, padx=(0, 8))
 
         if samples > 0 or avatar_path:
             clear_btn = tk.Button(
