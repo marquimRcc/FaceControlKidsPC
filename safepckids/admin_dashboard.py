@@ -40,12 +40,20 @@ from .parent_ui_state import filter_children, load_overview, screen_time_label, 
 from .ui_theme import THEMES, load_theme, save_theme, theme_palette
 from .children_pilot import child_pilot_database, windows_token_user
 from .platform_paths import application_data_dir
+from .program_policy import (
+    PROGRAMS_FILE,
+    default_programs_config,
+    discover_installed_programs,
+    is_program_allowed_for_child,
+    load_programs_config,
+    save_programs_config,
+    set_program_allowed_for_child,
+)
 
 logger = logging.getLogger("SafePCKidsAdmin")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT_DIR / "models"
-PROGRAMS_FILE = application_data_dir() / "programas_inicializar.json"
 
 # The classic palette is unchanged. Theme changes rebuild Tk widgets with
 # these active module-level roles, including existing dialogs and card canvases.
@@ -77,48 +85,19 @@ def time_format_hm(seconds: float | int) -> str:
     return f"{minutes} min"
 
 
-class ProgramsConfigDialog(tk.Toplevel):
-    """Janela modal para configurar programas de inicializacao automatica."""
+class ProgramChildToggleDialog(tk.Toplevel):
+    """Sub-modal para alternar permissoes de cada crianca para um programa especifico."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, prog: dict, children: list[tuple[int, str]]):
         super().__init__(parent)
-        self.title("Configurar Programas de Inicialização")
-        self.geometry("540x480")
+        self.prog = prog
+        self.children = children
+        self.title(f"Permissões — {prog.get('name', 'Programa')}")
+        self.geometry("420x360")
         self.configure(bg=BG_MAIN)
         self.transient(parent)
         self.grab_set()
-
-        self.config_data = self._load()
         self._build_ui()
-
-    def _load(self) -> dict:
-        default = {
-            "enabled": True,
-            "description": "Lista de programas a inicializar automaticamente apos o desbloqueio facial",
-            "programs": [
-                {
-                    "name": "Brave",
-                    "executable": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                    "arguments": "",
-                    "enabled": True,
-                }
-            ],
-        }
-        if PROGRAMS_FILE.exists():
-            try:
-                return json.loads(PROGRAMS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return default
-
-    def _save(self):
-        try:
-            PROGRAMS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            PROGRAMS_FILE.write_text(json.dumps(self.config_data, indent=2, ensure_ascii=False), encoding="utf-8")
-            messagebox.showinfo("Sucesso", "Configuração salva com sucesso!", parent=self)
-            self.destroy()
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao salvar configuração: {e}", parent=self)
 
     def _build_ui(self):
         pad = tk.Frame(self, bg=BG_MAIN, padx=16, pady=16)
@@ -126,7 +105,317 @@ class ProgramsConfigDialog(tk.Toplevel):
 
         tk.Label(
             pad,
-            text="🚀 Programas de Inicialização Automática",
+            text=f"Acesso ao Programa: {self.prog.get('name')}",
+            font=("Segoe UI", 11, "bold"),
+            fg=ACCENT_CYAN,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            pad,
+            text="Marque os filhos autorizados a usar este programa:",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(0, 10))
+
+        box = tk.Frame(pad, bg=BG_BOX, padx=12, pady=10, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        box.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+
+        self.child_vars: dict[int, tk.BooleanVar] = {}
+        for cid, name in self.children:
+            allowed = is_program_allowed_for_child(self.prog, cid)
+            var = tk.BooleanVar(value=allowed)
+            self.child_vars[cid] = var
+
+            row = tk.Frame(box, bg=BG_BOX)
+            row.pack(fill=tk.X, pady=4)
+
+            cb = tk.Checkbutton(
+                row,
+                text=name,
+                variable=var,
+                font=("Segoe UI", 10),
+                fg=TEXT_TITLE,
+                bg=BG_BOX,
+                activeforeground=TEXT_TITLE,
+                activebackground=BG_BOX,
+                selectcolor=BG_FIELD,
+                cursor="hand2",
+            )
+            cb.pack(side=tk.LEFT)
+
+        btn_row = tk.Frame(pad, bg=BG_MAIN)
+        btn_row.pack(fill=tk.X)
+
+        ok_btn = tk.Button(
+            btn_row,
+            text="Concluir",
+            font=("Segoe UI", 9, "bold"),
+            bg=ACCENT_BLUE,
+            fg=TEXT_ON_ACCENT,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=4,
+            command=self._apply,
+        )
+        ok_btn.pack(side=tk.RIGHT)
+
+    def _apply(self):
+        for cid, var in self.child_vars.items():
+            set_program_allowed_for_child(self.prog, cid, var.get())
+        self.destroy()
+
+
+class AddProgramDialog(tk.Toplevel):
+    """Janela modal para cadastrar novo programa com selecao automatica ou busca de arquivo."""
+
+    def __init__(self, parent, config_data: dict, on_added):
+        super().__init__(parent)
+        self.config_data = config_data
+        self.on_added = on_added
+        self.title("Adicionar Programa ao Controle")
+        self.geometry("540x440")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+
+        self.discovered = discover_installed_programs()
+        self._build_ui()
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=18, pady=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(
+            pad,
+            text="➕ Adicionar Programa ao Controle",
+            font=("Segoe UI", 13, "bold"),
+            fg=ACCENT_CYAN,
+            bg=BG_MAIN,
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            pad,
+            text="Escolha um programa detectado no computador ou selecione um executável (.exe) manualmente.",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+            wraplength=500,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 14))
+
+        # Secao 1: Programas detectados no PC
+        detected_box = tk.LabelFrame(
+            pad,
+            text=" 🔍 Programas e Jogos Detectados no PC ",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT_BLUE,
+            bg=BG_MAIN,
+            padx=12,
+            pady=10,
+        )
+        detected_box.pack(fill=tk.X, pady=(0, 12))
+
+        det_row = tk.Frame(detected_box, bg=BG_MAIN)
+        det_row.pack(fill=tk.X)
+
+        self.selected_detected = tk.StringVar()
+        detected_names = [p["name"] for p in self.discovered]
+
+        combo = ttk.Combobox(
+            det_row,
+            textvariable=self.selected_detected,
+            values=detected_names,
+            state="readonly",
+            font=("Segoe UI", 9),
+            width=36,
+        )
+        combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+
+        def _on_select_detected(event=None):
+            sel = self.selected_detected.get()
+            for p in self.discovered:
+                if p["name"] == sel:
+                    self.name_var.set(p["name"])
+                    self.exe_var.set(p["executable"])
+                    break
+
+        combo.bind("<<ComboboxSelected>>", _on_select_detected)
+
+        choose_btn = tk.Button(
+            det_row,
+            text="Preencher",
+            font=("Segoe UI", 8, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_CYAN,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=3,
+            command=_on_select_detected,
+        )
+        choose_btn.pack(side=tk.RIGHT)
+
+        # Secao 2: Escolher Arquivo .exe no Computador
+        file_box = tk.LabelFrame(
+            pad,
+            text=" 📁 Ou Escolher Arquivo do Computador ",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT_BLUE,
+            bg=BG_MAIN,
+            padx=12,
+            pady=10,
+        )
+        file_box.pack(fill=tk.X, pady=(0, 12))
+
+        browse_row = tk.Frame(file_box, bg=BG_MAIN)
+        browse_row.pack(fill=tk.X)
+
+        tk.Label(
+            browse_row,
+            text="Selecione o arquivo .exe em qualquer pasta:",
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+        ).pack(side=tk.LEFT)
+
+        def _browse_file():
+            path = filedialog.askopenfilename(
+                parent=self,
+                title="Selecionar Arquivo Executável",
+                filetypes=[("Executáveis (*.exe)", "*.exe"), ("Todos os Arquivos", "*.*")],
+            )
+            if path:
+                self.exe_var.set(path)
+                stem = Path(path).stem
+                suggested = stem.replace("_", " ").replace("-", " ").title()
+                if not self.name_var.get().strip():
+                    self.name_var.set(suggested)
+
+        browse_btn = tk.Button(
+            browse_row,
+            text="📂 Procurar no PC...",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_YELLOW,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=3,
+            command=_browse_file,
+        )
+        browse_btn.pack(side=tk.RIGHT)
+
+        # Secao 3: Campos Finais
+        fields_box = tk.Frame(pad, bg=BG_MAIN)
+        fields_box.pack(fill=tk.X, pady=(0, 14))
+
+        tk.Label(fields_box, text="Nome Amigável:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_MAIN).grid(row=0, column=0, sticky="w", pady=4)
+        self.name_var = tk.StringVar()
+        name_ent = tk.Entry(fields_box, textvariable=self.name_var, font=("Segoe UI", 9), bg=BG_FIELD, fg=TEXT_TITLE, relief=tk.FLAT, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        name_ent.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=4)
+
+        tk.Label(fields_box, text="Executável / Caminho:", font=("Segoe UI", 9, "bold"), fg=TEXT_TITLE, bg=BG_MAIN).grid(row=1, column=0, sticky="w", pady=4)
+        self.exe_var = tk.StringVar()
+        exe_ent = tk.Entry(fields_box, textvariable=self.exe_var, font=("Segoe UI", 9), bg=BG_FIELD, fg=TEXT_TITLE, relief=tk.FLAT, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        exe_ent.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=4)
+
+        fields_box.columnconfigure(1, weight=1)
+
+        # Botoes Rodape
+        btn_row = tk.Frame(pad, bg=BG_MAIN)
+        btn_row.pack(fill=tk.X, pady=(6, 0))
+
+        cancel_btn = tk.Button(
+            btn_row,
+            text="Cancelar",
+            font=("Segoe UI", 9),
+            bg=BG_BOX,
+            fg=TEXT_MUTED,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=self.destroy,
+        )
+        cancel_btn.pack(side=tk.LEFT)
+
+        add_btn = tk.Button(
+            btn_row,
+            text="➕ Adicionar à Lista",
+            font=("Segoe UI", 9, "bold"),
+            bg=ACCENT_BLUE,
+            fg=TEXT_ON_ACCENT,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=5,
+            command=self._confirm,
+        )
+        add_btn.pack(side=tk.RIGHT)
+
+    def _confirm(self):
+        name = self.name_var.get().strip()
+        exe = self.exe_var.get().strip()
+        if not name:
+            messagebox.showwarning("Aviso", "Informe um nome para o programa.", parent=self)
+            return
+        if not exe:
+            messagebox.showwarning("Aviso", "Informe o caminho ou executável do programa.", parent=self)
+            return
+
+        self.config_data.setdefault("programs", []).append({
+            "name": name,
+            "executable": exe,
+            "arguments": "",
+            "enabled": True,
+            "blocked_child_ids": [],
+        })
+        if self.on_added:
+            self.on_added()
+        self.destroy()
+
+
+class ProgramsConfigDialog(tk.Toplevel):
+    """Janela modal para configurar programas e regras gerais de acesso."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.store = getattr(parent, "store", None)
+        self.title("Configurar Programas de Inicialização")
+        self.geometry("640x540")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+
+        self.config_data = load_programs_config()
+        self._build_ui()
+
+    def _get_children(self) -> list[tuple[int, str]]:
+        if self.store:
+            try:
+                return [(pid, name) for pid, name, _ in self.store.people()]
+            except Exception:
+                pass
+        return []
+
+    def _save(self):
+        if save_programs_config(self.config_data):
+            messagebox.showinfo("Sucesso", "Configuração de programas salva com sucesso!", parent=self)
+            self.destroy()
+        else:
+            messagebox.showerror("Erro", "Falha ao salvar configuração de programas.", parent=self)
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=16, pady=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(
+            pad,
+            text="🚀 Catálogo de Programas e Inicialização",
             font=("Segoe UI", 13, "bold"),
             fg=TEXT_TITLE,
             bg=BG_MAIN,
@@ -134,13 +423,13 @@ class ProgramsConfigDialog(tk.Toplevel):
 
         tk.Label(
             pad,
-            text="Estes programas abrem automaticamente na conta Filhos após o desbloqueio facial.",
+            text="Configure os programas permitidos e quais abrem automaticamente após o desbloqueio facial.",
             font=("Segoe UI", 9),
             fg=TEXT_SUB,
             bg=BG_MAIN,
-            wraplength=490,
+            wraplength=590,
             justify="left",
-        ).pack(anchor="w", pady=(0, 14))
+        ).pack(anchor="w", pady=(0, 12))
 
         # Checkbox Master
         self.master_var = tk.BooleanVar(value=self.config_data.get("enabled", False))
@@ -156,14 +445,28 @@ class ProgramsConfigDialog(tk.Toplevel):
             activebackground=BG_MAIN,
             selectcolor=BG_BOX,
         )
-        cb.pack(anchor="w", pady=(0, 12))
+        cb.pack(anchor="w", pady=(0, 10))
 
-        # Lista de Programas
-        list_frame = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
-        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
+        # Lista de Programas com scrollbar
+        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
-        self.items_container = tk.Frame(list_frame, bg=BG_BOX, padx=10, pady=10)
-        self.items_container.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.items_container = tk.Frame(canvas, bg=BG_BOX, padx=10, pady=10)
+        win_id = canvas.create_window((0, 0), window=self.items_container, anchor="nw")
+
+        def _on_configure(evt):
+            canvas.itemconfig(win_id, width=evt.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_configure)
+        self.items_container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self._refresh_programs_list()
 
@@ -171,9 +474,25 @@ class ProgramsConfigDialog(tk.Toplevel):
         btn_bar = tk.Frame(pad, bg=BG_MAIN)
         btn_bar.pack(fill=tk.X)
 
+        detect_btn = tk.Button(
+            btn_bar,
+            text="🔍 Detectar Jogos e Apps",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_YELLOW,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_YELLOW,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=self._auto_detect,
+        )
+        detect_btn.pack(side=tk.LEFT, padx=(0, 8))
+
         add_btn = tk.Button(
             btn_bar,
-            text="➕ Adicionar Programa",
+            text="➕ Adicionar Programa...",
             font=("Segoe UI", 9, "bold"),
             bg=BG_BOX,
             fg=ACCENT_BLUE,
@@ -210,15 +529,18 @@ class ProgramsConfigDialog(tk.Toplevel):
         if not programs:
             tk.Label(
                 self.items_container,
-                text="Nenhum programa cadastrado.",
+                text="Nenhum programa cadastrado.\nClique em 'Detectar Jogos e Apps' para escanear seu computador automaticamente.",
                 font=("Segoe UI", 10),
                 fg=TEXT_MUTED,
                 bg=BG_BOX,
+                justify="center",
             ).pack(pady=20)
             return
 
+        children = self._get_children()
+
         for idx, prog in enumerate(programs):
-            row = tk.Frame(self.items_container, bg=BG_BOX)
+            row = tk.Frame(self.items_container, bg=BG_FIELD, padx=8, pady=6, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
             row.pack(fill=tk.X, pady=4)
 
             var = tk.BooleanVar(value=prog.get("enabled", False))
@@ -230,20 +552,69 @@ class ProgramsConfigDialog(tk.Toplevel):
                 row,
                 variable=var,
                 command=_toggle,
-                bg=BG_BOX,
-                selectcolor=BG_FIELD,
-                activebackground=BG_BOX,
+                bg=BG_FIELD,
+                selectcolor=BG_BOX,
+                activebackground=BG_FIELD,
             )
             cb.pack(side=tk.LEFT)
 
-            info = tk.Label(
-                row,
-                text=f"{prog.get('name', 'Programa')} ({prog.get('executable', '')})",
-                font=("Segoe UI", 9, "bold" if prog.get("enabled") else "normal"),
+            info_frame = tk.Frame(row, bg=BG_FIELD)
+            info_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6)
+
+            info_title = tk.Label(
+                info_frame,
+                text=prog.get("name", "Programa"),
+                font=("Segoe UI", 9, "bold"),
                 fg=TEXT_TITLE if prog.get("enabled") else TEXT_MUTED,
-                bg=BG_BOX,
+                bg=BG_FIELD,
             )
-            info.pack(side=tk.LEFT, padx=4)
+            info_title.pack(anchor="w")
+
+            exe_display = prog.get("executable", "")
+            if len(exe_display) > 45:
+                exe_display = "..." + exe_display[-42:]
+
+            blocked_ids = [int(x) for x in prog.get("blocked_child_ids", [])]
+            if children and blocked_ids:
+                blocked_names = [name for pid, name in children if pid in blocked_ids]
+                if blocked_names:
+                    perm_text = f"⚠️ Bloqueado para: {', '.join(blocked_names)}"
+                    perm_color = ACCENT_YELLOW
+                else:
+                    perm_text = "✓ Liberado para todos"
+                    perm_color = ACCENT_GREEN
+            else:
+                perm_text = "✓ Liberado para todos"
+                perm_color = ACCENT_GREEN
+
+            desc_label = tk.Label(
+                info_frame,
+                text=f"{exe_display}  •  {perm_text}",
+                font=("Segoe UI", 8),
+                fg=perm_color,
+                bg=BG_FIELD,
+            )
+            desc_label.pack(anchor="w")
+
+            if children:
+                def _edit_perms(p=prog):
+                    dlg = ProgramChildToggleDialog(self, p, children)
+                    self.wait_window(dlg)
+                    self._refresh_programs_list()
+
+                perm_btn = tk.Button(
+                    row,
+                    text="👥 Perfis",
+                    font=("Segoe UI", 8, "bold"),
+                    fg=ACCENT_CYAN,
+                    bg=BG_BOX,
+                    relief=tk.FLAT,
+                    cursor="hand2",
+                    padx=6,
+                    pady=2,
+                    command=_edit_perms,
+                )
+                perm_btn.pack(side=tk.RIGHT, padx=4)
 
             def _del(index=idx):
                 self.config_data["programs"].pop(index)
@@ -254,29 +625,282 @@ class ProgramsConfigDialog(tk.Toplevel):
                 text="✕",
                 font=("Segoe UI", 8, "bold"),
                 fg=ACCENT_RED,
-                bg=BG_BOX,
+                bg=BG_FIELD,
                 relief=tk.FLAT,
                 cursor="hand2",
                 command=_del,
             )
-            del_btn.pack(side=tk.RIGHT)
+            del_btn.pack(side=tk.RIGHT, padx=2)
+
+    def _auto_detect(self):
+        discovered = discover_installed_programs()
+        existing_names = {p.get("name", "").strip().lower() for p in self.config_data.get("programs", [])}
+        existing_exes = {Path(p.get("executable", "")).name.lower() for p in self.config_data.get("programs", []) if p.get("executable")}
+
+        added_count = 0
+        added_names = []
+        for item in discovered:
+            p_name = item["name"].strip().lower()
+            e_name = Path(item["executable"]).name.lower()
+            if p_name not in existing_names and e_name not in existing_exes:
+                self.config_data.setdefault("programs", []).append(item)
+                existing_names.add(p_name)
+                existing_exes.add(e_name)
+                added_count += 1
+                added_names.append(item["name"])
+
+        if added_count > 0:
+            self._refresh_programs_list()
+            sample_str = ", ".join(added_names[:4])
+            if len(added_names) > 4:
+                sample_str += f" e mais {len(added_names) - 4} outros"
+            messagebox.showinfo(
+                "Detecção Concluída",
+                f"{added_count} programa(s) encontrado(s) no PC e adicionado(s) à lista:\n\n{sample_str}",
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Detecção Concluída",
+                "Todos os jogos e programas encontrados no computador já estão cadastrados na lista.",
+                parent=self,
+            )
 
     def _add_program(self):
-        name = simpledialog.askstring("Novo Programa", "Nome amigável (ex: Navegador Edge, Minecraft):", parent=self)
-        if not name:
-            return
-        exe = simpledialog.askstring("Executável", "Nome do executável ou comando (ex: msedge.exe, notepad.exe):", parent=self)
-        if not exe:
-            return
-        args = simpledialog.askstring("Argumentos (opcional)", "Argumentos adicionais (ou deixe em branco):", parent=self) or ""
+        AddProgramDialog(self, self.config_data, on_added=self._refresh_programs_list)
 
-        self.config_data.setdefault("programs", []).append({
-            "name": name.strip(),
-            "executable": exe.strip(),
-            "arguments": args.strip(),
-            "enabled": True,
-        })
-        self._refresh_programs_list()
+
+class ChildProgramsDialog(tk.Toplevel):
+    """Janela modal para configurar quais programas estao liberados para um perfil especifico."""
+
+    def __init__(self, parent, child_id: int, child_name: str):
+        super().__init__(parent)
+        self.parent = parent
+        self.child_id = int(child_id)
+        self.child_name = child_name
+        self.title(f"🎮 Programas Liberados — {child_name}")
+        self.geometry("620x540")
+        self.configure(bg=BG_MAIN)
+        self.transient(parent)
+        self.grab_set()
+
+        self.config_data = load_programs_config()
+        self._build_ui()
+
+    def _build_ui(self):
+        pad = tk.Frame(self, bg=BG_MAIN, padx=18, pady=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        header_frame = tk.Frame(pad, bg=BG_MAIN)
+        header_frame.pack(fill=tk.X, pady=(0, 6))
+
+        tk.Label(
+            header_frame,
+            text=f"🎮 Programas de {self.child_name}",
+            font=("Segoe UI", 13, "bold"),
+            fg=ACCENT_CYAN,
+            bg=BG_MAIN,
+        ).pack(side=tk.LEFT)
+
+        tk.Label(
+            pad,
+            text=(
+                f"Marque os programas autorizados para o perfil de {self.child_name}.\n"
+                f"Programas desmarcados (bloqueados) não abrem no desbloqueio e são encerrados automaticamente se iniciados."
+            ),
+            font=("Segoe UI", 9),
+            fg=TEXT_SUB,
+            bg=BG_MAIN,
+            wraplength=570,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
+        # Lista de Programas com scrollbar
+        list_container = tk.Frame(pad, bg=BG_BOX, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
+
+        canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.items_frame = tk.Frame(canvas, bg=BG_BOX, padx=12, pady=10)
+        win_id = canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
+
+        def _on_configure(evt):
+            canvas.itemconfig(win_id, width=evt.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", _on_configure)
+        self.items_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._refresh_list()
+
+        # Botoes de Acao
+        btn_bar = tk.Frame(pad, bg=BG_MAIN)
+        btn_bar.pack(fill=tk.X)
+
+        detect_btn = tk.Button(
+            btn_bar,
+            text="🔍 Detectar Jogos e Apps",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_YELLOW,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_YELLOW,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=self._auto_detect,
+        )
+        detect_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+        add_btn = tk.Button(
+            btn_bar,
+            text="➕ Adicionar Programa...",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_BLUE,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=self._add_program,
+        )
+        add_btn.pack(side=tk.LEFT)
+
+        save_btn = tk.Button(
+            btn_bar,
+            text="💾 Salvar Alterações",
+            font=("Segoe UI", 9, "bold"),
+            bg=ACCENT_BLUE,
+            fg=TEXT_ON_ACCENT,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=5,
+            command=self._save,
+        )
+        save_btn.pack(side=tk.RIGHT)
+
+    def _auto_detect(self):
+        discovered = discover_installed_programs()
+        existing_names = {p.get("name", "").strip().lower() for p in self.config_data.get("programs", [])}
+        existing_exes = {Path(p.get("executable", "")).name.lower() for p in self.config_data.get("programs", []) if p.get("executable")}
+
+        added_count = 0
+        added_names = []
+        for item in discovered:
+            p_name = item["name"].strip().lower()
+            e_name = Path(item["executable"]).name.lower()
+            if p_name not in existing_names and e_name not in existing_exes:
+                self.config_data.setdefault("programs", []).append(item)
+                existing_names.add(p_name)
+                existing_exes.add(e_name)
+                added_count += 1
+                added_names.append(item["name"])
+
+        if added_count > 0:
+            self._refresh_list()
+            sample_str = ", ".join(added_names[:4])
+            if len(added_names) > 4:
+                sample_str += f" e mais {len(added_names) - 4} outros"
+            messagebox.showinfo(
+                "Detecção Concluída",
+                f"{added_count} programa(s) encontrado(s) no PC e adicionado(s) à lista:\n\n{sample_str}",
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Detecção Concluída",
+                "Todos os jogos e programas encontrados no computador já estão cadastrados na lista.",
+                parent=self,
+            )
+
+    def _refresh_list(self):
+        for w in self.items_frame.winfo_children():
+            w.destroy()
+
+        programs = self.config_data.get("programs", [])
+        if not programs:
+            tk.Label(
+                self.items_frame,
+                text="Nenhum programa cadastrado no sistema.\nClique em 'Detectar Jogos e Apps' para encontrar automaticamente.",
+                font=("Segoe UI", 10),
+                fg=TEXT_MUTED,
+                bg=BG_BOX,
+                justify="center",
+            ).pack(pady=30)
+            return
+
+        for idx, prog in enumerate(programs):
+            card = tk.Frame(self.items_frame, bg=BG_FIELD, padx=10, pady=8, highlightbackground=BORDER_DEFAULT, highlightthickness=1)
+            card.pack(fill=tk.X, pady=4)
+
+            is_allowed = is_program_allowed_for_child(prog, self.child_id)
+            var = tk.BooleanVar(value=is_allowed)
+
+            left_frame = tk.Frame(card, bg=BG_FIELD)
+            left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            status_lbl = tk.Label(
+                card,
+                text="✓ Liberado" if is_allowed else "✕ Bloqueado",
+                font=("Segoe UI", 9, "bold"),
+                fg=ACCENT_GREEN if is_allowed else ACCENT_RED,
+                bg=BG_FIELD,
+                padx=8,
+            )
+            status_lbl.pack(side=tk.RIGHT)
+
+            def _toggle(p=prog, v=var, lbl=status_lbl):
+                allowed = v.get()
+                set_program_allowed_for_child(p, self.child_id, allowed)
+                if allowed:
+                    lbl.config(text="✓ Liberado", fg=ACCENT_GREEN)
+                else:
+                    lbl.config(text="✕ Bloqueado", fg=ACCENT_RED)
+
+            cb = tk.Checkbutton(
+                left_frame,
+                text=prog.get("name", "Programa"),
+                variable=var,
+                command=_toggle,
+                font=("Segoe UI", 10, "bold"),
+                fg=TEXT_TITLE,
+                bg=BG_FIELD,
+                activeforeground=TEXT_TITLE,
+                activebackground=BG_FIELD,
+                selectcolor=BG_BOX,
+                cursor="hand2",
+            )
+            cb.pack(anchor="w")
+
+            exe_text = prog.get("executable", "")
+            if len(exe_text) > 55:
+                exe_text = "..." + exe_text[-52:]
+            tk.Label(
+                left_frame,
+                text=exe_text or "(caminho não especificado)",
+                font=("Segoe UI", 8),
+                fg=TEXT_MUTED,
+                bg=BG_FIELD,
+            ).pack(anchor="w", padx=(24, 0))
+
+    def _add_program(self):
+        AddProgramDialog(self, self.config_data, on_added=self._refresh_list)
+
+    def _save(self):
+        if save_programs_config(self.config_data):
+            messagebox.showinfo("Sucesso", f"Permissões de programas para {self.child_name} salvas com sucesso!", parent=self)
+            self.destroy()
+        else:
+            messagebox.showerror("Erro", "Falha ao salvar as permissões de programas.", parent=self)
+
+
 
 
 class WeeklyUsageDialog(tk.Toplevel):
@@ -1132,6 +1756,22 @@ class AdminDashboard(tk.Tk):
         )
         webcam_btn.pack(side=tk.LEFT, padx=(0, 8))
 
+        programs_btn = tk.Button(
+            photo_btn_row,
+            text="🎮 Programas",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_CYAN,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_CYAN,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=lambda cid=child_id, cname=name: self._open_child_programs(cid, cname),
+        )
+        programs_btn.pack(side=tk.LEFT, padx=(0, 8))
+
         if samples > 0 or avatar_path:
             clear_btn = tk.Button(
                 photo_btn_row,
@@ -1814,6 +2454,10 @@ class AdminDashboard(tk.Tk):
     def _open_programs_config(self):
         """Abre a janela de configuracao de programas de inicializacao."""
         ProgramsConfigDialog(self)
+
+    def _open_child_programs(self, child_id: int, child_name: str):
+        """Abre a janela modal de programas liberados para um filho especifico."""
+        ChildProgramsDialog(self, child_id, child_name)
 
     def _open_history(self):
         """Abre o historico de uso dos ultimos 7 dias."""

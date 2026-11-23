@@ -45,6 +45,7 @@ from .windows_pipe_api import configure_kernel32
 from .session_transition_policy import decide_child_transition, TransitionDecision
 from .quota_vm_shadow_integration import VmBoundShadow, shadow_enabled_for_vm
 from .agent_watchdog import write_agent_heartbeat
+from .program_policy import enforce_child_process_restrictions
 
 AUTH_PIPE_NAME = os.environ.get("SAFEPCKIDS_AUTH_PIPE", r"\\.\pipe\SafePCKidsAuthPipe")
 
@@ -622,6 +623,7 @@ def run_agent():
     logger.info("Monitoramento ativo iniciado. Criança ativa inicial: %s (ID %s)", tracker.current_child_name, tracker.current_child_id)
     write_agent_heartbeat()
     last_heartbeat_mono = time.monotonic()
+    last_process_check_mono = time.monotonic()
 
     # 2. Loop continuo de monitoramento (a cada 2 segundos)
     while True:
@@ -854,6 +856,25 @@ def run_agent():
                             color="#89DCEB",
                             duration_ms=5000,
                         )
+
+                    # Fiscalizacao periodica de processos bloqueados para o perfil ativo
+                    if (now_mono - last_process_check_mono) >= 2.0:
+                        last_process_check_mono = now_mono
+                        try:
+                            terminated_progs = enforce_child_process_restrictions(
+                                tracker.current_child_id,
+                                tracker.current_child_name,
+                            )
+                            for prog_name in terminated_progs:
+                                show_toast(
+                                    "🚫 Programa Bloqueado",
+                                    f"O programa '{prog_name}' não está liberado para o perfil de {tracker.current_child_name}.",
+                                    icon="🚫",
+                                    color="#F38BA8",
+                                    duration_ms=6000,
+                                )
+                        except Exception as err:
+                            logger.debug("Falha na checagem de programas bloqueados: %s", err)
 
                     # Shadow may observe this child, but NEVER change rem,
                     # trigger a lock, or select a facial identity.

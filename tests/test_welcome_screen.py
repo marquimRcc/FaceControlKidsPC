@@ -220,6 +220,43 @@ class TestWelcomeScreen(unittest.TestCase):
                 app._check_for_child_switch()
                 mock_switch.assert_called_once_with(4, "Ana", 5400)
 
+    def test_launch_configured_programs_filters_blocked_child(self):
+        with tempfile.TemporaryDirectory() as td:
+            cfg_file = Path(td) / "programas.json"
+            cfg_file.write_text(json.dumps({
+                "enabled": True,
+                "programs": [
+                    {
+                        "name": "Roblox",
+                        "executable": str(Path(td) / "roblox.exe"),
+                        "enabled": True,
+                        "blocked_child_ids": [1],
+                    },
+                    {
+                        "name": "Brave",
+                        "executable": str(Path(td) / "brave.exe"),
+                        "enabled": True,
+                        "blocked_child_ids": [],
+                    },
+                ]
+            }), encoding="utf-8")
+            (Path(td) / "roblox.exe").write_text("", encoding="utf-8")
+            (Path(td) / "brave.exe").write_text("", encoding="utf-8")
+
+            with patch("safepckids.welcome_screen.CONFIG_FILE", cfg_file), \
+                 patch("safepckids.welcome_screen.is_active_console_user_filhos", return_value=True), \
+                 patch.dict(os.environ, {"USERNAME": "Filhos"}), \
+                 patch("safepckids.welcome_screen.get_current_child_info", return_value=(1, "Miguel", 3600)), \
+                 patch("safepckids.welcome_screen.is_process_running_in_current_session", return_value=False), \
+                 patch("subprocess.Popen") as mock_popen:
+
+                welcome_screen._programs_launched = False
+                welcome_screen.launch_configured_programs()
+
+                self.assertEqual(mock_popen.call_count, 1)
+                called_exe = mock_popen.call_args[0][0][0]
+                self.assertIn("brave.exe", called_exe)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -142,6 +142,77 @@ class TestAdminDashboard(unittest.TestCase):
                 self.assertFalse(samples_updated[0]["selected"])
                 self.assertTrue(samples_updated[4]["selected"])
 
+    def test_child_programs_dialog_toggle_and_save(self):
+        import tkinter as tk
+        from safepckids.admin_dashboard import ChildProgramsDialog
+        from safepckids.program_policy import load_programs_config, set_program_allowed_for_child
+
+        temp_dir = tempfile.TemporaryDirectory()
+        cfg_file = Path(temp_dir.name) / "programas.json"
+        cfg_file.write_text(json.dumps({
+            "enabled": True,
+            "programs": [
+                {"name": "Roblox", "executable": "RobloxPlayerBeta.exe", "enabled": True, "blocked_child_ids": []},
+                {"name": "Brave", "executable": "brave.exe", "enabled": True, "blocked_child_ids": []},
+            ]
+        }), encoding="utf-8")
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            with patch("safepckids.admin_dashboard.PROGRAMS_FILE", cfg_file), \
+                 patch("safepckids.program_policy.PROGRAMS_FILE", cfg_file), \
+                 patch("safepckids.admin_dashboard.messagebox.showinfo"):
+                dialog = ChildProgramsDialog(root, child_id=1, child_name="Miguel")
+
+                prog_roblox = dialog.config_data["programs"][0]
+                set_program_allowed_for_child(prog_roblox, 1, False)
+
+                dialog._save()
+
+                saved_cfg = load_programs_config(cfg_file)
+                self.assertEqual(saved_cfg["programs"][0]["blocked_child_ids"], [1])
+                self.assertEqual(saved_cfg["programs"][1]["blocked_child_ids"], [])
+                dialog.destroy()
+        finally:
+            root.destroy()
+            temp_dir.cleanup()
+
+    def test_add_program_dialog_and_auto_detect(self):
+        import tkinter as tk
+        from safepckids.admin_dashboard import AddProgramDialog, ProgramsConfigDialog
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            cfg = {"enabled": True, "programs": []}
+            added = []
+            with patch("safepckids.admin_dashboard.tk.Toplevel.grab_set"), \
+                 patch("safepckids.admin_dashboard.discover_installed_programs", return_value=[
+                    {"name": "Roblox", "executable": r"C:\Roblox\RobloxPlayerBeta.exe", "arguments": "", "enabled": True, "blocked_child_ids": []},
+                    {"name": "Minecraft", "executable": r"C:\Minecraft\launcher.exe", "arguments": "", "enabled": True, "blocked_child_ids": []},
+                 ]):
+                dlg = AddProgramDialog(root, cfg, on_added=lambda: added.append(True))
+                dlg.name_var.set("Roblox")
+                dlg.exe_var.set(r"C:\Roblox\RobloxPlayerBeta.exe")
+                dlg._confirm()
+
+                self.assertEqual(len(cfg["programs"]), 1)
+                self.assertEqual(cfg["programs"][0]["name"], "Roblox")
+                self.assertEqual(len(added), 1)
+
+                root.store = None
+                with patch("safepckids.admin_dashboard.load_programs_config", return_value=cfg), \
+                     patch("safepckids.admin_dashboard.messagebox.showinfo"):
+                    p_dlg = ProgramsConfigDialog(root)
+                    p_dlg._auto_detect()
+                    names = [p["name"] for p in p_dlg.config_data["programs"]]
+                    self.assertIn("Roblox", names)
+                    self.assertIn("Minecraft", names)
+                    p_dlg.destroy()
+        finally:
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

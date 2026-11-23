@@ -24,6 +24,7 @@ from .avatar_utils import get_child_avatar_path
 from .children_pilot import child_pilot_database
 from .platform_paths import application_data_dir
 from .storage import Storage
+from .program_policy import is_program_allowed_for_child
 
 CONFIG_FILE = application_data_dir() / "programas_inicializar.json"
 LAST_UNLOCK_FILE = application_data_dir() / "last_unlock.json"
@@ -188,9 +189,14 @@ def launch_configured_programs():
     if not cfg.get("enabled", False):
         return
 
+    cid, child_name, _ = get_current_child_info()
+
     programs = cfg.get("programs", [])
     for prog in programs:
         if not prog.get("enabled", False):
+            continue
+        if cid is not None and not is_program_allowed_for_child(prog, cid):
+            logger.info("Programa '%s' nao esta liberado para o perfil %s (ID %s). Ignorando inicializacao.", prog.get("name"), child_name, cid)
             continue
         exe = prog.get("executable", "").strip()
         args = prog.get("arguments", "").strip()
