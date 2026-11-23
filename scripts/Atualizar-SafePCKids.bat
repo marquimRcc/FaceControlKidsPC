@@ -18,6 +18,7 @@ cd /d "%~dp0.."
 echo [1/3] Parando servicos anteriores...
 schtasks /end /tn SafePCKidsBootAuth 2>nul
 schtasks /end /tn SafePCKidsAuthService 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetTCPConnection -LocalPort 8765 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'python*' -and ($_.CommandLine -like '*safepckids.auth_service*' -or $_.CommandLine -like '*safepckids.boot_auth*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
 
 echo [2/3] Sincronizando arquivos e bibliotecas...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Preparar-Ambiente-SafePCKids.ps1"
