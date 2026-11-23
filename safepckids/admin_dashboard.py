@@ -85,6 +85,47 @@ def time_format_hm(seconds: float | int) -> str:
     return f"{minutes} min"
 
 
+def _enable_modal_scroll(toplevel: tk.Toplevel, canvas: tk.Canvas, container: Optional[tk.Widget] = None):
+    """Habilita rolagem suave do mousewheel na janela modal sem vazar para a janela principal."""
+    def _on_wheel(event):
+        try:
+            if not canvas.winfo_exists():
+                return "break"
+            if getattr(event, "num", None) == 4:
+                canvas.yview_scroll(-2, "units")
+            elif getattr(event, "num", None) == 5:
+                canvas.yview_scroll(2, "units")
+            elif getattr(event, "delta", None):
+                delta = int(-1 * (event.delta / 60))
+                if delta == 0:
+                    delta = -1 if event.delta > 0 else 1
+                canvas.yview_scroll(delta, "units")
+            return "break"
+        except Exception:
+            return "break"
+
+    toplevel.bind("<MouseWheel>", _on_wheel)
+    toplevel.bind("<Button-4>", _on_wheel)
+    toplevel.bind("<Button-5>", _on_wheel)
+    canvas.bind("<MouseWheel>", _on_wheel)
+    canvas.bind("<Button-4>", _on_wheel)
+    canvas.bind("<Button-5>", _on_wheel)
+    if container:
+        container.bind("<MouseWheel>", _on_wheel)
+        container.bind("<Button-4>", _on_wheel)
+        container.bind("<Button-5>", _on_wheel)
+    return _on_wheel
+
+
+def _bind_tree_mousewheel(widget: tk.Widget, handler) -> None:
+    """Propaga o evento de mousewheel recursivamente para widgets filhos."""
+    widget.bind("<MouseWheel>", handler, add="+")
+    widget.bind("<Button-4>", handler, add="+")
+    widget.bind("<Button-5>", handler, add="+")
+    for child in widget.winfo_children():
+        _bind_tree_mousewheel(child, handler)
+
+
 class ProgramChildToggleDialog(tk.Toplevel):
     """Sub-modal para alternar permissoes de cada crianca para um programa especifico."""
 
@@ -95,8 +136,11 @@ class ProgramChildToggleDialog(tk.Toplevel):
         self.title(f"Permissões — {prog.get('name', 'Programa')}")
         self.geometry("420x360")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(380, 280)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
         self._build_ui()
 
     def _build_ui(self):
@@ -178,8 +222,11 @@ class AddProgramDialog(tk.Toplevel):
         self.title("Adicionar Programa ao Controle")
         self.geometry("540x440")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(480, 380)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
 
         self.discovered = discover_installed_programs()
         self._build_ui()
@@ -388,8 +435,11 @@ class ProgramsConfigDialog(tk.Toplevel):
         self.title("Configurar Programas de Inicialização")
         self.geometry("640x540")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(560, 420)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
 
         self.config_data = load_programs_config()
         self._build_ui()
@@ -452,21 +502,24 @@ class ProgramsConfigDialog(tk.Toplevel):
         list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        self.canvas = canvas
         scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         self.items_container = tk.Frame(canvas, bg=BG_BOX, padx=10, pady=10)
-        win_id = canvas.create_window((0, 0), window=self.items_container, anchor="nw")
+        self.win_id = canvas.create_window((0, 0), window=self.items_container, anchor="nw")
 
         def _on_configure(evt):
-            canvas.itemconfig(win_id, width=evt.width)
+            canvas.itemconfig(self.win_id, width=evt.width)
             canvas.configure(scrollregion=canvas.bbox("all"))
 
         canvas.bind("<Configure>", _on_configure)
         self.items_container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_container)
+
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self._refresh_programs_list()
 
@@ -632,6 +685,14 @@ class ProgramsConfigDialog(tk.Toplevel):
             )
             del_btn.pack(side=tk.RIGHT, padx=2)
 
+        if hasattr(self, "_wheel_handler"):
+            _bind_tree_mousewheel(self.items_container, self._wheel_handler)
+        self.update_idletasks()
+        if hasattr(self, "canvas"):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            if hasattr(self, "win_id"):
+                self.canvas.itemconfig(self.win_id, width=self.canvas.winfo_width())
+
     def _auto_detect(self):
         discovered = discover_installed_programs()
         existing_names = {p.get("name", "").strip().lower() for p in self.config_data.get("programs", [])}
@@ -681,8 +742,11 @@ class ChildProgramsDialog(tk.Toplevel):
         self.title(f"🎮 Programas Liberados — {child_name}")
         self.geometry("620x540")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(560, 420)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
 
         self.config_data = load_programs_config()
         self._build_ui()
@@ -720,21 +784,24 @@ class ChildProgramsDialog(tk.Toplevel):
         list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         canvas = tk.Canvas(list_container, bg=BG_BOX, highlightthickness=0)
+        self.canvas = canvas
         scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         self.items_frame = tk.Frame(canvas, bg=BG_BOX, padx=12, pady=10)
-        win_id = canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
+        self.win_id = canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
 
         def _on_configure(evt):
-            canvas.itemconfig(win_id, width=evt.width)
+            canvas.itemconfig(self.win_id, width=evt.width)
             canvas.configure(scrollregion=canvas.bbox("all"))
 
         canvas.bind("<Configure>", _on_configure)
         self.items_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._wheel_handler = _enable_modal_scroll(self, canvas, self.items_frame)
+
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self._refresh_list()
 
@@ -890,6 +957,14 @@ class ChildProgramsDialog(tk.Toplevel):
                 bg=BG_FIELD,
             ).pack(anchor="w", padx=(24, 0))
 
+        if hasattr(self, "_wheel_handler"):
+            _bind_tree_mousewheel(self.items_frame, self._wheel_handler)
+        self.update_idletasks()
+        if hasattr(self, "canvas"):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            if hasattr(self, "win_id"):
+                self.canvas.itemconfig(self.win_id, width=self.canvas.winfo_width())
+
     def _add_program(self):
         AddProgramDialog(self, self.config_data, on_added=self._refresh_list)
 
@@ -911,8 +986,11 @@ class WeeklyUsageDialog(tk.Toplevel):
         self.title("Histórico de Uso dos Últimos 7 Dias")
         self.geometry("660x540")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(540, 400)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
         self.store = store
         self._build_ui()
 
@@ -945,8 +1023,10 @@ class WeeklyUsageDialog(tk.Toplevel):
         container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
 
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        wheel_handler = _enable_modal_scroll(self, canvas, container)
+
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         people = self.store.people()
         if not people:
@@ -983,6 +1063,8 @@ class WeeklyUsageDialog(tk.Toplevel):
 
                 tk.Label(row, text=time_format_hm(sec), font=("Segoe UI", 9, "bold"), fg=ACCENT_CYAN, bg=BG_BOX, width=10, anchor="e").pack(side=tk.RIGHT)
 
+        _bind_tree_mousewheel(container, wheel_handler)
+
 
 class CurfewConfigDialog(tk.Toplevel):
     """Janela modal para configurar horario permitido de uso (toque de recolher)."""
@@ -992,8 +1074,11 @@ class CurfewConfigDialog(tk.Toplevel):
         self.title("Configurar Horário Permitido")
         self.geometry("540x420")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(460, 360)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
         self.store = store
         self._build_ui()
 
@@ -1072,8 +1157,11 @@ class PinConfigDialog(tk.Toplevel):
         self.title("Configurar PIN de Acesso dos Pais")
         self.geometry("460x340")
         self.configure(bg=BG_MAIN)
+        self.resizable(True, True)
+        self.minsize(420, 300)
         self.transient(parent)
         self.grab_set()
+        self.bind("<Escape>", lambda e: self.destroy())
         self.store = store
         self._build_ui()
 
@@ -1453,6 +1541,13 @@ class AdminDashboard(tk.Tk):
 
         def _on_mousewheel(event):
             try:
+                w = getattr(event, "widget", None)
+                if w is not None:
+                    try:
+                        if w.winfo_toplevel() != self:
+                            return
+                    except Exception:
+                        pass
                 if self.canvas.winfo_exists():
                     # Windows event.delta e tipicamente +/- 120
                     self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -1974,9 +2069,11 @@ class AdminDashboard(tk.Tk):
         win.title(f"Escolher Foto do Perfil — {child_name}")
         win.configure(bg=BG_MAIN)
         win.geometry("700x630")
-        win.resizable(False, False)
+        win.resizable(True, True)
+        win.minsize(580, 500)
         win.transient(self)
         win.grab_set()
+        win.bind("<Escape>", lambda e: win.destroy())
 
         # Mantem referencias das imagens em win para impedir garbage collection
         win._gallery_images = []

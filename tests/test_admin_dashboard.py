@@ -213,6 +213,70 @@ class TestAdminDashboard(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_modals_resizable_esc_and_mousewheel_guard(self):
+        import tkinter as tk
+        from safepckids.admin_dashboard import (
+            ChildProgramsDialog,
+            ProgramsConfigDialog,
+            AddProgramDialog,
+            WeeklyUsageDialog,
+            CurfewConfigDialog,
+            PinConfigDialog,
+        )
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            cfg = {"enabled": True, "programs": []}
+            mock_store = MagicMock()
+            mock_store.people.return_value = []
+            mock_store.get_curfew_config.return_value = (False, "08:00", "20:00")
+            mock_store.get_parent_pin.return_value = None
+
+            with patch("safepckids.admin_dashboard.tk.Toplevel.grab_set"), \
+                 patch("safepckids.admin_dashboard.load_programs_config", return_value=cfg), \
+                 patch("safepckids.admin_dashboard.discover_installed_programs", return_value=[]):
+                
+                # 1. ChildProgramsDialog
+                c_dlg = ChildProgramsDialog(root, child_id=1, child_name="Miguel")
+                self.assertEqual(c_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in c_dlg.bind()))
+                self.assertTrue(hasattr(c_dlg, "_wheel_handler"))
+                c_dlg.destroy()
+
+                # 2. ProgramsConfigDialog
+                root.store = None
+                p_dlg = ProgramsConfigDialog(root)
+                self.assertEqual(p_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in p_dlg.bind()))
+                p_dlg.destroy()
+
+                # 3. AddProgramDialog
+                a_dlg = AddProgramDialog(root, cfg, on_added=lambda: None)
+                self.assertEqual(a_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in a_dlg.bind()))
+                a_dlg.destroy()
+
+                # 4. WeeklyUsageDialog
+                w_dlg = WeeklyUsageDialog(root, mock_store)
+                self.assertEqual(w_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in w_dlg.bind()))
+                w_dlg.destroy()
+
+                # 5. CurfewConfigDialog
+                curf_dlg = CurfewConfigDialog(root, mock_store)
+                self.assertEqual(curf_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in curf_dlg.bind()))
+                curf_dlg.destroy()
+
+                # 6. PinConfigDialog
+                pin_dlg = PinConfigDialog(root, mock_store)
+                self.assertEqual(pin_dlg.resizable(), (True, True))
+                self.assertTrue(any("Escape" in b for b in pin_dlg.bind()))
+                pin_dlg.destroy()
+        finally:
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()
