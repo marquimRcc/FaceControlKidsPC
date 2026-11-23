@@ -1880,6 +1880,22 @@ class AdminDashboard(tk.Tk):
         )
         webcam_btn.pack(side=tk.LEFT, padx=(0, 8))
 
+        programs_btn_row = tk.Button(
+            photo_btn_row,
+            text="🎮 Programas",
+            font=("Segoe UI", 9, "bold"),
+            bg=BG_BOX,
+            fg=ACCENT_CYAN,
+            activebackground=BG_BOX_HOVER,
+            activeforeground=ACCENT_CYAN,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            command=lambda cid=child_id, cname=name: self._open_child_programs(cid, cname),
+        )
+        programs_btn_row.pack(side=tk.LEFT, padx=(0, 8))
+
         if samples > 0 or avatar_path:
             clear_btn = tk.Button(
                 photo_btn_row,
