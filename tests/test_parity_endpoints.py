@@ -285,6 +285,15 @@ class TestInstallerEngineHealthAndUninstall(unittest.TestCase):
             self.assertIn("filhos_agent", health)
             self.assertIn("credential_provider", health)
 
+    def test_verify_runtime_health_access_denied_recognizes_registration(self):
+        """Valida que tarefas pertencentes a SYSTEM ou outro usuario (retornando Acesso negado) sao consideradas registradas."""
+        with patch("safepckids.installer_engine._run_win_cmd") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=1, stdout="", stderr="ERRO: Acesso negado.")
+            health = installer_engine.verify_runtime_health()
+            self.assertTrue(health["auth_service"]["registered"])
+            self.assertTrue(health["filhos_agent"]["registered"])
+            self.assertTrue(health["boot_auth"]["registered"])
+
     def test_uninstall_system_flow(self):
         """Valida que o desinstalador encerra tarefas, remove chaves e atalhos na ordem de seguranca."""
         with patch("safepckids.installer_engine._run_win_cmd") as mock_cmd:

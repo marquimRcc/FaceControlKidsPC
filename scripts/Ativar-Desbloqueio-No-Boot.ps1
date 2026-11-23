@@ -31,8 +31,15 @@ if (-not (Test-Path -LiteralPath $python)) {
 $models = Join-Path $root 'models'
 $dataDir = 'C:\ProgramData\SafePCKids'
 $dll = Join-Path $dataDir 'SafePCKidsCredentialProvider.dll'
+$sourceDll = Join-Path $root 'native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll'
+if (-not (Test-Path -LiteralPath $dll -PathType Leaf) -and (Test-Path -LiteralPath $sourceDll -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $dataDir)) {
+        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $sourceDll -Destination $dll -Force
+}
 if (Test-Path -LiteralPath (Join-Path $root 'runtime\python.exe')) {
-    $dll = Join-Path $root 'native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll'
+    $dll = $sourceDll
 }
 $dbFile = Join-Path $dataDir 'criancas.sqlite3'
 if (-not (Test-Path -LiteralPath $dbFile)) {

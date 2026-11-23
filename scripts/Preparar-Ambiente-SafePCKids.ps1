@@ -39,6 +39,14 @@ if ($sourceRoot -ne $root) {
     }
 }
 
+$dllDest = Join-Path $dataRoot 'SafePCKidsCredentialProvider.dll'
+if (-not (Test-Path -LiteralPath $dllDest)) {
+    $dllSource = Join-Path $root 'native\credential_provider_safepckids\SafePCKidsCredentialProvider.dll'
+    if (Test-Path -LiteralPath $dllSource) {
+        Copy-Item -LiteralPath $dllSource -Destination $dllDest -Force
+    }
+}
+
 $venvPython = Join-Path $root '.venv\Scripts\python.exe'
 
 if (-not (Test-Path -LiteralPath $venvPython)) {

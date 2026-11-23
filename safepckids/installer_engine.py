@@ -607,9 +607,15 @@ def verify_runtime_health() -> Dict[str, Any]:
         return health
 
     try:
+        def _task_registered(proc) -> bool:
+            if getattr(proc, "returncode", 1) == 0:
+                return True
+            out = (getattr(proc, "stdout", "") + getattr(proc, "stderr", "")).lower()
+            return "acesso negado" in out or "access is denied" in out
+
         # 1. Consulta SafePCKidsAuthService
         p = _run_win_cmd(["schtasks", "/query", "/tn", "SafePCKidsAuthService", "/fo", "csv"], timeout=5.0)
-        if p.returncode == 0:
+        if _task_registered(p):
             health["auth_service"]["registered"] = True
             if any(w in p.stdout for w in ("Running", "Em execução", "Executando")):
                 health["auth_service"]["running"] = True
@@ -626,11 +632,10 @@ def verify_runtime_health() -> Dict[str, Any]:
 
         # 2. Consulta SafePCKidsFilhosAgent
         p_agent = _run_win_cmd(["schtasks", "/query", "/tn", "SafePCKidsFilhosAgent", "/fo", "csv"], timeout=5.0)
-        if p_agent.returncode == 0:
-            health["filhos_agent"]["registered"] = True
+        health["filhos_agent"]["registered"] = _task_registered(p_agent)
 
         p_boot = _run_win_cmd(["schtasks", "/query", "/tn", "SafePCKidsBootAuth"], timeout=5.0)
-        health["boot_auth"]["registered"] = p_boot.returncode == 0
+        health["boot_auth"]["registered"] = _task_registered(p_boot)
         p_user = _run_win_cmd(["net", "user", "Filhos"], timeout=5.0)
         health["filhos_user"]["exists"] = p_user.returncode == 0
 
