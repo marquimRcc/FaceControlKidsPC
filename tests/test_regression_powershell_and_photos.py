@@ -189,6 +189,43 @@ class TestPowerShellLoopAndSubprocesses(unittest.TestCase):
             app_window.open_app_window(mode="dashboard", port=55555)
             mock_edge_popen.assert_called_once()
             self.assertEqual(mock_edge_popen.call_args.kwargs.get("creationflags"), expected_flag)
+            edge_cmd = mock_edge_popen.call_args.args[0]
+            self.assertIn("--guest", edge_cmd)
+            self.assertTrue(any(arg.startswith("--app=http://127.0.0.1:55555/?mode=dashboard&desktop_bridge=") for arg in edge_cmd))
+
+    def test_desktop_bridge_opens_only_local_remote_in_default_browser(self):
+        import safepckids.app_window as app_window
+
+        bridge, bridge_port = app_window.start_desktop_bridge(8765)
+        try:
+            with patch.object(app_window.webbrowser, "open", return_value=True) as mock_open:
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{bridge_port}/open-remote",
+                    data=json.dumps({"url": "http://127.0.0.1:8765/remote"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:8765"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    self.assertEqual(resp.status, 200)
+                    self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:8765")
+                    body = json.loads(resp.read().decode("utf-8"))
+                    self.assertTrue(body.get("ok"))
+                mock_open.assert_called_once_with("http://127.0.0.1:8765/remote")
+
+            with patch.object(app_window.webbrowser, "open") as mock_open_bad:
+                bad_req = urllib.request.Request(
+                    f"http://127.0.0.1:{bridge_port}/open-remote",
+                    data=json.dumps({"url": "https://evil.example/phish"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(bad_req, timeout=5.0)
+                self.assertEqual(ctx.exception.code, 400)
+                mock_open_bad.assert_not_called()
+        finally:
+            bridge.shutdown()
+            bridge.server_close()
 
 
 class TestPhotoAndAvatarIsolation(unittest.TestCase):

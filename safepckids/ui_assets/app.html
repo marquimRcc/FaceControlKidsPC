@@ -707,7 +707,7 @@
 
       <!-- Acoes -->
       <div class="flex items-center justify-between pt-2 border-t border-slate-800">
-        <button onclick="window.open('/remote', '_blank')" class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold">
+        <button onclick="openRemoteInDefaultBrowser()" class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold">
           Abrir neste PC ↗️
         </button>
         <button onclick="closeRemoteModal()" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white">
@@ -1559,12 +1559,38 @@
       if (m) m.classList.add('hidden');
     }
 
+    const _desktopBridgeParam = new URLSearchParams(window.location.search).get('desktop_bridge');
+    if (_desktopBridgeParam && /^\d+$/.test(_desktopBridgeParam)) {
+      try { sessionStorage.setItem('safepckids_desktop_bridge', _desktopBridgeParam); } catch (e) {}
+    }
+
     function copyRemoteUrl() {
       const urlInput = document.getElementById('remoteUrlDisplay');
       if (urlInput && urlInput.value) {
         navigator.clipboard.writeText(urlInput.value);
         showToast("Link copiado para a área de transferência!");
       }
+    }
+
+    async function openRemoteInDefaultBrowser() {
+      const remoteUrl = `${window.location.origin}/remote`;
+      let bridgePort = new URLSearchParams(window.location.search).get('desktop_bridge');
+      if (!bridgePort) {
+        try { bridgePort = sessionStorage.getItem('safepckids_desktop_bridge'); } catch (e) {}
+      }
+      if (bridgePort && /^\d+$/.test(bridgePort)) {
+        try {
+          const resp = await fetch(`http://127.0.0.1:${bridgePort}/open-remote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: remoteUrl })
+          });
+          if (resp.ok) return;
+        } catch (e) {
+          // Fallback para window.open abaixo caso a ponte local nao responda
+        }
+      }
+      window.open(remoteUrl, '_blank');
     }
 
     // Modal de Cadastro de Filho
