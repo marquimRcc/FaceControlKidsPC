@@ -703,6 +703,7 @@
             <span>Copiar</span>
           </button>
         </div>
+        <p id="remoteIpFallbackHint" class="text-[11px] font-mono text-slate-400"></p>
       </div>
 
       <!-- Acoes -->
@@ -1843,11 +1844,17 @@
       try {
         const resp = await fetch('/api/remote/status');
         const data = await resp.json();
-        const port = window.location.port || '14220';
+        const port = window.location.port || '8765';
         const ip = data.local_ip || window.location.hostname || '127.0.0.1';
-        const remoteUrl = `http://${ip}:${port}/remote`;
+        const host = data.remote_hostname || ip;
+        const remoteUrl = `http://${host}:${port}/remote`;
+        const ipUrl = `http://${ip}:${port}/remote`;
         const urlInput = document.getElementById('remoteUrlDisplay');
         if (urlInput) urlInput.value = remoteUrl;
+        const ipHint = document.getElementById('remoteIpFallbackHint');
+        if (ipHint) {
+          ipHint.textContent = (host !== ip) ? `Alternativa por IP atual: ${ipUrl}` : '';
+        }
         const qrImg = document.getElementById('remoteQrCodeImg');
         if (qrImg) {
           qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(remoteUrl)}`;

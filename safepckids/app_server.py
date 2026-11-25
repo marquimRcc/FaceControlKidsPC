@@ -50,6 +50,7 @@ from .avatar_utils import (
     AVATAR_DIR,
 )
 from .camera_service import CameraService
+from .mdns_responder import DEFAULT_REMOTE_HOSTNAME, MdnsResponder
 from .program_policy import (
     discover_installed_programs,
     is_program_allowed_for_child,
@@ -1433,6 +1434,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             "session_active": session_active,
             "has_pin": has_pin,
             "local_ip": get_local_ip(),
+            "remote_hostname": DEFAULT_REMOTE_HOSTNAME,
             "server_time": time.time(),
         })
 
@@ -1531,6 +1533,10 @@ def run_app_server(port: Optional[int] = None, host: str = "0.0.0.0") -> Tuple[T
     except OSError:
         server = ThreadingHTTPServer(("127.0.0.1", port), SafePCKidsApiHandler)
         host = "127.0.0.1"
+    if host == "0.0.0.0":
+        mdns = MdnsResponder(DEFAULT_REMOTE_HOSTNAME, ip_provider=get_local_ip)
+        mdns.start()
+        setattr(server, "_mdns_responder", mdns)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     logger.info(f"Servidor SafePCKids ativo em http://{host}:{port}")
