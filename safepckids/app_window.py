@@ -72,7 +72,10 @@ def open_app_window(mode: str = "auto", port: int | None = None) -> int:
             "--window-size=1220,840",
             f"--user-data-dir={profile_dir}",
             "--no-first-run",
-            "--no-default-browser-check"
+            "--no-default-browser-check",
+            "--disable-sync",
+            "--disable-signin-promo",
+            "--disable-features=msImplicitSignIn",
         ]
         try:
             creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
