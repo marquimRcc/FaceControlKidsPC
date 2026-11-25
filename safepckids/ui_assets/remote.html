@@ -384,6 +384,15 @@
       }
     }
 
+    function escapeHtml(text) {
+      return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function renderProfilesCarousel(children, sessionActive, activeId) {
       const container = document.getElementById('profiles-carousel');
       const countBadge = document.getElementById('profiles-count-badge');
@@ -392,6 +401,9 @@
       countBadge.innerText = `${children.length} ${children.length === 1 ? 'perfil' : 'perfis'}`;
 
       container.innerHTML = children.map(c => {
+        const safeName = escapeHtml(c.name || 'Perfil');
+        const safeAvatarUrl = c.avatar_url ? escapeHtml(c.avatar_url) : '';
+        const safeId = Number(c.id) || 0;
         const isSelected = (c.id === selectedChildId);
         const isUsing = (c.id === activeId && sessionActive);
         const m = c.remaining_minutes || 0;
@@ -405,19 +417,19 @@
           ? `<span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>` 
           : '';
 
-        const avatarMarkup = c.avatar_url 
-          ? `<img src="${c.avatar_url}" alt="${c.name}" class="w-8 h-8 rounded-lg object-cover border border-cyan-400/30">`
+        const avatarMarkup = safeAvatarUrl
+          ? `<img src="${safeAvatarUrl}" alt="${safeName}" class="w-8 h-8 rounded-lg object-cover border border-cyan-400/30">`
           : `<div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-xs">👦</div>`;
 
         return `
-          <button type="button" onclick="selectProfile(${c.id})" class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-left ${borderClass}">
+          <button type="button" onclick="selectProfile(${safeId})" class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-left ${borderClass}">
             <div class="relative">
               ${avatarMarkup}
               <div class="absolute -top-1 -right-1">${activeBadge}</div>
             </div>
             <div>
               <div class="text-xs font-bold text-white flex items-center gap-1 leading-tight">
-                ${c.name}
+                ${safeName}
               </div>
               <div class="text-[10px] font-mono text-cyan-400 leading-tight">
                 ${timeStr}

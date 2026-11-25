@@ -486,12 +486,12 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
         for task in ("SafePCKidsAuthService", "SafePCKidsFilhosAgent", "SafePCKidsBootAuth"):
             _require_win_cmd(["schtasks", "/query", "/tn", task], f"Verificacao da tarefa {task}")
 
-        # 11. Regra de Firewall padrao para permitir Acesso Remoto na rede local (TCP 8765)
+        # 11. Regra de Firewall padrao para permitir Acesso Remoto apenas na rede privada (TCP 8765)
         ps_fw = (
             "Remove-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' -ErrorAction SilentlyContinue; "
             "New-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' "
             "-DisplayName 'SafePCKids - Controle Remoto HTTP (8765)' "
-            "-Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765 -Profile Any -Enabled True | Out-Null"
+            "-Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765 -Profile Private -Enabled True | Out-Null"
         )
         _require_win_cmd(
             ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_fw],

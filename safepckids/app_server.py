@@ -6,6 +6,7 @@ e os endpoints REST locais para comunicacao em tempo real entre o frontend e o s
 from __future__ import annotations
 
 import base64
+import hmac
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json
 import logging
@@ -20,7 +21,7 @@ import threading
 import time
 import traceback
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
@@ -49,6 +50,14 @@ from .avatar_utils import (
     AVATAR_DIR,
 )
 from .camera_service import CameraService
+from .program_policy import (
+    discover_installed_programs,
+    is_program_allowed_for_child,
+    load_programs_config,
+    normalize_program_entry,
+    save_programs_config,
+    set_program_allowed_for_child,
+)
 
 
 logger = logging.getLogger("safepckids.app_server")
@@ -57,6 +66,68 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 ROOT_DIR = Path(__file__).resolve().parent.parent
 ASSETS_DIR = ROOT_DIR / "assets"
 _DEFAULT_PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SafePCKids"
+MAX_POST_BODY_BYTES = 1_048_576
+API_SESSION_TOKEN = secrets.token_urlsafe(32)
+PIN_MAX_FAILURES = 5
+PIN_WINDOW_SECONDS = 60.0
+PIN_LOCKOUT_SECONDS = 60.0
+
+
+def _is_loopback_ip(host: str) -> bool:
+    clean = str(host or "").strip().lower()
+    if clean.startswith("::ffff:"):
+        clean = clean[7:]
+    return clean in ("127.0.0.1", "::1", "localhost")
+
+
+def _is_loopback_origin(url_value: str) -> bool:
+    try:
+        parsed = urlparse(str(url_value or "").strip())
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    return _is_loopback_ip(parsed.hostname or "")
+
+
+def _is_remote_allowed_path(path: str) -> bool:
+    if path in (
+        "/remote",
+        "/remote/",
+        "/remote.html",
+        "/api/remote/status",
+        "/api/remote/pause",
+        "/api/remote/resume",
+        "/favicon.ico",
+    ):
+        return True
+    if path.startswith("/assets/"):
+        return True
+    if path.startswith("/api/child/") and path.endswith("/avatar"):
+        return True
+    return False
+
+
+def _resolve_safe_subpath(base_dir: Path, rel_path: str) -> Optional[Path]:
+    """Resolve um subcaminho relativo garantindo que permaneca dentro de base_dir."""
+    decoded = unquote(rel_path or "")
+    if "\x00" in decoded:
+        return None
+    normalized = decoded.replace("\\", "/").lstrip("/")
+    if not normalized or normalized.startswith("/"):
+        return None
+    parts = [p for p in normalized.split("/") if p]
+    if any(p in (".", "..") or ":" in p for p in parts):
+        return None
+    base_resolved = base_dir.resolve()
+    candidate = (base_resolved / Path(*parts)).resolve()
+    try:
+        if not candidate.is_relative_to(base_resolved):
+            return None
+    except AttributeError:
+        if str(candidate) != str(base_resolved) and not str(candidate).startswith(str(base_resolved) + os.sep):
+            return None
+    return candidate
 
 
 def _fotos_dir() -> Path:
@@ -64,6 +135,13 @@ def _fotos_dir() -> Path:
     if PROGRAMDATA_DIR != _DEFAULT_PROGRAMDATA_DIR:
         return PROGRAMDATA_DIR / "fotos"
     return AVATAR_DIR
+
+
+def _programs_config_path() -> Optional[Path]:
+    """Resolve o arquivo de programas preservando overrides de testes em PROGRAMDATA_DIR."""
+    if PROGRAMDATA_DIR != _DEFAULT_PROGRAMDATA_DIR:
+        return PROGRAMDATA_DIR / "programas_inicializar.json"
+    return None
 
 
 def get_ui_dir() -> Path:
@@ -86,22 +164,130 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
     shutdown_requested: bool = False
     is_installing: bool = False
     install_lock = threading.Lock()
+    require_api_token: bool = os.environ.get("SAFEPCKIDS_REQUIRE_API_TOKEN", "") == "1"
+    _pin_failures: Dict[str, list[float]] = {}
+    _pin_lockouts: Dict[str, float] = {}
+    _pin_rate_lock = threading.Lock()
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
+
+    def _client_ip(self) -> str:
+        addr = getattr(self, "client_address", None)
+        if isinstance(addr, tuple) and addr:
+            return str(addr[0])
+        return "127.0.0.1"
+
+    def _is_loopback(self) -> bool:
+        return _is_loopback_ip(self._client_ip())
+
+    def _send_cors_headers(self, allow_remote: bool = False) -> None:
+        origin = self.headers.get("Origin", "") if hasattr(self, "headers") else ""
+        if allow_remote:
+            self.send_header("Access-Control-Allow-Origin", origin or "*")
+            self.send_header("Vary", "Origin")
+        elif origin and _is_loopback_origin(origin):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-SafePCKids-Token, X-Session-Token")
+
+    def _is_valid_api_token(self, token: str) -> bool:
+        if not token:
+            return False
+        if hmac.compare_digest(token, API_SESSION_TOKEN):
+            return True
+        try:
+            secret = get_session_secret()
+            if secret and secret != "1" and hmac.compare_digest(token, secret):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _check_request_security(self, path: str) -> bool:
+        is_remote_route = _is_remote_allowed_path(path)
+        if not self._is_loopback() and not is_remote_route:
+            self.send_json({"ok": False, "error": "Acesso restrito ao computador local."}, 403)
+            return False
+
+        if not is_remote_route and hasattr(self, "headers"):
+            origin = self.headers.get("Origin", "")
+            referer = self.headers.get("Referer", "")
+            fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+            if origin and not _is_loopback_origin(origin):
+                self.send_json({"ok": False, "error": "Origem nao autorizada."}, 403)
+                return False
+            if referer and not _is_loopback_origin(referer):
+                self.send_json({"ok": False, "error": "Referer nao autorizado."}, 403)
+                return False
+            if fetch_site == "cross-site":
+                self.send_json({"ok": False, "error": "Requisicao cross-site bloqueada."}, 403)
+                return False
+
+            provided = (
+                self.headers.get("X-Session-Token")
+                or self.headers.get("X-SafePCKids-Token")
+                or ""
+            ).strip()
+            if provided and not self._is_valid_api_token(provided):
+                self.send_json({"ok": False, "error": "Token de sessao invalido."}, 401)
+                return False
+            if self.require_api_token and path.startswith("/api/") and path != "/api/heartbeat":
+                if not self._is_valid_api_token(provided):
+                    self.send_json({"ok": False, "error": "Autenticacao de sessao obrigatoria."}, 401)
+                    return False
+        return True
+
+    def _check_pin_rate_limit(self) -> bool:
+        ip = self._client_ip()
+        now = time.monotonic()
+        with SafePCKidsApiHandler._pin_rate_lock:
+            until = SafePCKidsApiHandler._pin_lockouts.get(ip, 0.0)
+            if until > now:
+                retry_after = max(1, int(until - now))
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": f"Muitas tentativas de PIN incorretas. Aguarde {retry_after}s.",
+                    },
+                    429,
+                )
+                return False
+            if ip in SafePCKidsApiHandler._pin_lockouts:
+                del SafePCKidsApiHandler._pin_lockouts[ip]
+        return True
+
+    def _record_pin_attempt(self, success: bool) -> None:
+        ip = self._client_ip()
+        now = time.monotonic()
+        with SafePCKidsApiHandler._pin_rate_lock:
+            if success:
+                SafePCKidsApiHandler._pin_failures.pop(ip, None)
+                SafePCKidsApiHandler._pin_lockouts.pop(ip, None)
+                return
+            recent = [
+                t for t in SafePCKidsApiHandler._pin_failures.get(ip, [])
+                if now - t <= PIN_WINDOW_SECONDS
+            ]
+            recent.append(now)
+            if len(recent) >= PIN_MAX_FAILURES:
+                SafePCKidsApiHandler._pin_lockouts[ip] = now + PIN_LOCKOUT_SECONDS
+                SafePCKidsApiHandler._pin_failures.pop(ip, None)
+            else:
+                SafePCKidsApiHandler._pin_failures[ip] = recent
 
     def send_json(self, data: Any, status: int = 200) -> None:
         SafePCKidsApiHandler.last_activity_time = time.time()
         payload_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
         try:
+            req_path = urlparse(getattr(self, "path", "/")).path
             self.close_connection = True
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload_bytes)))
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.send_header("Connection", "close")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-SafePCKids-Token, X-Session-Token")
+            self._send_cors_headers(allow_remote=_is_remote_allowed_path(req_path))
             self.end_headers()
             self.wfile.write(payload_bytes)
             self.wfile.flush()
@@ -109,10 +295,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             logger.debug(f"Conexao fechada pelo cliente ao enviar JSON: {e}")
 
     def do_OPTIONS(self) -> None:
+        req_path = urlparse(getattr(self, "path", "/")).path
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._send_cors_headers(allow_remote=_is_remote_allowed_path(req_path))
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-SafePCKids-Token, X-Session-Token")
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -120,6 +306,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = parsed.path
+            if not self._check_request_security(path):
+                return
 
             if path in ("/remote", "/remote/", "/remote.html"):
                 self.serve_static(path)
@@ -153,6 +341,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_child_photo_sample(path)
             elif path.startswith("/api/children/") and path.endswith("/photos"):
                 self.handle_child_photos_list(path)
+            elif path.startswith("/api/children/") and path.endswith("/programs"):
+                self.handle_child_programs_get(path)
             elif path.startswith("/assets/") or path == "/favicon.ico":
                 self.serve_asset(path)
             elif path.startswith("/ui/") or path == "/" or path == "/index.html":
@@ -171,15 +361,34 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         SafePCKidsApiHandler.last_activity_time = time.time()
         try:
-            length = int(self.headers.get("Content-Length", 0))
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if not self._check_request_security(path):
+                return
+
+            raw_len = self.headers.get("Content-Length", "0")
+            try:
+                length = int(raw_len)
+            except (ValueError, TypeError):
+                self.send_json({"ok": False, "error": "Content-Length invalido."}, 400)
+                return
+
+            if length < 0:
+                self.send_json({"ok": False, "error": "Content-Length negativo."}, 400)
+                return
+            if length > MAX_POST_BODY_BYTES:
+                self.send_json({"ok": False, "error": "Corpo da requisicao excede o limite permitido."}, 413)
+                return
+
             raw_body = self.rfile.read(length) if length > 0 else b"{}"
             try:
                 body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
             except Exception:
-                body = {}
-
-            parsed = urlparse(self.path)
-            path = parsed.path
+                self.send_json({"ok": False, "error": "JSON invalido no corpo da requisicao."}, 400)
+                return
+            if not isinstance(body, dict):
+                self.send_json({"ok": False, "error": "O corpo JSON deve ser um objeto."}, 400)
+                return
 
             if path == "/api/install":
                 self.handle_install(body)
@@ -197,6 +406,14 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_child_photo_select(path, body)
             elif path.startswith("/api/children/") and path.endswith("/recapture"):
                 self.handle_child_recapture(path, body)
+            elif path.startswith("/api/children/") and path.endswith("/programs"):
+                self.handle_child_programs_post(path, body)
+            elif path == "/api/programs/add":
+                self.handle_program_add(body)
+            elif path == "/api/programs/delete":
+                self.handle_program_delete(body)
+            elif path == "/api/programs/detect":
+                self.handle_programs_detect()
             elif path == "/api/uninstall":
                 self.handle_uninstall(body)
             elif path == "/api/child/bonus":
@@ -404,6 +621,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             SafePCKidsApiHandler.install_lock.release()
 
     def handle_auth_verify(self, data: Dict[str, Any]) -> None:
+        if not self._check_pin_rate_limit():
+            return
         pin = str(data.get("pin", "")).strip()
         if not DEFAULT_DB_FILE.exists():
             self.send_json({"ok": False, "error": "Banco de dados ainda nao inicializado."}, 400)
@@ -413,9 +632,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         try:
             stored = store.get_setting(AUTH_SETTING)
             if not stored:
+                self._record_pin_attempt(True)
                 self.send_json({"ok": True, "message": "Sem PIN configurado."})
                 return
             valid = verify_pin(pin, stored)
+            self._record_pin_attempt(valid)
             self.send_json({"ok": valid, "error": None if valid else "PIN incorreto."})
         finally:
             store.close()
@@ -446,6 +667,12 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             children = []
             total_used_today = 0
             total_limit_today = 0
+            enabled_programs = []
+            try:
+                programs_cfg = load_programs_config(_programs_config_path())
+                enabled_programs = [p for p in programs_cfg.get("programs", []) if p.get("enabled", True)]
+            except Exception as e:
+                logger.debug(f"Falha ao ler politica de programas para dashboard: {e}")
 
             for p in people:
                 cid = p[0]
@@ -457,6 +684,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
                 total_used_today += used_sec
                 total_limit_today += limit_sec
+                allowed_count = sum(1 for prog in enabled_programs if is_program_allowed_for_child(prog, cid))
 
                 children.append({
                     "id": cid,
@@ -468,7 +696,9 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                     "bonus_seconds": bonus_sec,
                     "remaining_formatted": f"{remaining_sec // 3600}h {(remaining_sec % 3600) // 60}m",
                     "used_formatted": f"{used_sec // 3600}h {(used_sec % 3600) // 60}m",
-                    "percent_remaining": round((remaining_sec / max(1, limit_sec + bonus_sec)) * 100)
+                    "percent_remaining": round((remaining_sec / max(1, limit_sec + bonus_sec)) * 100),
+                    "programs_allowed_count": allowed_count,
+                    "programs_total_count": len(enabled_programs),
                 })
 
             summary = {
@@ -619,6 +849,204 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         res = cam.start_enrollment(cid, DEFAULT_DB_FILE)
         self.send_json(res)
 
+    @staticmethod
+    def _parse_child_id_from_path(path: str, expected_suffix: str) -> Optional[int]:
+        parts = [p for p in path.split("/") if p]
+        if len(parts) != 4 or parts[0] != "api" or parts[1] != "children" or parts[3] != expected_suffix:
+            return None
+        try:
+            cid = int(parts[2])
+        except (ValueError, TypeError):
+            return None
+        return cid if cid > 0 else None
+
+    @staticmethod
+    def _serialize_programs_for_child(cfg: Dict[str, Any], cid: int) -> list[Dict[str, Any]]:
+        items = []
+        for idx, prog in enumerate(cfg.get("programs", [])):
+            items.append({
+                "index": idx,
+                "name": prog.get("name", "Programa"),
+                "executable": prog.get("executable", ""),
+                "arguments": prog.get("arguments", ""),
+                "enabled": bool(prog.get("enabled", True)),
+                "allowed": is_program_allowed_for_child(prog, cid),
+            })
+        return items
+
+    def handle_child_programs_get(self, path: str) -> None:
+        cid = self._parse_child_id_from_path(path, "programs")
+        if cid is None:
+            self.send_json({"ok": False, "error": "ID da crianca invalido."}, 400)
+            return
+
+        cfg = load_programs_config(_programs_config_path())
+        self.send_json({
+            "ok": True,
+            "child_id": cid,
+            "policy_enabled": bool(cfg.get("enabled", True)),
+            "programs": self._serialize_programs_for_child(cfg, cid),
+        })
+
+    def handle_child_programs_post(self, path: str, data: Dict[str, Any]) -> None:
+        cid = self._parse_child_id_from_path(path, "programs")
+        if cid is None:
+            self.send_json({"ok": False, "error": "ID da crianca invalido."}, 400)
+            return
+
+        cfg_path = _programs_config_path()
+        cfg = load_programs_config(cfg_path)
+        programs = cfg.get("programs", [])
+
+        if "policy_enabled" in data:
+            cfg["enabled"] = bool(data.get("policy_enabled"))
+
+        permissions = data.get("permissions")
+        if isinstance(permissions, list):
+            for entry in permissions:
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    idx = int(entry.get("index", -1))
+                except (ValueError, TypeError):
+                    continue
+                if 0 <= idx < len(programs):
+                    set_program_allowed_for_child(programs[idx], cid, bool(entry.get("allowed", True)))
+        elif "index" in data and "allowed" in data:
+            try:
+                idx = int(data.get("index", -1))
+            except (ValueError, TypeError):
+                idx = -1
+            if not (0 <= idx < len(programs)):
+                self.send_json({"ok": False, "error": "Indice de programa invalido."}, 400)
+                return
+            set_program_allowed_for_child(programs[idx], cid, bool(data.get("allowed", True)))
+        else:
+            self.send_json({"ok": False, "error": "Informe 'permissions' ou 'index' e 'allowed'."}, 400)
+            return
+
+        if not save_programs_config(cfg, cfg_path):
+            self.send_json({"ok": False, "error": "Falha ao salvar permissoes de programas."}, 500)
+            return
+
+        self.send_json({
+            "ok": True,
+            "message": "Permissoes de programas atualizadas com sucesso.",
+            "programs": self._serialize_programs_for_child(cfg, cid),
+        })
+
+    def handle_program_add(self, data: Dict[str, Any]) -> None:
+        name = str(data.get("name", "")).strip()
+        executable = str(data.get("executable", "")).strip().strip("\"'")
+        arguments = str(data.get("arguments", "")).strip()
+
+        if not name:
+            self.send_json({"ok": False, "error": "Informe o nome do programa."}, 400)
+            return
+        if not executable:
+            self.send_json({"ok": False, "error": "Informe o executavel ou caminho do programa."}, 400)
+            return
+
+        cfg_path = _programs_config_path()
+        cfg = load_programs_config(cfg_path)
+        programs = cfg.setdefault("programs", [])
+
+        exe_name = Path(executable).name.lower()
+        for existing in programs:
+            if existing.get("name", "").strip().lower() == name.lower():
+                self.send_json({"ok": False, "error": f"O programa '{name}' ja esta cadastrado."}, 409)
+                return
+            ex_exe = existing.get("executable", "").strip()
+            if ex_exe and Path(ex_exe).name.lower() == exe_name:
+                self.send_json({"ok": False, "error": f"O executavel '{exe_name}' ja esta cadastrado."}, 409)
+                return
+
+        entry = normalize_program_entry({
+            "name": name,
+            "executable": executable,
+            "arguments": arguments,
+            "enabled": True,
+            "blocked_child_ids": [],
+        })
+        if data.get("child_id") is not None and data.get("allowed") is False:
+            set_program_allowed_for_child(entry, data.get("child_id"), False)
+
+        programs.append(entry)
+        if not save_programs_config(cfg, cfg_path):
+            self.send_json({"ok": False, "error": "Falha ao salvar programa no catalogo."}, 500)
+            return
+
+        self.send_json({"ok": True, "message": f"Programa '{name}' adicionado.", "program": entry})
+
+    def handle_program_delete(self, data: Dict[str, Any]) -> None:
+        cfg_path = _programs_config_path()
+        cfg = load_programs_config(cfg_path)
+        programs = cfg.get("programs", [])
+
+        removed = None
+        if "index" in data and data.get("index") is not None:
+            try:
+                idx = int(data.get("index"))
+            except (ValueError, TypeError):
+                self.send_json({"ok": False, "error": "Indice de programa invalido."}, 400)
+                return
+            if not (0 <= idx < len(programs)):
+                self.send_json({"ok": False, "error": "Programa nao encontrado."}, 404)
+                return
+            removed = programs.pop(idx)
+        elif data.get("name"):
+            target = str(data.get("name", "")).strip().lower()
+            for idx, p in enumerate(programs):
+                if p.get("name", "").strip().lower() == target:
+                    removed = programs.pop(idx)
+                    break
+            if removed is None:
+                self.send_json({"ok": False, "error": "Programa nao encontrado."}, 404)
+                return
+        else:
+            self.send_json({"ok": False, "error": "Informe o indice ou nome do programa."}, 400)
+            return
+
+        if not save_programs_config(cfg, cfg_path):
+            self.send_json({"ok": False, "error": "Falha ao remover programa do catalogo."}, 500)
+            return
+
+        self.send_json({"ok": True, "message": f"Programa '{removed.get('name', '')}' removido."})
+
+    def handle_programs_detect(self) -> None:
+        cfg_path = _programs_config_path()
+        cfg = load_programs_config(cfg_path)
+        programs = cfg.setdefault("programs", [])
+
+        existing_names = {p.get("name", "").strip().lower() for p in programs}
+        existing_exes = {
+            Path(p.get("executable", "")).name.lower()
+            for p in programs
+            if p.get("executable", "").strip()
+        }
+
+        added_names = []
+        for item in discover_installed_programs():
+            p_name = item.get("name", "").strip().lower()
+            e_name = Path(item.get("executable", "")).name.lower()
+            if p_name and p_name not in existing_names and e_name not in existing_exes:
+                programs.append(normalize_program_entry(item))
+                existing_names.add(p_name)
+                if e_name:
+                    existing_exes.add(e_name)
+                added_names.append(item["name"])
+
+        if added_names and not save_programs_config(cfg, cfg_path):
+            self.send_json({"ok": False, "error": "Falha ao salvar programas detectados."}, 500)
+            return
+
+        self.send_json({
+            "ok": True,
+            "added_count": len(added_names),
+            "added_names": added_names,
+            "total": len(programs),
+        })
+
     def handle_child_bonus(self, data: Dict[str, Any]) -> None:
         try:
             cid = int(data.get("child_id", 0))
@@ -719,6 +1147,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             store.close()
 
     def handle_uninstall(self, body: Dict[str, Any]) -> None:
+        if not self._check_pin_rate_limit():
+            return
         pin = str(body.get("pin", "")).strip()
         remove_data = bool(body.get("remove_data", False))
         remove_user = bool(body.get("remove_windows_user", False))
@@ -728,11 +1158,13 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             try:
                 stored = store.get_setting(AUTH_SETTING)
                 if stored and not verify_pin(pin, stored):
+                    self._record_pin_attempt(False)
                     self.send_json({"ok": False, "error": "PIN incorreto para confirmar a desinstalacao."}, 400)
                     return
             finally:
                 store.close()
 
+        self._record_pin_attempt(True)
         ok, msg = uninstall_system(remove_data=remove_data, remove_windows_user=remove_user)
         self.send_json({"ok": ok, "message": msg})
 
@@ -760,7 +1192,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._send_cors_headers(allow_remote=False)
         self.end_headers()
         try:
             cam = CameraService.get_instance()
@@ -863,8 +1295,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         if path == "/favicon.ico":
             target = ASSETS_DIR / "safepckids.ico"
         else:
-            rel = path.lstrip("/assets/")
-            target = ASSETS_DIR / rel
+            rel = path[len("/assets/"):] if path.startswith("/assets/") else path
+            target = _resolve_safe_subpath(ASSETS_DIR, rel)
+            if target is None:
+                self.send_error(403, "Caminho de asset nao permitido")
+                return
 
         if not target.exists() or not target.is_file():
             self.send_error(404, "Asset nao encontrado")
@@ -890,8 +1325,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         elif path in ("/remote", "/remote/", "/remote.html"):
             target = target_dir / "remote.html"
         else:
-            rel = path.lstrip("/ui/")
-            target = target_dir / rel
+            rel = path[len("/ui/"):] if path.startswith("/ui/") else path
+            target = _resolve_safe_subpath(target_dir, rel)
+            if target is None:
+                self.send_error(403, "Caminho estatico nao permitido")
+                return
 
         if not target.exists() or not target.is_file():
             target = target_dir / "app.html"
@@ -905,6 +1343,12 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
         try:
             content = target.read_bytes()
+            if target.name == "app.html" and self._is_loopback():
+                html_text = content.decode("utf-8")
+                token_script = f'<script>window.__SAFEPCKIDS_TOKEN__ = {json.dumps(API_SESSION_TOKEN)};</script>'
+                if "</head>" in html_text and "__SAFEPCKIDS_TOKEN__" not in html_text:
+                    html_text = html_text.replace("</head>", f"  {token_script}\n</head>", 1)
+                    content = html_text.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))
@@ -993,6 +1437,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         })
 
     def handle_remote_pause(self, data: Dict[str, Any]) -> None:
+        if not self._check_pin_rate_limit():
+            return
         if not DEFAULT_DB_FILE.exists():
             self.send_json({"ok": False, "error": "Sistema ainda nao configurado"}, 400)
             return
@@ -1002,8 +1448,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             has_pin = bool(store.get_parent_pin())
             pin = str(data.get("pin", "")).strip()
             if has_pin and not store.verify_parent_pin(pin):
+                self._record_pin_attempt(False)
                 self.send_json({"ok": False, "error": "PIN incorreto"}, 401)
                 return
+            self._record_pin_attempt(True)
 
             dur_min = data.get("duration_minutes")
             if dur_min is None or int(dur_min) <= 0:
@@ -1026,6 +1474,8 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             store.close()
 
     def handle_remote_resume(self, data: Dict[str, Any]) -> None:
+        if not self._check_pin_rate_limit():
+            return
         if not DEFAULT_DB_FILE.exists():
             self.send_json({"ok": False, "error": "Sistema ainda nao configurado"}, 400)
             return
@@ -1035,8 +1485,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             has_pin = bool(store.get_parent_pin())
             pin = str(data.get("pin", "")).strip()
             if has_pin and not store.verify_parent_pin(pin):
+                self._record_pin_attempt(False)
                 self.send_json({"ok": False, "error": "PIN incorreto"}, 401)
                 return
+            self._record_pin_attempt(True)
 
             store.clear_remote_pause()
             self.send_json({"ok": True, "message": "Pausa cancelada. Computador liberado."})

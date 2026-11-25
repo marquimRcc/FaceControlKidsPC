@@ -750,6 +750,69 @@
 
 
   <!-- ======================================================== -->
+  <!-- MODAL: PROGRAMAS LIBERADOS POR PERFIL                    -->
+  <!-- ======================================================== -->
+  <div id="programsModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl glass-panel rounded-3xl p-6 border border-slate-700 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-white">🎮 Programas Liberados</h3>
+          <p id="programsChildSubtitle" class="text-xs text-slate-400">Defina quais programas este perfil pode abrir.</p>
+        </div>
+        <button type="button" onclick="closeProgramsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- Barra de Acoes Rapidas -->
+      <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="detectProgramsBtn" onclick="detectProgramsForModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95">
+            🔍 Detectar Jogos e Apps
+          </button>
+          <button type="button" onclick="toggleAddProgramForm()" class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-xs font-semibold text-emerald-300 border border-emerald-500/40 transition-all active:scale-95">
+            + Adicionar Programa
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="setAllProgramsAllowed(true)" class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-emerald-300 border border-slate-700 transition-all">Liberar Todos</button>
+          <button type="button" onclick="setAllProgramsAllowed(false)" class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-rose-300 border border-slate-700 transition-all">Bloquear Todos</button>
+        </div>
+      </div>
+
+      <!-- Formulario Inline: Adicionar Programa -->
+      <div id="addProgramForm" class="hidden rounded-2xl bg-slate-900/90 border border-slate-700/80 p-3.5 space-y-2.5 shrink-0">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-semibold text-slate-400 mb-1">Nome do Programa</label>
+            <input id="newProgramName" type="text" placeholder="Ex: Roblox, Minecraft, Chrome..." class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold text-slate-400 mb-1">Executável (.exe) ou Caminho</label>
+            <input id="newProgramExe" type="text" placeholder="Ex: RobloxPlayerBeta.exe ou C:\...\app.exe" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" onclick="toggleAddProgramForm(false)" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-all">Cancelar</button>
+          <button type="button" onclick="submitAddProgram()" class="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all active:scale-95">Adicionar ao Catálogo</button>
+        </div>
+      </div>
+
+      <!-- Lista de Programas -->
+      <div id="programsListContainer" class="space-y-2 overflow-y-auto max-h-[340px] pr-1 flex-1">
+        <!-- Injetado dinamicamente via JavaScript -->
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800 shrink-0">
+        <span class="text-[11px] text-slate-400">Programas desmarcados são bloqueados e encerrados na sessão deste perfil.</span>
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="closeProgramsModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-all">Cancelar</button>
+          <button type="button" id="saveProgramsBtn" onclick="saveChildProgramsModal()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold shadow-md active:scale-95 transition-all">Salvar Permissões</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
   <!-- MODAL: CADASTRAR / EDITAR FILHO COM CAMERA REAL          -->
   <!-- ======================================================== -->
   <div id="childModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -867,7 +930,20 @@
     let activeGalleryChildId = null;
     let activeGalleryChildName = "";
     let galleryRecaptureTimer = null;
+    let activeProgramsChildId = null;
+    let activeProgramsChildName = "";
+    let programsModalItems = [];
+    let programsPolicyEnabled = true;
     window.avatarTimestamps = {};
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
 
     // Relogio ao vivo
     setInterval(() => {
@@ -1169,12 +1245,13 @@
             </div>
 
             <!-- Botoes de Controle de Tempo -->
-            <div class="flex items-center space-x-2 pt-1">
-              <button onclick="injectBonus(${c.id}, 15)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 15 minutos">+15m</button>
-              <button onclick="injectBonus(${c.id}, 30)" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 30 minutos">+30m</button>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button onclick="injectBonus(${c.id}, 15)" class="flex-1 min-w-[54px] py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 15 minutos">+15m</button>
+              <button onclick="injectBonus(${c.id}, 30)" class="flex-1 min-w-[54px] py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-all active:scale-95" title="Adicionar 30 minutos">+30m</button>
               <button onclick="injectBonus(${c.id}, -15)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 border border-amber-500/30 transition-all active:scale-95" title="Subtrair 15 minutos">-15m</button>
-              <button onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
-              <button onclick="deleteChildProfile(${c.id}, '${displayName.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
+              <button onclick="openProgramsModal(${c.id}, '${displayName.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-xs font-semibold text-emerald-300 border border-emerald-500/40 transition-all active:scale-95" title="Gerenciar programas liberados para este perfil">🎮 Programas${typeof c.programs_total_count === "number" && c.programs_total_count > 0 ? ` (${c.programs_allowed_count ?? 0}/${c.programs_total_count})` : ""}</button>
+              <button onclick="openPhotoGalleryModal(${c.id}, '${displayName.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition-all" title="Ver 12 Fotos / Escolher Avatar">🖼️ 12 Fotos</button>
+              <button onclick="deleteChildProfile(${c.id}, '${displayName.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-xs text-red-400 border border-red-500/30 transition-all" title="Excluir Perfil">🗑️</button>
             </div>
           </div>
         `;
@@ -1241,6 +1318,234 @@
       if (modal) modal.classList.add("hidden");
       activeGalleryChildId = null;
       activeGalleryChildName = "";
+    }
+
+    async function openProgramsModal(childId, childName) {
+      activeProgramsChildId = childId;
+      activeProgramsChildName = childName || "";
+      programsModalItems = [];
+
+      const modal = document.getElementById("programsModal");
+      const subtitle = document.getElementById("programsChildSubtitle");
+      const listEl = document.getElementById("programsListContainer");
+      toggleAddProgramForm(false);
+
+      if (subtitle) {
+        subtitle.innerText = activeProgramsChildName
+          ? `Perfil de ${activeProgramsChildName} (#${childId}): marque os programas permitidos.`
+          : `Perfil #${childId}: marque os programas permitidos.`;
+      }
+      if (listEl) {
+        listEl.innerHTML = "<p class='text-xs text-slate-400 p-6 text-center animate-pulse'>Carregando catálogo de programas...</p>";
+      }
+      if (modal) modal.classList.remove("hidden");
+
+      await loadChildProgramsIntoModal(childId);
+    }
+
+    async function loadChildProgramsIntoModal(childId, preserveUnsaved = false) {
+      const unsavedByName = {};
+      if (preserveUnsaved && Array.isArray(programsModalItems)) {
+        programsModalItems.forEach(p => {
+          unsavedByName[String(p.name || "").toLowerCase()] = !!p.allowed;
+        });
+      }
+
+      const res = await SafePCKidsAPI.getChildPrograms(childId);
+      if (activeProgramsChildId !== childId) return;
+
+      const listEl = document.getElementById("programsListContainer");
+      if (!res || !res.ok) {
+        if (listEl) {
+          listEl.innerHTML = `<p class='text-xs text-rose-400 p-6 text-center'>${escapeHtml((res && res.error) || "Erro ao carregar programas.")}</p>`;
+        }
+        return;
+      }
+
+      programsPolicyEnabled = res.policy_enabled !== false;
+      programsModalItems = (res.programs || []).map(p => {
+        const key = String(p.name || "").toLowerCase();
+        return {
+          ...p,
+          allowed: (preserveUnsaved && key in unsavedByName) ? unsavedByName[key] : !!p.allowed
+        };
+      });
+      renderProgramsModalList();
+    }
+
+    function renderProgramsModalList() {
+      const listEl = document.getElementById("programsListContainer");
+      if (!listEl) return;
+
+      if (!programsModalItems || programsModalItems.length === 0) {
+        listEl.innerHTML = "<div class='p-6 text-center space-y-2 rounded-2xl bg-slate-900/50 border border-slate-800'><p class='text-xs text-slate-400'>Nenhum programa cadastrado ainda.</p><p class='text-[11px] text-cyan-400'>Use \"Detectar Jogos e Apps\" ou \"+ Adicionar Programa\" acima.</p></div>";
+        return;
+      }
+
+      let html = "";
+      programsModalItems.forEach((p, idx) => {
+        const allowed = !!p.allowed;
+        const safeName = escapeHtml(p.name || "Programa");
+        const safeExe = escapeHtml(p.executable || "(executável não informado)");
+        html += `
+          <div class="flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-900/80 border ${allowed ? 'border-emerald-500/30' : 'border-rose-500/30'} transition-all">
+            <label class="flex items-start space-x-3 cursor-pointer flex-1 min-w-0">
+              <input type="checkbox" ${allowed ? "checked" : ""} onchange="toggleProgramAllowed(${idx}, this.checked)" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-950 text-cyan-400 focus:ring-cyan-400 cursor-pointer">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs font-bold text-white truncate">${safeName}</span>
+                </div>
+                <p class="text-[10px] text-slate-400 font-mono truncate" title="${safeExe}">${safeExe}</p>
+              </div>
+            </label>
+            <div class="flex items-center space-x-2 shrink-0">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${allowed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'}">
+                ${allowed ? "✓ Liberado" : "✕ Bloqueado"}
+              </span>
+              <button type="button" onclick="deleteCatalogProgram(${idx})" class="px-2 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-[11px] text-red-400 border border-red-500/20 transition-all" title="Remover programa do catálogo">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+      listEl.innerHTML = html;
+    }
+
+    function toggleProgramAllowed(idx, checked) {
+      if (!programsModalItems[idx]) return;
+      programsModalItems[idx].allowed = !!checked;
+      renderProgramsModalList();
+    }
+
+    function setAllProgramsAllowed(allowed) {
+      if (!programsModalItems || programsModalItems.length === 0) return;
+      programsModalItems.forEach(p => { p.allowed = !!allowed; });
+      renderProgramsModalList();
+    }
+
+    function toggleAddProgramForm(forceState = null) {
+      const form = document.getElementById("addProgramForm");
+      if (!form) return;
+      const shouldShow = (forceState === null) ? form.classList.contains("hidden") : !!forceState;
+      form.classList.toggle("hidden", !shouldShow);
+      if (shouldShow) {
+        const nameInput = document.getElementById("newProgramName");
+        if (nameInput) nameInput.focus();
+      } else {
+        const nameInput = document.getElementById("newProgramName");
+        const exeInput = document.getElementById("newProgramExe");
+        if (nameInput) nameInput.value = "";
+        if (exeInput) exeInput.value = "";
+      }
+    }
+
+    async function submitAddProgram() {
+      const nameInput = document.getElementById("newProgramName");
+      const exeInput = document.getElementById("newProgramExe");
+      const name = nameInput ? nameInput.value.trim() : "";
+      const executable = exeInput ? exeInput.value.trim() : "";
+
+      if (!name) {
+        showToast("Informe o nome do programa.");
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      if (!executable) {
+        showToast("Informe o executável (.exe) ou caminho.");
+        if (exeInput) exeInput.focus();
+        return;
+      }
+
+      const res = await SafePCKidsAPI.addProgram(name, executable, activeProgramsChildId, true);
+      if (res && res.ok) {
+        showToast(res.message || `Programa '${name}' adicionado.`);
+        toggleAddProgramForm(false);
+        await loadChildProgramsIntoModal(activeProgramsChildId, true);
+        if (typeof syncDashboardData === "function") syncDashboardData();
+      } else {
+        showToast((res && res.error) || "Erro ao adicionar programa.");
+      }
+    }
+
+    async function deleteCatalogProgram(idx) {
+      const item = programsModalItems[idx];
+      if (!item) return;
+      if (!confirm(`Remover '${item.name}' do catálogo de programas de todos os perfis?`)) return;
+
+      const res = await SafePCKidsAPI.deleteProgram(item.index);
+      if (res && res.ok) {
+        showToast(res.message || "Programa removido.");
+        programsModalItems.splice(idx, 1);
+        await loadChildProgramsIntoModal(activeProgramsChildId, true);
+        if (typeof syncDashboardData === "function") syncDashboardData();
+      } else {
+        showToast((res && res.error) || "Erro ao remover programa.");
+      }
+    }
+
+    async function detectProgramsForModal() {
+      const btn = document.getElementById("detectProgramsBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "⏳ Detectando...";
+      }
+      try {
+        const res = await SafePCKidsAPI.detectPrograms();
+        if (res && res.ok) {
+          if (res.added_count > 0) {
+            showToast(`${res.added_count} programa(s) detectado(s) e adicionado(s).`);
+          } else {
+            showToast("Todos os programas detectados já estavam na lista.");
+          }
+          await loadChildProgramsIntoModal(activeProgramsChildId, true);
+          if (typeof syncDashboardData === "function") syncDashboardData();
+        } else {
+          showToast((res && res.error) || "Falha ao detectar programas.");
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = "🔍 Detectar Jogos e Apps";
+        }
+      }
+    }
+
+    async function saveChildProgramsModal() {
+      if (!activeProgramsChildId) return;
+      const btn = document.getElementById("saveProgramsBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Salvando...";
+      }
+      try {
+        const permissions = programsModalItems.map(p => ({
+          index: p.index,
+          allowed: !!p.allowed
+        }));
+        const res = await SafePCKidsAPI.saveChildPrograms(activeProgramsChildId, permissions, programsPolicyEnabled);
+        if (res && res.ok) {
+          showToast(`Programas de '${activeProgramsChildName || "#" + activeProgramsChildId}' salvos!`);
+          closeProgramsModal();
+          if (typeof syncDashboardData === "function") syncDashboardData();
+        } else {
+          showToast((res && res.error) || "Erro ao salvar permissões de programas.");
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = "Salvar Permissões";
+        }
+      }
+    }
+
+    function closeProgramsModal() {
+      const modal = document.getElementById("programsModal");
+      const listEl = document.getElementById("programsListContainer");
+      toggleAddProgramForm(false);
+      if (listEl) listEl.innerHTML = "";
+      if (modal) modal.classList.add("hidden");
+      activeProgramsChildId = null;
+      activeProgramsChildName = "";
+      programsModalItems = [];
     }
 
     async function selectActivePhoto(childId, photoIndex) {
@@ -1861,7 +2166,15 @@
         return;
       }
 
-      // 2. Prioridade: Passo 3 do Assistente de Instalação (Wizard)
+      // 2. Prioridade: Modal de Programas Liberados (fechar com Esc)
+      const programsModal = document.getElementById("programsModal");
+      if (programsModal && !programsModal.classList.contains("hidden") && e.key === "Escape") {
+        e.preventDefault();
+        closeProgramsModal();
+        return;
+      }
+
+      // 3. Prioridade: Passo 3 do Assistente de Instalação (Wizard)
       const wizardView = document.getElementById("wizardView");
       const step3 = document.getElementById("wizardStep3");
       const isStep3Open = wizardView && wizardView.style.display !== "none" && step3 && step3.style.display !== "none";

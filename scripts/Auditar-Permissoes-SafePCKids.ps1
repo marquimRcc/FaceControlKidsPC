@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Auditoria somente leitura das ACLs de arquivos relevantes do SafePCKids.
 .DESCRIPTION
@@ -23,6 +23,14 @@ $paths = @(
     (Join-Path $Root 'criancas.sqlite3'),
     (Join-Path $Root 'criancas.sqlite3-wal'),
     (Join-Path $Root 'criancas.sqlite3-shm'),
+    (Join-Path $Root 'kids.sqlite3'),
+    (Join-Path $Root 'kids.sqlite3-wal'),
+    (Join-Path $Root 'kids.sqlite3-shm'),
+    (Join-Path $Root 'configuracoes.json'),
+    (Join-Path $Root 'programas_inicializar.json'),
+    (Join-Path $Root 'credentials.bin'),
+    (Join-Path $Root 'security'),
+    (Join-Path $Root 'security\filhos_session.token'),
     (Join-Path $Root 'fotos')
 )
 

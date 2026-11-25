@@ -149,6 +149,21 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $output -notcontains 'SAFEPCKIDS_NESTED_SCRIPT_OK') {
             throw ('Nested script was blocked by execution policy: ' + ($output -join '; '))
           }
+      - name: Windows all PowerShell scripts syntax check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path 'scripts' -Filter '*.ps1' | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -ne 0) {
+              $errors | ForEach-Object { Write-Error "$($_.Extent.File): $($_.Message)" }
+              throw ("PowerShell syntax failed: " + $_.Name)
+            }
+          }
       - name: Windows P6 VM harness PowerShell syntax check only
         if: runner.os == 'Windows'
         shell: pwsh

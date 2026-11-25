@@ -126,7 +126,7 @@ const SafePCKidsAPI = {
       }
       return data || { ok: false };
     } catch (e) {
-      return { ok: pin === "1234" };
+      return { ok: false, error: "Servidor local indisponível para validar o PIN." };
     }
   },
 
@@ -310,6 +310,69 @@ const SafePCKidsAPI = {
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify({ enable })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async getChildPrograms(childId) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/programs?t=${Date.now()}`, {
+        headers: this.getHeaders()
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, programs: [], error: e.message };
+    }
+  },
+
+  async saveChildPrograms(childId, permissions, policyEnabled = true) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/children/${childId}/programs`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ permissions, policy_enabled: policyEnabled })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async addProgram(name, executable, childId = null, allowed = true) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/programs/add`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ name, executable, child_id: childId, allowed })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async deleteProgram(index) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/programs/delete`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ index })
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  async detectPrograms() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/programs/detect`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({})
       });
       return await res.json();
     } catch (e) {
