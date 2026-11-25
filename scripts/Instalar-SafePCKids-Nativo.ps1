@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Instalador do SafePCKids Credential Provider nativo e Agente de Boas-Vindas.
 .DESCRIPTION
@@ -270,6 +270,17 @@ try {
 } catch {
     Write-Host "Aviso ao configurar boot facial: $($_.Exception.Message)" -ForegroundColor DarkYellow
     Write-Host "A inicializacao interativa via SafePCKidsAuthService continuara funcionando." -ForegroundColor DarkGray
+}
+
+# 9. Liberar porta 8765 no Firewall do Windows para acesso remoto na rede local
+try {
+    Remove-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' -ErrorAction SilentlyContinue
+    New-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' `
+        -DisplayName 'SafePCKids - Controle Remoto HTTP (8765)' `
+        -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765 -Profile Any -Enabled True | Out-Null
+    Write-Host "Regra de Firewall do Controle Remoto (TCP 8765) configurada." -ForegroundColor Green
+} catch {
+    Write-Host "Aviso ao configurar Firewall do Controle Remoto (TCP 8765): $($_.Exception.Message)" -ForegroundColor DarkYellow
 }
 
 Write-Host ""

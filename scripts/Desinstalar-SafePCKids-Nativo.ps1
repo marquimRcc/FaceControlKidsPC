@@ -51,6 +51,7 @@ $checklist["Tarefa SafePCKidsBootAuth removida"] = ($tasksOutput -notmatch "Safe
 # 3. Remover entradas de inicializacao automatica (Startup / Run)
 Write-Host "3. Removendo scripts de inicializacao..." -ForegroundColor Cyan
 Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "SafePCKidsAuthService" -Force -ErrorAction SilentlyContinue
+Remove-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' -ErrorAction SilentlyContinue
 
 $userStartupVbs = Join-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" "SafePCKidsAuthService.vbs"
 if (Test-Path -LiteralPath $userStartupVbs) {

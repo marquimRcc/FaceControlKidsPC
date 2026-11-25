@@ -486,6 +486,18 @@ def setup_windows_services(root_dir: Optional[Path] = None) -> Tuple[bool, str]:
         for task in ("SafePCKidsAuthService", "SafePCKidsFilhosAgent", "SafePCKidsBootAuth"):
             _require_win_cmd(["schtasks", "/query", "/tn", task], f"Verificacao da tarefa {task}")
 
+        # 11. Regra de Firewall padrao para permitir Acesso Remoto na rede local (TCP 8765)
+        ps_fw = (
+            "Remove-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' -ErrorAction SilentlyContinue; "
+            "New-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' "
+            "-DisplayName 'SafePCKids - Controle Remoto HTTP (8765)' "
+            "-Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765 -Profile Any -Enabled True | Out-Null"
+        )
+        _require_win_cmd(
+            ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", "$ErrorActionPreference = 'Stop'; " + ps_fw],
+            "Regra de Firewall do Controle Remoto (porta 8765)",
+        )
+
         return True, "Servicos e Credential Provider registrados com sucesso."
     except Exception as e:
         logger.warning(f"Aviso ao registrar servicos: {e}")
@@ -736,12 +748,18 @@ def uninstall_system(remove_data: bool = False, remove_windows_user: bool = Fals
         if remove_windows_user:
             _run_win_cmd(["net", "user", "Filhos", "/delete"], timeout=10.0)
 
-        # 8. Restaurar DNS padrao e remover regras de firewall do AdGuard Family
+        # 8. Restaurar DNS padrao e remover regras de firewall do AdGuard Family e Controle Remoto
         try:
             from .network_guard import disable_adguard_family_protection
             disable_adguard_family_protection()
         except Exception as e:
             logger.warning(f"Aviso ao desativar protecao de rede na desinstalacao: {e}")
+
+        _run_win_cmd(
+            ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
+             "Remove-NetFirewallRule -Name 'SafePCKids_Remote_Control_HTTP' -ErrorAction SilentlyContinue"],
+            timeout=10.0,
+        )
 
     return True, "SafePCKids desinstalado com sucesso."
 
