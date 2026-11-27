@@ -12,12 +12,14 @@ on:
         default: 'v0.0.1'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windows:
     name: Build Windows Single-EXE Installer
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,7 +37,7 @@ jobs:
           python -m venv .venv
           .\.venv\Scripts\python.exe -m pip install --upgrade pip
           Write-Host "Instalando dependencias de requirements.txt no .venv..."
-          .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+          .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.txt
 
       - name: Download facial recognition models
         shell: pwsh
@@ -52,39 +54,40 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "Falha na execucao dos testes unitarios (codigo $LASTEXITCODE)."
           }
-          if ($testOutput -notmatch 'OK \(skipped=13\)') {
-              throw "Resultado dos testes invalido: esperado 'OK (skipped=13)'."
-          }
-          if ($testOutput -match 'Ran (\d+) tests') {
-              $ran = [int]$Matches[1]
-              Write-Host "Total de testes executados: $ran (exigencia: >= 539 aprovados, 13 ignorados)"
-              if ($ran -lt 539) {
-                  throw "Contagem de testes ($ran) inferior ao minimo exigido (539)."
-              }
-          } else {
-              throw "Nao foi possivel identificar a quantidade total de testes executados."
+          Write-Host "Suite integral concluida; regressao de seguranca tambem sera executada explicitamente."
+
+      - name: Run security regression suites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($suite in @(
+            'test_app_server_install.py',
+            'test_parity_endpoints.py',
+            'test_auth_service.py',
+            'test_windows_login_guardrails.py'
+          )) {
+            & .\.venv\Scripts\python.exe -m unittest discover -s tests -p $suite -v
+            if ($LASTEXITCODE -ne 0) { throw "Security regression suite failed: $suite" }
           }
 
       - name: Prepare code signing certificate (if secrets available)
         id: prepare-cert
         shell: pwsh
+        env:
+          SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
         run: |
-          $certBase64 = "${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}"
-          if ($certBase64) {
-              $certBytes = [Convert]::FromBase64String($certBase64)
-              $certPath = Join-Path $env:RUNNER_TEMP "safepckids_signing_cert.pfx"
-              [IO.File]::WriteAllBytes($certPath, $certBytes)
-              Add-Content -Path $env:GITHUB_ENV -Value "SAFEPCKIDS_SIGNING_CERT=$certPath"
-              if ("${{ secrets.WINDOWS_SIGNING_PASSWORD }}") {
-                  Add-Content -Path $env:GITHUB_ENV -Value "SAFEPCKIDS_SIGNING_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
-              }
-              Write-Host "Certificado de assinatura preparado com sucesso."
-          } else {
-              Write-Host "Segredo de assinatura ausente. O executavel sera gerado sem assinatura digital."
+          if (-not $env:SIGNING_CERT_BASE64) {
+            throw 'Windows signing certificate secret is required for releases.'
           }
+          $certBytes = [Convert]::FromBase64String($env:SIGNING_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP 'safepckids_signing_cert.pfx'
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+          Add-Content -Path $env:GITHUB_ENV -Value "SAFEPCKIDS_SIGNING_CERT=$certPath"
 
       - name: Build SafePCKids-Instalador-Windows-x64.exe
         shell: pwsh
+        env:
+          SAFEPCKIDS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
         run: |
           Write-Host "Iniciando compilacao do instalador..."
           & scripts/Construir-SafePCKids-Setup.ps1
@@ -111,20 +114,17 @@ jobs:
           $sigExe = Get-AuthenticodeSignature -FilePath $exePath
           $sigDll = Get-AuthenticodeSignature -FilePath $dllPath
 
-          if ($env:SAFEPCKIDS_SIGNING_CERT -and (Test-Path -LiteralPath $env:SAFEPCKIDS_SIGNING_CERT)) {
-              Write-Host "Validando assinaturas digitais configuradas..."
-              if ($sigExe.Status -notin @('Valid', 'UnknownError')) {
-                  throw "Assinatura do EXE invalida: $($sigExe.Status) ($($sigExe.StatusMessage))"
-              }
-              if ($sigDll.Status -notin @('Valid', 'UnknownError')) {
-                  throw "Assinatura da DLL invalida: $($sigDll.Status) ($($sigDll.StatusMessage))"
-              }
-              Write-Host "EXE e DLL validados com sucesso via Authenticode."
-              Set-Content -Path "dist\SIGNING_STATUS.txt" -Value "SIGNED"
-          } else {
-              Write-Host "Nenhum certificado de assinatura fornecido. O instalador sera publicado sem assinatura digital."
-              Set-Content -Path "dist\SIGNING_STATUS.txt" -Value "UNSIGNED"
+          if (-not $env:SAFEPCKIDS_SIGNING_CERT -or -not (Test-Path -LiteralPath $env:SAFEPCKIDS_SIGNING_CERT)) {
+              throw 'Signing certificate unavailable; unsigned releases are forbidden.'
           }
+          if ($sigExe.Status -ne 'Valid') {
+              throw "Assinatura do EXE invalida: $($sigExe.Status) ($($sigExe.StatusMessage))"
+          }
+          if ($sigDll.Status -ne 'Valid') {
+              throw "Assinatura da DLL invalida: $($sigDll.Status) ($($sigDll.StatusMessage))"
+          }
+          Write-Host "EXE e DLL validados com sucesso via Authenticode."
+          Set-Content -Path "dist\SIGNING_STATUS.txt" -Value "SIGNED"
 
       - name: Clean up signing certificate
         if: always()
@@ -160,6 +160,9 @@ jobs:
     name: Publish GitHub Release
     needs: build-windows
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -190,11 +193,11 @@ jobs:
 
           SIGNING_STATUS=$(tr -d '\r\n' < release_assets/SIGNING_STATUS.txt 2>/dev/null || echo "UNSIGNED")
 
-          if [ "$SIGNING_STATUS" = "SIGNED" ]; then
-            SIGNING_NOTE="### 🔒 Assinatura Digital\n- O executável e a DLL do Credential Provider foram **assinados digitalmente** via Authenticode e validados com sucesso."
-          else
-            SIGNING_NOTE="### ⚠️ Aviso de Segurança e SmartScreen\n- Este binário foi gerado de forma automatizada via GitHub Actions **sem certificado comercial Authenticode** (segredos de assinatura não configurados).\n- **Alerta do Windows SmartScreen**: Ao executar no Windows 10/11, pode aparecer o alerta *'O Windows protegeu o seu computador'*. Clique em **Mais informações** -> **Executar assim mesmo** para prosseguir com a instalação.\n- O código fonte é 100% aberto e auditável neste repositório."
+          if [ "$SIGNING_STATUS" != "SIGNED" ]; then
+            echo "Release recusada: artefato sem assinatura verificada." >&2
+            exit 1
           fi
+          SIGNING_NOTE="### 🔒 Assinatura Digital\n- O executável e a DLL do Credential Provider foram assinados digitalmente via Authenticode e validados."
 
           SHA256_LINE=$(cat release_assets/SHA256SUMS.txt)
           EXE_SIZE=$(stat -c%s "release_assets/SafePCKids-Instalador-Windows-x64.exe" 2>/dev/null || echo "0")
@@ -218,7 +221,7 @@ jobs:
 
           ### ⚙️ Características e Requisitos
           - **Instalação com 2 cliques**: Executável único autônomo com um único prompt de UAC.
-          - **Conta Supervisionada 'Filhos'**: Provisionamento automático ou reaproveitamento total da conta existente, com senha inicial \`1\` editável.
+          - **Conta Supervisionada 'Filhos'**: Provisionamento da conta existente ou criação com senha aleatória, protegida via DPAPI.
           - **Sessão Segura**: O agente na sessão Filhos opera sem privilégios administrativos e sem prompts de UAC.
           - **Validação de Testes**: 544 testes unitários automatizados (531 aprovados e 13 ignorados em ambiente Windows limpo).
           EOF

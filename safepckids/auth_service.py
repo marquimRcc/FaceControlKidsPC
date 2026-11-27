@@ -7,8 +7,8 @@ Quando o LogonUI consulta o servico:
 1. Abre a webcam brevemente em segundo plano;
 2. Localiza e identifica o rosto presente usando YuNet + SFace;
 3. Consulta o saldo de quotas do SQLite local;
-4. Se o filho for reconhecido e possuir saldo > 0:
-   Retorna autorizacao com usuario 'Filhos' e senha '1';
+4. Se o filho for reconhecido, possuir saldo > 0 e houver credencial DPAPI:
+   Retorna autorizacao para a conta 'Filhos';
 5. Salva a foto/avatar do filho reconhecido e dispara a tela de boas-vindas.
 """
 from __future__ import annotations
@@ -40,8 +40,7 @@ from .windows_pipe_api import configure_kernel32
 from .pipe_protocol import decode_pipe_command
 from .boot_auth import write_status
 from .agent_watchdog import AgentWatchdog, AgentWatchdogThread
-from .session_secret import get_session_secret
-from .credential_store import get_filhos_credentials, get_filhos_password
+from .credential_store import get_filhos_credentials
 
 from .vm_lab_paths import vm_lab_root
 
@@ -178,6 +177,13 @@ class FaceAuthenticator:
             references = list(store.embeddings())
             if not references:
                 return "DENY_NO_ENROLLMENT", {"message": "Nenhum rosto cadastrado"}
+            unlock_credentials = get_filhos_credentials() if publish_unlock_event else None
+            if publish_unlock_event and (
+                not unlock_credentials[1] or unlock_credentials[1] == "1"
+            ):
+                return "ERROR_CREDENTIALS", {
+                    "message": "Credencial Windows ausente ou insegura no cofre DPAPI"
+                }
 
             try:
                 rec = self.recognizer
@@ -356,7 +362,7 @@ class FaceAuthenticator:
                 except Exception as e:
                     logger.warning("Falha ao salvar last_unlock.json: %s", e)
 
-            filhos_user, filhos_pass = get_filhos_credentials()
+            filhos_user, filhos_pass = unlock_credentials or ("Filhos", "")
             response = {
                 "child_id": best_candidate,
                 "child_name": child_name,
@@ -600,7 +606,7 @@ def _serve_connections(kernel32, sa, auth, camera_backend, once, report, watchdo
                 "data": data,
                 "timestamp": time.time(),
             }
-            if status == "ALLOW":
+            if status == "ALLOW" and command == "AUTH_QUERY":
                 response_payload["password"] = filhos_pass
             if status in ("ALLOW", "DENY_QUOTA", "DENY_CURFEW"):
                 response_payload["child_id"] = data.get("child_id")

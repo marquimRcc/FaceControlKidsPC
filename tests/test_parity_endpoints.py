@@ -25,7 +25,6 @@ import urllib.error
 from safepckids.app_server import SafePCKidsApiHandler
 import safepckids.credential_store as cred_store
 import safepckids.installer_engine as installer_engine
-import safepckids.session_secret as session_secret
 
 
 class TestParityEndpoints(unittest.TestCase):
@@ -53,6 +52,7 @@ class TestParityEndpoints(unittest.TestCase):
             headers={
                 "Content-Type": "application/json",
                 "Content-Length": str(len(data)),
+                "X-SafePCKids-Token": self.server.RequestHandlerClass.session_token,
             },
             method="POST",
         )
@@ -63,7 +63,11 @@ class TestParityEndpoints(unittest.TestCase):
             return e.code, json.loads(e.read().decode("utf-8"))
 
     def _get_json(self, path: str) -> tuple[int, dict]:
-        req = urllib.request.Request(f"{self.base_url}{path}", method="GET")
+        req = urllib.request.Request(
+            f"{self.base_url}{path}",
+            headers={"X-SafePCKids-Token": self.server.RequestHandlerClass.session_token},
+            method="GET",
+        )
         try:
             with urllib.request.urlopen(req, timeout=5.0) as resp:
                 return resp.status, json.loads(resp.read().decode("utf-8"))
@@ -253,26 +257,45 @@ class TestParityEndpoints(unittest.TestCase):
 
 class TestCredentialStoreDPAPI(unittest.TestCase):
     def test_save_and_retrieve_credentials(self):
-        """Valida o ciclo completo de gravacao e leitura com DPAPI / fallback."""
+        """Valida DPAPI e confirma que nenhum token de senha legado e gravado."""
         with tempfile.TemporaryDirectory() as td:
             mock_progdata = Path(td)
             mock_token = mock_progdata / "security" / "filhos_session.token"
             mock_sec_dir = mock_progdata / "security"
-            mock_cred = mock_progdata / "credentials.bin"
+            mock_cred = mock_sec_dir / "credentials.bin"
             with patch.object(cred_store, "PROGRAMDATA_DIR", mock_progdata), \
                  patch.object(cred_store, "CREDENTIALS_FILE", mock_cred), \
+                 patch.object(cred_store, "LEGACY_CREDENTIALS_FILE", mock_progdata / "legacy-credentials.bin"), \
                  patch.object(cred_store, "SECURITY_DIR", mock_sec_dir), \
                  patch.object(cred_store, "TOKEN_FILE", mock_token), \
-                 patch.object(session_secret, "TOKEN_FILE", mock_token), \
-                 patch.object(session_secret, "SECURITY_DIR", mock_sec_dir), \
-                 patch.object(cred_store, "_run_win_cmd"), \
-                 patch.object(session_secret, "_run_win_cmd"):
+                 patch.object(
+                     cred_store, "_dpapi_encrypt",
+                     side_effect=lambda payload: b"test-encrypted:" + payload.hex().encode("ascii"),
+                 ), \
+                 patch.object(
+                     cred_store, "_dpapi_decrypt",
+                     side_effect=lambda data: bytes.fromhex(data.removeprefix(b"test-encrypted:").decode("ascii")),
+                 ), \
+                 patch.object(cred_store, "_run_win_cmd", return_value=MagicMock(returncode=0)):
                 ok = cred_store.save_filhos_credentials("Criancas", "MinhaSenhaSuperSegura123!")
                 self.assertTrue(ok)
+                self.assertFalse(mock_token.exists())
+                self.assertNotIn(b"MinhaSenhaSuperSegura123!", mock_cred.read_bytes())
                 user, pwd = cred_store.get_filhos_credentials()
                 self.assertEqual(user, "Criancas")
                 self.assertEqual(pwd, "MinhaSenhaSuperSegura123!")
                 self.assertEqual(cred_store.get_filhos_password(), "MinhaSenhaSuperSegura123!")
+
+    def test_legacy_plaintext_secret_is_deleted_and_never_used_as_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            data_dir = Path(td)
+            legacy = data_dir / "security" / "filhos_session.token"
+            legacy.parent.mkdir()
+            legacy.write_text("legacy-password", encoding="utf-8")
+            with patch.object(cred_store, "TOKEN_FILE", legacy), \
+                 patch.object(cred_store, "CREDENTIALS_FILE", data_dir / "missing.bin"):
+                self.assertEqual(cred_store.get_filhos_credentials(), ("Filhos", ""))
+            self.assertFalse(legacy.exists())
 
 
 class TestInstallerEngineHealthAndUninstall(unittest.TestCase):

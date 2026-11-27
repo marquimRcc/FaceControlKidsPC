@@ -2,7 +2,7 @@
 
 **Data de Homologação:** Outubro / 2026  
 **Ambiente Alvo:** Windows 10 e Windows 11 (Desktop Doméstico Físico)  
-**Conta Compartilhada:** `Filhos` (senha fixa `"1"` para AutoLogon pelo Credential Provider)  
+**Conta Compartilhada:** `Filhos` (credencial gerada ou definida pelo responsável e protegida via DPAPI)
 **Conta Administradora:** Intacta, nunca interceptada pelo Credential Provider
 
 ---
@@ -15,7 +15,7 @@ O SafePCKids é um sistema de controle parental biométrico e controle de tempo 
    - DLL: `native/credential_provider_safepckids/SafePCKidsCredentialProvider.dll` (instalada em `C:\ProgramData\SafePCKids\`).
    - Visível **exclusivamente** na conta `Filhos` (filtragem por SID).
    - Consulta o serviço Python via Named Pipe `\\.\pipe\SafePCKidsAuthPipe`.
-   - Ao receber `ALLOW`, executa AutoLogon transparente via `KerbInteractiveLogon` com senha `"1"`.
+   - Ao receber `ALLOW`, serializa a credencial DPAPI da conta; ausência de credencial bloqueia o desbloqueio.
 
 2. **Camada de Serviço Central (Python SYSTEM / Administrador):**
    - Serviço: `safepckids/auth_service.py` (executado via Agendador de Tarefas no Boot como `SYSTEM` ou no logon).

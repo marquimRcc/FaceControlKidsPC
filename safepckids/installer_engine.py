@@ -28,8 +28,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from .admin_auth import hash_pin
 from .storage import Storage
 from .session_secret import (
-    save_secure_secret,
-    get_session_secret,
+    generate_secure_secret,
     _run_win_cmd,
 )
 from .credential_store import (
@@ -43,7 +42,6 @@ logger = logging.getLogger("safepckids.installer_engine")
 
 PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SafePCKids"
 SECURITY_DIR = PROGRAMDATA_DIR / "security"
-TOKEN_FILE = SECURITY_DIR / "filhos_session.token"
 CONFIG_FILE = PROGRAMDATA_DIR / "configuracoes.json"
 DEFAULT_DB_FILE = PROGRAMDATA_DIR / "criancas.sqlite3"
 INSTALL_MARKER = PROGRAMDATA_DIR / "installation-ready.json"
@@ -111,10 +109,13 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
     """Cria ou atualiza a senha da conta local 'Filhos' e armazena no cofre seguro DPAPI."""
     if username != "Filhos":
         return False, "O nome da conta supervisionada deve ser Filhos."
+    if secret == "1" and not preserve_existing:
+        return False, "A senha inicial insegura '1' nao e permitida."
     if not secret and not preserve_existing:
         return False, "Informe a senha da conta Filhos."
 
     if sys.platform != "win32":
+        secret = secret or generate_secure_secret()
         save_filhos_credentials(username, secret)
         return True, "Simulado em ambiente de teste"
 
@@ -130,9 +131,17 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
             return False, f"Nao foi possivel consultar a conta Filhos (Windows {status})."
         if status == 0:
             if preserve_existing:
-                stored_user, stored_password = get_filhos_credentials(default_password="")
-                if stored_user == username and stored_password:
+                stored_user, stored_password = get_filhos_credentials()
+                if stored_user == username and stored_password and stored_password != "1":
                     return True, "Conta Filhos existente preservada."
+                if stored_user == username and stored_password == "1":
+                    secret = secret if secret and secret != "1" else generate_secure_secret()
+                    res = _run_win_cmd(["net", "user", username, secret], timeout=5.0)
+                    if res.returncode != 0:
+                        return False, "Nao foi possivel substituir a senha inicial insegura da conta Filhos."
+                    if not save_filhos_credentials(username, secret):
+                        return False, "A senha foi alterada, mas nao foi salva no cofre DPAPI."
+                    return True, "Senha inicial insegura da conta Filhos substituida."
                 if not secret:
                     return False, "Informe a senha atual da conta Filhos para vincula-la ao SafePCKids."
                 token = wintypes.HANDLE()
@@ -161,7 +170,7 @@ def ensure_filhos_windows_user(secret: str, username: str = "Filhos", *,
                 return False, "A senha foi alterada no Windows, mas nao foi salva no cofre de credenciais."
             return True, f"Conta '{username}' atualizada com a nova senha e protegida via DPAPI."
         else:
-            secret = secret or "1"
+            secret = secret or generate_secure_secret()
             # Cria a conta supervisionada
             res = _run_win_cmd(
                 ["net", "user", username, secret, "/add",

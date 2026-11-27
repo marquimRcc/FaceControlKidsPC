@@ -1,11 +1,6 @@
-"""SafePCKids - Gerenciador do Segredo Dinamico de Sessao.
-
-Substitui qualquer senha fixa ou estatica por credenciais criptograficas
-geradas no momento da instalacao e armazenadas com isolamento de privilegios.
-"""
+"""Helpers for generated credentials and Windows process execution."""
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 import secrets
@@ -13,9 +8,6 @@ import string
 import subprocess
 import sys
 from typing import List, Sequence, Union
-
-
-logger = logging.getLogger("safepckids.session_secret")
 
 PROGRAMDATA_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SafePCKids"
 SECURITY_DIR = PROGRAMDATA_DIR / "security"
@@ -85,64 +77,3 @@ def generate_secure_secret(length: int = 32) -> str:
         has_symbol = any(c in "!@#$%^&*" for c in candidate)
         if has_upper and has_lower and has_digit and has_symbol:
             return candidate
-
-
-def save_secure_secret(
-    secret: str,
-    token_file: Optional[Path] = None,
-    security_dir: Optional[Path] = None,
-) -> None:
-    """Salva o segredo gerado em diretorio blindado acessivel pelo sistema e administradores."""
-    try:
-        sec_dir = security_dir or SECURITY_DIR
-        tok_file = token_file or TOKEN_FILE
-        sec_dir.mkdir(parents=True, exist_ok=True)
-        tok_file.write_text(secret, encoding="utf-8")
-        if sys.platform == "win32":
-            try:
-                current_user = None
-                try:
-                    current_user = os.getlogin()
-                except Exception:
-                    current_user = os.environ.get("USERNAME")
-
-                # Concede controle total explicitamente para SYSTEM (*S-1-5-18) e Administradores (*S-1-5-32-544)
-                # e para o usuario atual da sessao para evitar perda de permissao de leitura
-                cmd_dir = [
-                    "icacls", str(sec_dir),
-                    "/grant", "*S-1-5-18:(OI)(CI)(F)",
-                    "*S-1-5-32-544:(OI)(CI)(F)",
-                ]
-                if current_user:
-                    cmd_dir.extend([f"{current_user}:(OI)(CI)(F)"])
-                _run_win_cmd(cmd_dir, timeout=10.0)
-
-                if tok_file.exists():
-                    cmd_token = [
-                        "icacls", str(tok_file),
-                        "/grant", "*S-1-5-18:F",
-                        "*S-1-5-32-544:F",
-                    ]
-                    if current_user:
-                        cmd_token.extend([f"{current_user}:F"])
-                    _run_win_cmd(cmd_token, timeout=10.0)
-            except Exception as e:
-                logger.warning(f"Aviso nao-critico ao ajustar permissoes ACL via icacls: {e}")
-    except Exception as e:
-        logger.warning(f"Aviso ao salvar filhos_session.token: {e}")
-
-
-def get_session_secret() -> str:
-    """Retorna o segredo dinamico da conta Filhos para autenticacao no Windows.
-    
-    Se o arquivo de segredo nao existir ou estiver restrito a nivel de administrador,
-    retorna o fallback seguro.
-    """
-    try:
-        if TOKEN_FILE.exists():
-            val = TOKEN_FILE.read_text(encoding="utf-8").strip()
-            if val:
-                return val
-    except Exception:
-        pass
-    return "1"

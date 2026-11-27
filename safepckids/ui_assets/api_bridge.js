@@ -9,7 +9,6 @@ const SafePCKidsAPI = {
     const headers = { "Content-Type": "application/json" };
     const currentToken = this.token || window.__SAFEPCKIDS_TOKEN__;
     if (currentToken) {
-      headers["X-Session-Token"] = currentToken;
       headers["X-SafePCKids-Token"] = currentToken;
     }
     return headers;
@@ -86,10 +85,6 @@ const SafePCKidsAPI = {
           ok: false,
           error: (data && data.error) ? data.error : `Erro HTTP ${res.status}`
         };
-      }
-      if (data && data.token) {
-        this.token = data.token;
-        window.__SAFEPCKIDS_TOKEN__ = data.token;
       }
       return data || { ok: true };
     } catch (e) {
@@ -333,11 +328,11 @@ setInterval(triggerSafePCKidsHeartbeat, 2500);
 
 // Notifica encerramento limpo ao fechar a janela do navegador
 window.addEventListener("beforeunload", () => {
-  try {
-    navigator.sendBeacon(`${SafePCKidsAPI.baseUrl}/api/shutdown`);
-  } catch (e) {
-    fetch(`${SafePCKidsAPI.baseUrl}/api/shutdown`, { keepalive: true }).catch(() => {});
-  }
+  fetch(`${SafePCKidsAPI.baseUrl}/api/shutdown`, {
+    method: "POST",
+    headers: SafePCKidsAPI.getHeaders(),
+    keepalive: true
+  }).catch(() => {});
 });
 
 async function initSafePCKidsUI() {

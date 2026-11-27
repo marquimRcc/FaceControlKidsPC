@@ -39,7 +39,8 @@ def download_models(model_dir: Path) -> None:
             temporary_path = Path(temporary.name)
         try:
             print(f"Baixando e verificando {name} ...")
-            urlretrieve(url, temporary_path)
+            # URLs are fixed HTTPS endpoints; downloaded model bytes must match the pinned SHA-256.
+            urlretrieve(url, temporary_path)  # nosec B310
             actual_hash = _sha256(temporary_path)
             if actual_hash != expected_hash:
                 raise RuntimeError(

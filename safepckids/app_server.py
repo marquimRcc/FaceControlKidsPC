@@ -6,6 +6,7 @@ e os endpoints REST locais para comunicacao em tempo real entre o frontend e o s
 from __future__ import annotations
 
 import base64
+import hmac
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json
 import logging
@@ -20,7 +21,7 @@ import threading
 import time
 import traceback
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlsplit, unquote
 
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
@@ -35,7 +36,6 @@ from .installer_engine import (
     INSTALL_MARKER,
     _run_win_cmd,
 )
-from .session_secret import get_session_secret
 from .credential_store import (
     get_filhos_credentials,
     get_filhos_password,
@@ -82,6 +82,8 @@ UI_DIR = get_ui_dir()
 
 
 class SafePCKidsApiHandler(BaseHTTPRequestHandler):
+    session_token = secrets.token_urlsafe(32)
+    MAX_REQUEST_BODY = 1024 * 1024
     last_activity_time: float = time.time()
     shutdown_requested: bool = False
     is_installing: bool = False
@@ -100,26 +102,67 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload_bytes)))
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.send_header("Connection", "close")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-SafePCKids-Token, X-Session-Token")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(payload_bytes)
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError) as e:
             logger.debug(f"Conexao fechada pelo cliente ao enviar JSON: {e}")
 
+    def _valid_local_host(self) -> bool:
+        try:
+            host = urlsplit("//" + self.headers.get("Host", ""))
+            return (
+                host.hostname in ("127.0.0.1", "localhost")
+                and host.port == self.server.server_port
+            )
+        except ValueError:
+            return False
+
+    def _authorized_api_request(self, path: str) -> bool:
+        if not self._valid_local_host():
+            return False
+
+        origin = self.headers.get("Origin")
+        if origin:
+            try:
+                parsed_origin = urlsplit(origin)
+                if (
+                    parsed_origin.scheme != "http"
+                    or parsed_origin.hostname not in ("127.0.0.1", "localhost")
+                    or parsed_origin.port != self.server.server_port
+                ):
+                    return False
+            except ValueError:
+                return False
+
+        if self.headers.get("Sec-Fetch-Site", "").lower() in ("cross-site", "cross-origin"):
+            return False
+
+        supplied = self.headers.get("X-SafePCKids-Token") or self.headers.get("X-Session-Token")
+        if not supplied and self.command == "GET":
+            supplied = parse_qs(urlparse(self.path).query).get("session_token", [""])[0]
+        return bool(supplied) and hmac.compare_digest(
+            supplied.encode("utf-8"),
+            self.session_token.encode("utf-8"),
+        )
+
     def do_OPTIONS(self) -> None:
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-SafePCKids-Token, X-Session-Token")
-        self.end_headers()
+        self.send_json({"ok": False, "error": "CORS nao esta habilitado."}, 403)
 
     def do_GET(self) -> None:
         SafePCKidsApiHandler.last_activity_time = time.time()
         try:
             parsed = urlparse(self.path)
             path = parsed.path
+            if not self._valid_local_host():
+                self.send_json({"ok": False, "error": "Host local nao autorizado."}, 403)
+                return
+            if path.startswith("/api/") and not self._authorized_api_request(path):
+                self.send_json({"ok": False, "error": "Token ou origem nao autorizado."}, 403)
+                return
 
             if path == "/api/status":
                 self.handle_status()
@@ -133,10 +176,6 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_dashboard()
             elif path == "/api/heartbeat":
                 self.send_json({"ok": True, "time": time.time()})
-            elif path == "/api/shutdown":
-                if not SafePCKidsApiHandler.is_installing:
-                    SafePCKidsApiHandler.shutdown_requested = True
-                self.send_json({"ok": True, "message": "Encerrando servidor..."})
             elif path == "/api/camera/stream":
                 self.handle_camera_stream()
             elif path == "/api/camera/preview":
@@ -167,14 +206,29 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         SafePCKidsApiHandler.last_activity_time = time.time()
         try:
-            length = int(self.headers.get("Content-Length", 0))
+            parsed = urlparse(self.path)
+            if not self._valid_local_host():
+                self.send_json({"ok": False, "error": "Host local nao autorizado."}, 403)
+                return
+            if parsed.path.startswith("/api/") and not self._authorized_api_request(parsed.path):
+                self.send_json({"ok": False, "error": "Token ou origem nao autorizado."}, 403)
+                return
+
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                self.send_json({"ok": False, "error": "Content-Length invalido."}, 400)
+                return
+            if length < 0 or length > self.MAX_REQUEST_BODY:
+                self.send_json({"ok": False, "error": "Corpo da requisicao excede o limite permitido."}, 413)
+                return
             raw_body = self.rfile.read(length) if length > 0 else b"{}"
             try:
                 body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
-            except Exception:
-                body = {}
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self.send_json({"ok": False, "error": "JSON invalido."}, 400)
+                return
 
-            parsed = urlparse(self.path)
             path = parsed.path
 
             if path == "/api/install":
@@ -351,11 +405,9 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 filhos_username=filhos_user,
                 defer_services=False,
             )
-            current_token = get_session_secret()
             self.send_json({
                 "ok": ok,
                 "status": "success" if ok else "error",
-                "token": current_token,
                 "message": msg
             })
         except (KeyboardInterrupt, SystemExit):
@@ -853,10 +905,14 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
     def serve_asset(self, path: str) -> None:
         if path == "/favicon.ico":
-            target = ASSETS_DIR / "safepckids.ico"
+            target = (ASSETS_DIR / "safepckids.ico").resolve()
         else:
-            rel = path.lstrip("/assets/")
-            target = ASSETS_DIR / rel
+            rel = unquote(path.removeprefix("/assets/"))
+            root = ASSETS_DIR.resolve()
+            target = (root / rel).resolve()
+            if not target.is_relative_to(root):
+                self.send_error(404, "Asset nao encontrado")
+                return
 
         if not target.exists() or not target.is_file():
             self.send_error(404, "Asset nao encontrado")
@@ -878,10 +934,14 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
     def serve_static(self, path: str) -> None:
         target_dir = get_ui_dir()
         if path in ("/", "/index.html"):
-            target = target_dir / "app.html"
+            target = (target_dir / "app.html").resolve()
         else:
-            rel = path.lstrip("/ui/")
-            target = target_dir / rel
+            rel = unquote(path.removeprefix("/ui/"))
+            root = target_dir.resolve()
+            target = (root / rel).resolve()
+            if not target.is_relative_to(root):
+                self.send_error(404, "Arquivo nao encontrado")
+                return
 
         if not target.exists() or not target.is_file():
             target = target_dir / "app.html"
@@ -895,10 +955,20 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
         try:
             content = target.read_bytes()
+            if target.name == "app.html":
+                token_script = (
+                    "<script>window.__SAFEPCKIDS_TOKEN__="
+                    + json.dumps(self.session_token)
+                    + ";</script>"
+                ).encode("utf-8")
+                content = content.replace(b"<head>", b"<head>" + token_script, 1)
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:
@@ -919,7 +989,12 @@ def find_free_port(start: int = 14220) -> int:
 
 def run_app_server(port: Optional[int] = None) -> Tuple[ThreadingHTTPServer, int]:
     port = port or find_free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), SafePCKidsApiHandler)
+    handler = type(
+        "SafePCKidsSessionHandler",
+        (SafePCKidsApiHandler,),
+        {"session_token": secrets.token_urlsafe(32)},
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     logger.info(f"Servidor SafePCKids ativo em http://127.0.0.1:{port}")

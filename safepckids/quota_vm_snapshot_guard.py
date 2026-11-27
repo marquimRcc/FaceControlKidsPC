@@ -34,7 +34,8 @@ def assert_snapshot_matches(live: sqlite3.Connection, snapshot: sqlite3.Connecti
         columns = len(live.execute(f"PRAGMA table_info({identifier})").fetchall())
         if not columns:
             raise RuntimeError("VM snapshot has an unsupported table layout")
-        query = (f"SELECT * FROM {identifier} ORDER BY " +
+        # Schema equality is checked above and the identifier is SQL-quoted.
+        query = (f"SELECT * FROM {identifier} ORDER BY " +  # nosec B608
                  ", ".join(str(i) for i in range(1, columns + 1)))
         old_rows = snapshot.execute(query)
         new_rows = live.execute(query)

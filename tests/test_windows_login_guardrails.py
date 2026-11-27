@@ -51,7 +51,8 @@ class NativeLoginGuardrails(unittest.TestCase):
 
         # Pipe client must require ALLOW status and set Filhos account
         self.assertIn('result.user = L"Filhos";', pipe_src)
-        self.assertIn('result.password = L"1";', pipe_src)
+        self.assertIn('if (pass.empty() || pass == "1")', pipe_src)
+        self.assertNotIn('result.password = L"1";', pipe_src)
 
     def test_workflows_never_register_credential_provider(self):
         workflow_folder = ROOT / ".github/workflows"
