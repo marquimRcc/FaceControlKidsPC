@@ -240,9 +240,10 @@ class Storage:
 
                 raise KeyError(person_id)
 
+            # Table names come only from this fixed internal allowlist.
             for table in ("profile_photos", "embeddings", "daily_usage", "daily_bonus"):
 
-                self.db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))
+                self.db.execute(f"DELETE FROM {table} WHERE person_id=?", (person_id,))  # nosec B608
 
             self.db.execute("DELETE FROM settings WHERE key=?", (f"selected_sample_{person_id}",))
 

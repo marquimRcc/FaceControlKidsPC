@@ -112,12 +112,12 @@ class TestAppServerSecurity(unittest.TestCase):
             "/api/dashboard",
             headers={"X-Session-Token": "token-invalido"},
         )
-        self.assertEqual(status, 401)
+        self.assertEqual(status, 403)
         self.assertFalse(json.loads(raw)["ok"])
 
         with patch.object(SafePCKidsApiHandler, "require_api_token", True):
             status_missing, _, _ = self._request("GET", "/api/dashboard")
-            self.assertEqual(status_missing, 401)
+            self.assertEqual(status_missing, 403)
 
             status_ok, _, _ = self._request(
                 "GET",
@@ -129,7 +129,7 @@ class TestAppServerSecurity(unittest.TestCase):
                 status_auth, _, _ = self._request(
                     "GET",
                     "/api/dashboard",
-                    headers={"X-Session-Token": API_SESSION_TOKEN},
+                    headers={"X-Session-Token": SafePCKidsApiHandler.session_token},
                 )
                 self.assertEqual(status_auth, 200)
 
@@ -148,14 +148,15 @@ class TestAppServerSecurity(unittest.TestCase):
         self.assertEqual(status, 200)
         html = raw.decode("utf-8", errors="replace")
         self.assertIn("window.__SAFEPCKIDS_TOKEN__", html)
-        self.assertIn(API_SESSION_TOKEN, html)
+        self.assertIn(SafePCKidsApiHandler.session_token, html)
 
     def test_post_rejects_invalid_or_oversized_content_length(self):
+        tok_headers = {"X-SafePCKids-Token": SafePCKidsApiHandler.session_token}
         status_neg, _, _ = self._request(
             "POST",
             "/api/auth/verify",
             body=b"",
-            headers={"Content-Length": "-5"},
+            headers={"Content-Length": "-5", **tok_headers},
         )
         self.assertEqual(status_neg, 400)
 
@@ -163,7 +164,7 @@ class TestAppServerSecurity(unittest.TestCase):
             "POST",
             "/api/auth/verify",
             body=b"{}",
-            headers={"Content-Length": str(MAX_POST_BODY_BYTES + 1)},
+            headers={"Content-Length": str(MAX_POST_BODY_BYTES + 1), **tok_headers},
         )
         self.assertEqual(status_big, 413)
 
@@ -171,6 +172,7 @@ class TestAppServerSecurity(unittest.TestCase):
             "POST",
             "/api/auth/verify",
             body=b"{not-json",
+            headers=tok_headers,
         )
         self.assertEqual(status_bad_json, 400)
 
@@ -181,12 +183,14 @@ class TestAppServerSecurity(unittest.TestCase):
             store.set_parent_pin("4321")
             store.close()
 
+            tok_headers = {"X-SafePCKids-Token": SafePCKidsApiHandler.session_token}
             with patch.object(app_server, "DEFAULT_DB_FILE", db_path):
                 for _ in range(app_server.PIN_MAX_FAILURES):
                     st, _, raw = self._request(
                         "POST",
                         "/api/auth/verify",
                         body=b'{"pin":"0000"}',
+                        headers=tok_headers,
                     )
                     self.assertEqual(st, 200)
                     self.assertFalse(json.loads(raw)["ok"])
@@ -195,6 +199,7 @@ class TestAppServerSecurity(unittest.TestCase):
                     "POST",
                     "/api/auth/verify",
                     body=b'{"pin":"4321"}',
+                    headers=tok_headers,
                 )
                 self.assertEqual(st_locked, 429)
                 self.assertFalse(json.loads(raw_locked)["ok"])

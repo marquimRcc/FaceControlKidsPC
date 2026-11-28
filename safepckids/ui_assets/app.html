@@ -233,7 +233,7 @@
           <div class="text-left space-y-0.5">
             <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">Acesso Exclusivo dos Pais</span>
             <h2 class="text-lg font-bold text-white">Configure a Conta Filhos e o PIN</h2>
-            <p class="text-[11px] text-slate-400">Defina a senha da conta supervisionada no Windows e crie o PIN de administrador.</p>
+            <p class="text-[11px] text-slate-400">Defina, se necessário, a senha Windows da conta supervisionada; em branco, será gerada uma senha aleatória protegida por DPAPI. Crie também o PIN de administrador.</p>
           </div>
 
           <!-- 1. PARTE SUPERIOR: Conta Windows das Crianças (Cofre DPAPI) -->
@@ -253,7 +253,7 @@
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Senha da Conta Windows</label>
                 <div class="relative">
-                  <input id="wizardFilhosPass" type="password" value="1" placeholder="Digite uma senha..." class="w-full px-3 py-1.5 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
+                  <input id="wizardFilhosPass" type="password" placeholder="Vazia: gerar senha aleatoria protegida por DPAPI" class="w-full px-3 py-1.5 pr-8 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400">
                   <button type="button" onclick="togglePasswordVisibility('wizardFilhosPass', this)" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-white text-xs">👁️</button>
                 </div>
               </div>
@@ -936,6 +936,11 @@
     let programsModalItems = [];
     let programsPolicyEnabled = true;
     window.avatarTimestamps = {};
+    function localApiUrl(path) {
+      const separator = path.includes("?") ? "&" : "?";
+      const token = encodeURIComponent(window.__SAFEPCKIDS_TOKEN__ || "");
+      return `${path}${separator}session_token=${token}`;
+    }
 
     function escapeHtml(value) {
       return String(value ?? "")
@@ -955,18 +960,18 @@
 
     // Heartbeat nativo no HTML para manter o servidor Python sempre ativo
     function sendLocalHeartbeat() {
-      fetch("/api/heartbeat").catch(() => {});
+      fetch("/api/heartbeat", { headers: SafePCKidsAPI.getHeaders() }).catch(() => {});
     }
     sendLocalHeartbeat();
     setInterval(sendLocalHeartbeat, 2500);
 
     // Encerramento limpo ao fechar a janela
     window.addEventListener("beforeunload", () => {
-      try {
-        navigator.sendBeacon("/api/shutdown");
-      } catch (e) {
-        fetch("/api/shutdown", { keepalive: true }).catch(() => {});
-      }
+      fetch("/api/shutdown", {
+        method: "POST",
+        headers: SafePCKidsAPI.getHeaders(),
+        keepalive: true
+      }).catch(() => {});
     });
 
     function togglePasswordVisibility(inputId, btn) {
@@ -1067,7 +1072,7 @@
 
       const passInput = document.getElementById("wizardFilhosPass");
       const userInput = document.getElementById("wizardFilhosUser");
-      const filhosPass = passInput ? passInput.value.trim() : "1";
+      const filhosPass = passInput ? passInput.value.trim() : "";
       const filhosUser = userInput ? userInput.value.trim() : "Filhos";
 
       let res = null;
@@ -1077,7 +1082,7 @@
         } else {
           const resp = await fetch("/api/install", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: SafePCKidsAPI.getHeaders(),
             body: JSON.stringify({
               pin: enteredWizardPin,
               child_name: null,
@@ -1092,8 +1097,6 @@
       }
 
       if (res && res.token) {
-        window.__SAFEPCKIDS_TOKEN__ = res.token;
-        if (window.SafePCKidsAPI) window.SafePCKidsAPI.token = res.token;
       }
 
       if (res && (res.ok || res.status === "success")) {
@@ -1156,7 +1159,7 @@
       const srvStream = document.getElementById("tabServicesStream");
       if (srvStream) {
         if (tabId === "services") {
-          srvStream.src = "/api/camera/stream";
+          srvStream.src = localApiUrl("/api/camera/stream");
         } else {
           srvStream.src = "";
         }
@@ -1204,7 +1207,7 @@
           window.avatarTimestamps[c.id] = Date.now();
         }
         const ts = window.avatarTimestamps[c.id];
-        const avatarUrl = `/api/child/${c.id}/avatar?t=${ts}`;
+        const avatarUrl = localApiUrl(`/api/child/${c.id}/avatar?t=${ts}`);
 
         html += `
           <div class="glass-panel rounded-3xl p-5 border border-slate-800 space-y-4 shadow-xl">
@@ -1560,7 +1563,7 @@
         
         // Atualiza imediatamente na tela apenas os elementos de imagem deste childId
         document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
-          el.src = `/api/child/${childId}/avatar?t=${now}`;
+          el.src = localApiUrl(`/api/child/${childId}/avatar?t=${now}`);
         });
         
         await openPhotoGalleryModal(childId, activeGalleryChildName);
@@ -1612,7 +1615,7 @@
           if (!window.avatarTimestamps) window.avatarTimestamps = {};
           window.avatarTimestamps[childId] = now;
           document.querySelectorAll(`img[data-child-avatar="${childId}"]`).forEach(el => {
-            el.src = `/api/child/${childId}/avatar?t=${now}`;
+            el.src = localApiUrl(`/api/child/${childId}/avatar?t=${now}`);
           });
           await openPhotoGalleryModal(childId, activeGalleryChildName);
           if (typeof syncDashboardData === "function") syncDashboardData();
@@ -1792,7 +1795,10 @@
       if (res && res.ok) {
         alert("SafePCKids desinstalado com sucesso! A janela será encerrada.");
         try {
-          await fetch("/api/shutdown");
+          await fetch("/api/shutdown", {
+            method: "POST",
+            headers: SafePCKidsAPI.getHeaders()
+          });
         } catch(e) {}
         window.close();
       } else {
@@ -1935,7 +1941,7 @@
       const m = document.getElementById("childModal");
       if (m) m.classList.remove("hidden");
       const cam = document.getElementById("modalCamPreview");
-      if (cam) cam.src = `/api/camera/stream?t=${Date.now()}`;
+      if (cam) cam.src = localApiUrl(`/api/camera/stream?t=${Date.now()}`);
     }
 
     function closeChildModal() {

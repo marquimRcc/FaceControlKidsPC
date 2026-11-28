@@ -21,7 +21,7 @@ import threading
 import time
 import traceback
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, urlsplit, unquote
 
 from .admin_auth import verify_pin, hash_pin, AUTH_SETTING
 from .storage import Storage
@@ -36,7 +36,6 @@ from .installer_engine import (
     INSTALL_MARKER,
     _run_win_cmd,
 )
-from .session_secret import get_session_secret
 from .credential_store import (
     get_filhos_credentials,
     get_filhos_password,
@@ -161,11 +160,13 @@ UI_DIR = get_ui_dir()
 
 
 class SafePCKidsApiHandler(BaseHTTPRequestHandler):
+    session_token = secrets.token_urlsafe(32)
+    MAX_REQUEST_BODY = 1024 * 1024
     last_activity_time: float = time.time()
     shutdown_requested: bool = False
     is_installing: bool = False
     install_lock = threading.Lock()
-    require_api_token: bool = os.environ.get("SAFEPCKIDS_REQUIRE_API_TOKEN", "") == "1"
+    require_api_token: bool = os.environ.get("SAFEPCKIDS_REQUIRE_API_TOKEN", "1") == "1"
     _pin_failures: Dict[str, list[float]] = {}
     _pin_lockouts: Dict[str, float] = {}
     _pin_rate_lock = threading.Lock()
@@ -195,14 +196,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
     def _is_valid_api_token(self, token: str) -> bool:
         if not token:
             return False
-        if hmac.compare_digest(token, API_SESSION_TOKEN):
+        if hmac.compare_digest(token.encode("utf-8"), str(self.session_token).encode("utf-8")):
             return True
-        try:
-            secret = get_session_secret()
-            if secret and secret != "1" and hmac.compare_digest(token, secret):
-                return True
-        except Exception:
-            pass
+        if hmac.compare_digest(token.encode("utf-8"), API_SESSION_TOKEN.encode("utf-8")):
+            return True
         return False
 
     def _check_request_security(self, path: str) -> bool:
@@ -221,21 +218,24 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             if referer and not _is_loopback_origin(referer):
                 self.send_json({"ok": False, "error": "Referer nao autorizado."}, 403)
                 return False
-            if fetch_site == "cross-site":
+            if fetch_site in ("cross-site", "cross-origin"):
                 self.send_json({"ok": False, "error": "Requisicao cross-site bloqueada."}, 403)
                 return False
 
             provided = (
-                self.headers.get("X-Session-Token")
-                or self.headers.get("X-SafePCKids-Token")
+                self.headers.get("X-SafePCKids-Token")
+                or self.headers.get("X-Session-Token")
                 or ""
             ).strip()
+            if not provided and getattr(self, "command", "GET") == "GET":
+                provided = parse_qs(urlparse(getattr(self, "path", "")).query).get("session_token", [""])[0].strip()
+
             if provided and not self._is_valid_api_token(provided):
-                self.send_json({"ok": False, "error": "Token de sessao invalido."}, 401)
+                self.send_json({"ok": False, "error": "Token de sessao invalido."}, 403)
                 return False
             if self.require_api_token and path.startswith("/api/") and path != "/api/heartbeat":
                 if not self._is_valid_api_token(provided):
-                    self.send_json({"ok": False, "error": "Autenticacao de sessao obrigatoria."}, 401)
+                    self.send_json({"ok": False, "error": "Autenticacao de sessao obrigatoria."}, 403)
                     return False
         return True
 
@@ -289,6 +289,9 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.send_header("Connection", "close")
             self._send_cors_headers(allow_remote=_is_remote_allowed_path(req_path))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(payload_bytes)
             self.wfile.flush()
@@ -297,8 +300,11 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:
         req_path = urlparse(getattr(self, "path", "/")).path
+        if not _is_remote_allowed_path(req_path):
+            self.send_json({"ok": False, "error": "CORS nao esta habilitado."}, 403)
+            return
         self.send_response(204)
-        self._send_cors_headers(allow_remote=_is_remote_allowed_path(req_path))
+        self._send_cors_headers(allow_remote=True)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
 
@@ -326,10 +332,6 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 self.handle_dashboard()
             elif path == "/api/heartbeat":
                 self.send_json({"ok": True, "time": time.time()})
-            elif path == "/api/shutdown":
-                if not SafePCKidsApiHandler.is_installing:
-                    SafePCKidsApiHandler.shutdown_requested = True
-                self.send_json({"ok": True, "message": "Encerrando servidor..."})
             elif path == "/api/camera/stream":
                 self.handle_camera_stream()
             elif path == "/api/camera/preview":
@@ -577,11 +579,9 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
                 filhos_username=filhos_user,
                 defer_services=False,
             )
-            current_token = get_session_secret()
             self.send_json({
                 "ok": ok,
                 "status": "success" if ok else "error",
-                "token": current_token,
                 "message": msg
             })
         except (KeyboardInterrupt, SystemExit):
@@ -1294,7 +1294,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
 
     def serve_asset(self, path: str) -> None:
         if path == "/favicon.ico":
-            target = ASSETS_DIR / "safepckids.ico"
+            target = (ASSETS_DIR / "safepckids.ico").resolve()
         else:
             rel = path[len("/assets/"):] if path.startswith("/assets/") else path
             target = _resolve_safe_subpath(ASSETS_DIR, rel)
@@ -1346,7 +1346,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             content = target.read_bytes()
             if target.name == "app.html" and self._is_loopback():
                 html_text = content.decode("utf-8")
-                token_script = f'<script>window.__SAFEPCKIDS_TOKEN__ = {json.dumps(API_SESSION_TOKEN)};</script>'
+                token_script = f"<script>window.__SAFEPCKIDS_TOKEN__={json.dumps(self.session_token)};</script>"
                 if "</head>" in html_text and "__SAFEPCKIDS_TOKEN__" not in html_text:
                     html_text = html_text.replace("</head>", f"  {token_script}\n</head>", 1)
                     content = html_text.encode("utf-8")
@@ -1354,6 +1354,9 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:
@@ -1528,10 +1531,15 @@ def find_free_port(start: int = 8765) -> int:
 
 def run_app_server(port: Optional[int] = None, host: str = "0.0.0.0") -> Tuple[ThreadingHTTPServer, int]:
     port = port or find_free_port()
+    handler = type(
+        "SafePCKidsSessionHandler",
+        (SafePCKidsApiHandler,),
+        {"session_token": secrets.token_urlsafe(32)},
+    )
     try:
-        server = ThreadingHTTPServer((host, port), SafePCKidsApiHandler)
+        server = ThreadingHTTPServer((host, port), handler)
     except OSError:
-        server = ThreadingHTTPServer(("127.0.0.1", port), SafePCKidsApiHandler)
+        server = ThreadingHTTPServer(("127.0.0.1", port), handler)
         host = "127.0.0.1"
     if host == "0.0.0.0":
         mdns = MdnsResponder(DEFAULT_REMOTE_HOSTNAME, ip_provider=get_local_ip)

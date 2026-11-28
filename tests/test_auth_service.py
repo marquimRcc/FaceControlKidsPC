@@ -55,6 +55,19 @@ class TestAuthService(unittest.TestCase):
             self.assertEqual(status, "DENY_NO_ENROLLMENT")
             self.assertIn("Nenhum rosto cadastrado", data.get("message", ""))
 
+    def test_authenticator_fails_closed_without_stored_windows_credential(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test_credentials.sqlite3"
+            store = Storage(db_path)
+            person_id = store.add_person("Filho Teste", 120)
+            store.add_embedding(person_id, np.ones(128, dtype=np.float32))
+            store.close()
+            auth = FaceAuthenticator(Path("models"), db_path)
+            with patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "")):
+                status, data = auth.evaluate()
+            self.assertEqual(status, "ERROR_CREDENTIALS")
+            self.assertNotIn("password", data)
+
     def test_authenticator_contract_smoke_with_mock(self):
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "test_smoke.sqlite3"
@@ -82,12 +95,12 @@ class TestAuthService(unittest.TestCase):
 
             with patch("cv2.VideoCapture", return_value=mock_cap), \
                  patch("safepckids.auth_service.save_child_photo"), \
-                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "1")):
+                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "UserChosenStrongSecret123!")):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["user"], "Filhos")
-            self.assertEqual(data["password"], "1")
+            self.assertEqual(data["password"], "UserChosenStrongSecret123!")
 
             with patch("cv2.VideoCapture", return_value=mock_cap), \
                  patch("safepckids.auth_service.save_child_photo"), \
@@ -152,7 +165,9 @@ class TestAuthService(unittest.TestCase):
             mock_cap.isOpened.return_value = True
             mock_cap.read.return_value = (True, dummy_frame)
 
-            with patch("cv2.VideoCapture", return_value=mock_cap), patch("safepckids.auth_service.save_child_photo"):
+            with patch("cv2.VideoCapture", return_value=mock_cap), \
+                 patch("safepckids.auth_service.save_child_photo"), \
+                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "StrongSecret123!")):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             # Deve ser barrado pelo Anti-Spoofing
@@ -191,7 +206,9 @@ class TestAuthService(unittest.TestCase):
             mock_cap.isOpened.return_value = True
             mock_cap.read.return_value = (True, dummy_frame)
 
-            with patch("cv2.VideoCapture", return_value=mock_cap), patch("safepckids.auth_service.save_child_photo"):
+            with patch("cv2.VideoCapture", return_value=mock_cap), \
+                 patch("safepckids.auth_service.save_child_photo"), \
+                 patch("safepckids.auth_service.get_filhos_credentials", return_value=("Filhos", "StrongSecret123!")):
                 status, data = auth.evaluate(camera_index=0, timeout_seconds=1.0)
 
             self.assertEqual(status, "ALLOW")

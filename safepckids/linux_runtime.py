@@ -549,14 +549,15 @@ class LinuxFaceQuotaRuntime:
         self.admin_socket_path.parent.mkdir(parents=True, exist_ok=True)
         if self.admin_socket_path.parent.stat().st_gid != group.gr_gid:
             raise RuntimeError("Diretório de runtime não pertence ao grupo administrador")
-        os.chmod(self.admin_socket_path.parent, 0o750)
+        # Owner/admin-group access is required for the local administrative socket.
+        os.chmod(self.admin_socket_path.parent, 0o750)  # nosec B103
         self.admin_socket_path.unlink(missing_ok=True)
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             server.bind(str(self.admin_socket_path))
             if self.admin_socket_path.stat().st_gid != group.gr_gid:
                 raise RuntimeError("Socket administrativo criado com grupo incorreto")
-            os.chmod(self.admin_socket_path, 0o660)
+            os.chmod(self.admin_socket_path, 0o660)  # nosec B103
             server.listen(4)
             server.settimeout(0.5)
         except Exception:
@@ -619,7 +620,8 @@ class LinuxFaceQuotaRuntime:
         self.child_socket_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             os.chown(self.child_socket_path.parent, 0, account.pw_gid)
-            os.chmod(self.child_socket_path.parent, 0o2750)
+            # Setgid shares the child-status socket only with the monitored-user group.
+            os.chmod(self.child_socket_path.parent, 0o2750)  # nosec B103
         except PermissionError:
             pass
         self.child_socket_path.unlink(missing_ok=True)
@@ -630,7 +632,7 @@ class LinuxFaceQuotaRuntime:
                 os.chown(self.child_socket_path, 0, account.pw_gid)
             except PermissionError:
                 pass
-            os.chmod(self.child_socket_path, 0o660)
+            os.chmod(self.child_socket_path, 0o660)  # nosec B103
             server.listen(4)
             server.settimeout(0.5)
         except Exception:

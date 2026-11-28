@@ -19,7 +19,7 @@ import urllib.request
 import urllib.error
 
 from safepckids.app_server import SafePCKidsApiHandler
-from safepckids.session_secret import _run_win_cmd, save_secure_secret, get_session_secret
+from safepckids.session_secret import _run_win_cmd
 from safepckids.installer_engine import _run_win_cmd as installer_run_win_cmd
 
 
@@ -41,50 +41,102 @@ class TestAppServerInstall(unittest.TestCase):
         except Exception:
             pass
 
+    def _request(self, url, *, data=None, headers=None, method=None):
+        request_headers = dict(headers or {})
+        request_headers.setdefault(
+            "X-SafePCKids-Token",
+            self.server.RequestHandlerClass.session_token,
+        )
+        return urllib.request.Request(url, data=data, headers=request_headers, method=method)
+
+    def test_api_rejects_missing_token_and_cross_origin(self):
+        requests = (
+            urllib.request.Request(f"{self.base_url}/api/status", method="GET"),
+            self._request(
+                f"{self.base_url}/api/status",
+                headers={"Origin": "https://attacker.example"},
+                method="GET",
+            ),
+        )
+        for req in requests:
+            with self.subTest(headers=req.headers):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(req, timeout=5.0)
+                self.assertEqual(error.exception.code, 403)
+
+    def test_api_rejects_dns_rebinding_host_and_disables_cors(self):
+        req = self._request(
+            f"{self.base_url}/api/status",
+            headers={"Host": "attacker.example"},
+            method="GET",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req, timeout=5.0)
+        self.assertEqual(error.exception.code, 403)
+
+        preflight = urllib.request.Request(
+            f"{self.base_url}/api/status",
+            headers={
+                "Origin": "https://attacker.example",
+                "Access-Control-Request-Method": "POST",
+            },
+            method="OPTIONS",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(preflight, timeout=5.0)
+        self.assertEqual(error.exception.code, 403)
+        self.assertIsNone(error.exception.headers.get("Access-Control-Allow-Origin"))
+
+    def test_ui_injects_ephemeral_api_token(self):
+        req = urllib.request.Request(f"{self.base_url}/", method="GET")
+        with urllib.request.urlopen(req, timeout=5.0) as response:
+            page = response.read().decode("utf-8")
+        token = self.server.RequestHandlerClass.session_token
+        self.assertIn(f'window.__SAFEPCKIDS_TOKEN__="{token}"', page)
+
+    def test_static_routes_reject_path_traversal(self):
+        for path in ("/ui/../README.md", "/assets/../README.md"):
+            with self.subTest(path=path):
+                req = urllib.request.Request(f"{self.base_url}{path}", method="GET")
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(req, timeout=5.0)
+                self.assertEqual(error.exception.code, 404)
+
     def test_post_install_real_server_success(self):
-        """Verifica se POST /api/install retorna 200, Content-Length valido e payload JSON com token."""
-        mock_token = "secure_token_secret_xyz123"
+        """A API nao devolve token de sessao no corpo da instalacao."""
         with patch("safepckids.app_server.setup_system", return_value=(True, "Instalado com sucesso")):
-            with patch("safepckids.app_server.get_session_secret", return_value=mock_token):
-                payload = json.dumps({
-                    "pin": "1234",
-                    "child_name": "Lucas",
-                    "daily_limit_hours": 2.0
-                }).encode("utf-8")
+            payload = json.dumps({
+                "pin": "1234",
+                "child_name": "Lucas",
+                "daily_limit_hours": 2.0
+            }).encode("utf-8")
+            req = self._request(
+                f"{self.base_url}/api/install",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
 
-                req = urllib.request.Request(
-                    f"{self.base_url}/api/install",
-                    data=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Content-Length": str(len(payload))
-                    },
-                    method="POST"
-                )
-
-                with urllib.request.urlopen(req, timeout=10.0) as resp:
-                    self.assertEqual(resp.status, 200)
-                    content_length = resp.headers.get("Content-Length")
-                    self.assertIsNotNone(content_length)
-                    self.assertEqual(resp.headers.get("Connection"), "close")
-                    
-                    data = json.loads(resp.read().decode("utf-8"))
-                    self.assertTrue(data.get("ok"))
-                    self.assertEqual(data.get("status"), "success")
-                    self.assertEqual(data.get("token"), mock_token)
-                    self.assertEqual(data.get("message"), "Instalado com sucesso")
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                self.assertEqual(resp.status, 200)
+                self.assertIsNotNone(resp.headers.get("Content-Length"))
+                self.assertEqual(resp.headers.get("Connection"), "close")
+                data = json.loads(resp.read().decode("utf-8"))
+                self.assertTrue(data.get("ok"))
+                self.assertEqual(data.get("status"), "success")
+                self.assertNotIn("token", data)
+                self.assertEqual(data.get("message"), "Instalado com sucesso")
 
     def test_post_install_without_child_passes_none_and_not_deferred(self):
         """Verifica que POST /api/install sem crianca passa first_child_name=None e defer_services=False."""
-        with patch("safepckids.app_server.setup_system", return_value=(True, "Instalado com sucesso")) as mock_setup, \
-             patch("safepckids.app_server.get_session_secret", return_value="token123"):
+        with patch("safepckids.app_server.setup_system", return_value=(True, "Instalado com sucesso")) as mock_setup:
             payload = json.dumps({
                 "pin": "1234",
                 "child_name": None,
                 "filhos_password": "1",
                 "filhos_username": "Filhos"
             }).encode("utf-8")
-            req = urllib.request.Request(
+            req = self._request(
                 f"{self.base_url}/api/install",
                 data=payload,
                 headers={"Content-Type": "application/json"},
@@ -117,7 +169,7 @@ class TestAppServerInstall(unittest.TestCase):
             store_instance.people.return_value = []
             store_instance.embeddings.return_value = []
 
-            req = urllib.request.Request(f"{self.base_url}/api/status", method="GET")
+            req = self._request(f"{self.base_url}/api/status", method="GET")
             with urllib.request.urlopen(req, timeout=10.0) as resp:
                 self.assertEqual(resp.status, 200)
                 data = json.loads(resp.read().decode("utf-8"))
@@ -133,7 +185,7 @@ class TestAppServerInstall(unittest.TestCase):
              patch("safepckids.app_server.setup_system") as setup:
             db.exists.return_value = True
             storage.return_value.get_setting.return_value = None
-            req = urllib.request.Request(
+            req = self._request(
                 f"{self.base_url}/api/install/complete",
                 data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
             )
@@ -149,7 +201,7 @@ class TestAppServerInstall(unittest.TestCase):
             db.exists.return_value = True
             storage.return_value.get_setting.return_value = "hashed-pin"
             storage.return_value.embeddings.return_value = []
-            req = urllib.request.Request(
+            req = self._request(
                 f"{self.base_url}/api/install/complete",
                 data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
             )
@@ -165,7 +217,7 @@ class TestAppServerInstall(unittest.TestCase):
             storage.return_value.people.return_value = [(1, "Lucas"), (2, "Ana")]
             camera.return_value.start_enrollment.return_value = {"ok": True}
             payload = json.dumps({"child_id": 0, "child_name": "Ana"}).encode("utf-8")
-            req = urllib.request.Request(
+            req = self._request(
                 f"{self.base_url}/api/camera/enroll/start", data=payload,
                 headers={"Content-Type": "application/json"}, method="POST"
             )
@@ -176,7 +228,7 @@ class TestAppServerInstall(unittest.TestCase):
     def test_post_install_invalid_pin_returns_400(self):
         """Verifica se PIN menor que 4 digitos retorna HTTP 400 sem derrubar o socket."""
         payload = json.dumps({"pin": "12"}).encode("utf-8")
-        req = urllib.request.Request(
+        req = self._request(
             f"{self.base_url}/api/install",
             data=payload,
             headers={
@@ -198,7 +250,7 @@ class TestAppServerInstall(unittest.TestCase):
         """Verifica que qualquer excecao no setup_system retorna JSON 500 sem resetar a conexao."""
         with patch("safepckids.app_server.setup_system", side_effect=RuntimeError("Falha de teste simulada")):
             payload = json.dumps({"pin": "9999"}).encode("utf-8")
-            req = urllib.request.Request(
+            req = self._request(
                 f"{self.base_url}/api/install",
                 data=payload,
                 headers={

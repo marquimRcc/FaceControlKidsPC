@@ -52,7 +52,9 @@ class IntegratedFacePolicies(unittest.TestCase):
             rec.identify.side_effect = [(None, 0.1), (pid, 0.95)] * 2
             with patch("safepckids.auth_service.cv2.VideoCapture", return_value=video), \
                  patch("safepckids.avatar_utils.get_child_avatar_path", return_value=None), \
-                 patch("safepckids.auth_service.save_child_photo") as save:
+                 patch("safepckids.auth_service.save_child_photo") as save, \
+                 patch("safepckids.auth_service.get_filhos_credentials",
+                       return_value=("Filhos", "StrongSecret123!")):
                 status, data = FaceAuthenticator(Path("models"), path, recognizer=rec).evaluate()
             self.assertEqual(status, "ALLOW")
             self.assertEqual(data["child_id"], pid)

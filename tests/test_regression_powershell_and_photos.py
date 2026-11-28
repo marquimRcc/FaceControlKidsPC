@@ -243,7 +243,11 @@ class TestPhotoAndAvatarIsolation(unittest.TestCase):
         cls.server.server_close()
 
     def _get(self, path: str) -> tuple[int, bytes]:
-        req = urllib.request.Request(f"{self.base_url}{path}", method="GET")
+        req = urllib.request.Request(
+            f"{self.base_url}{path}",
+            headers={"X-SafePCKids-Token": SafePCKidsApiHandler.session_token},
+            method="GET",
+        )
         try:
             with urllib.request.urlopen(req, timeout=5.0) as resp:
                 return resp.status, resp.read()
@@ -255,7 +259,11 @@ class TestPhotoAndAvatarIsolation(unittest.TestCase):
         req = urllib.request.Request(
             f"{self.base_url}{path}",
             data=raw,
-            headers={"Content-Type": "application/json", "Content-Length": str(len(raw))},
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(raw)),
+                "X-SafePCKids-Token": SafePCKidsApiHandler.session_token,
+            },
             method="POST",
         )
         try:

@@ -17,13 +17,24 @@ static int RunParsingUnitTests() {
     }
 
     // 1. ALLOW valido completo com user, child_id, marcador e timestamp fresco
-    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"protocol_marker\": \"SAFEPCKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
+    std::string allowJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"UserChosenStrongSecret123!\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"protocol_marker\": \"SAFEPCKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
     AuthResult r1 = SafePCKidsPipeClient::ParseResponse(allowJson);
-    if (!r1.success || r1.user != L"Filhos" || r1.password != L"1" || r1.childId != 2 || r1.childName != L"Crianca 2") {
+    if (!r1.success || r1.user != L"Filhos" || r1.password != L"UserChosenStrongSecret123!" || r1.childId != 2 || r1.childName != L"Crianca 2") {
         std::wcerr << L"[FALHA] Teste 1 (ALLOW valido) falhou! Msg: " << r1.message << L"\n";
         return 1;
     }
     std::wcout << L"  [PASS] 1. ALLOW valido reconhecido corretamente.\n";
+
+    std::string missingPasswordJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"protocol_marker\": \"SAFEPCKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
+    if (SafePCKidsPipeClient::ParseResponse(missingPasswordJson).success) {
+        std::wcerr << L"[FALHA] ALLOW sem credencial foi aceito.\n";
+        return 13;
+    }
+    std::string weakPasswordJson = "{\"status\": \"ALLOW\", \"user\": \"Filhos\", \"password\": \"1\", \"child_id\": 2, \"child_name\": \"Crianca 2\", \"remaining\": 7200, \"protocol_marker\": \"SAFEPCKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";
+    if (SafePCKidsPipeClient::ParseResponse(weakPasswordJson).success) {
+        std::wcerr << L"[FALHA] ALLOW com senha inicial insegura foi aceito.\n";
+        return 14;
+    }
 
     // 2. Rejeicao de ALLOW sem o campo "user"
     std::string noUserJson = "{\"status\": \"ALLOW\", \"child_id\": 2, \"protocol_marker\": \"SAFEPCKIDS_IPC_V1\", \"timestamp\": " + nowTs + "}";

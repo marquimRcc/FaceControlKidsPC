@@ -40,6 +40,7 @@ class TestAppServerPrograms(unittest.TestCase):
             headers={
                 "Content-Type": "application/json",
                 "Content-Length": str(len(data)),
+                "X-SafePCKids-Token": SafePCKidsApiHandler.session_token,
             },
             method="POST",
         )
@@ -50,7 +51,11 @@ class TestAppServerPrograms(unittest.TestCase):
             return e.code, json.loads(e.read().decode("utf-8"))
 
     def _get_json(self, path: str) -> tuple[int, dict]:
-        req = urllib.request.Request(f"{self.base_url}{path}", method="GET")
+        req = urllib.request.Request(
+            f"{self.base_url}{path}",
+            headers={"X-SafePCKids-Token": SafePCKidsApiHandler.session_token},
+            method="GET",
+        )
         try:
             with urllib.request.urlopen(req, timeout=5.0) as resp:
                 return resp.status, json.loads(resp.read().decode("utf-8"))

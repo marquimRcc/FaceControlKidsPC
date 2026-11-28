@@ -2,7 +2,7 @@
 
 ## Instalação no Windows
 
-Abra `scripts/Instalar-SafePCKids.bat` com dois cliques. O script solicita a permissão de administrador, prepara Python e as bibliotecas, e instala o aplicativo em `C:\Program Files\SafePCKids`. O assistente pede o PIN dos pais, o nome e o limite diário da criança. A conta local aparece como **Filhos**, com senha **1** preenchida por padrão; essa senha pode ser alterada antes de concluir.
+Abra `scripts/Instalar-SafePCKids.bat` com dois cliques. O script solicita a permissão de administrador, prepara Python e as bibliotecas, e instala o aplicativo em `C:\Program Files\SafePCKids`. O assistente pede o PIN dos pais, o nome e o limite diário da criança. A conta local aparece como **Filhos**; se uma senha não for informada, uma senha aleatória é criada e guardada somente no cofre DPAPI protegido por ACL.
 
 O assistente cria a conta, captura 12 amostras faciais e só então registra e verifica as tarefas do Windows e abre o Painel dos Pais. Os dados e fotos ficam em `C:\ProgramData\SafePCKids`. O painel também fica disponível por atalhos na Área de Trabalho e no Menu Iniciar.
 
@@ -19,7 +19,7 @@ Sistema doméstico de controle parental e autenticação biométrica facial para
 
 ## 1. Principais Funcionalidades
 
-- **Desbloqueio Facial Transparente no Logon (LogonUI):** Credential Provider nativo em C++ (`SafePCKidsCredentialProvider.dll`) que atua exclusivamente na conta compartilhada `Filhos`. A senha inicial é `1` e pode ser alterada no assistente ou no painel.
+- **Desbloqueio Facial Transparente no Logon (LogonUI):** Credential Provider nativo em C++ (`SafePCKidsCredentialProvider.dll`) que atua exclusivamente na conta compartilhada `Filhos`. A senha não usa valor padrão; credenciais ausentes ou com a senha inicial legada `1` bloqueiam o desbloqueio até a rotação.
 - **Painel dos Pais Centralizado:** Interface local aberta em janela do Microsoft Edge, com atalhos na Área de Trabalho e no Menu Iniciar.
 - **Cadastro Facial com Galeria de 12 Fotos:** Captura guiada de 12 fotos da webcam (salvas limpas, sem retângulo de detecção verde sobreposto no rosto) permitindo escolher visualmente o avatar oficial da criança na galeria.
 - **Tela de Boas-Vindas Inteligente:** Exibe avatar e saldo diário imediatamente após o desbloqueio facial, fecha-se automaticamente após 4 segundos e reaparece brevemente a cada 30 minutos como lembrete suave do tempo restante.
@@ -61,7 +61,7 @@ Para entender detalhadamente a divisão entre os módulos de **Produção Window
     SafePCKids Credential Provider (C++ / COM)
        - DLL nativa: SafePCKidsCredentialProvider.dll
        - Filtragem estrita por SID (apenas conta Filhos)
-       - AutoLogon transparente (senha "1")
+       - Credencial DPAPI; sem fallback para senha fixa
                  │
                  ▼
            LogonUI / Windows LSA

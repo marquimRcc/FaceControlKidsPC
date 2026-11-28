@@ -111,15 +111,15 @@ public:
                 return result;
             }
 
-            // Autorizacao e elegivel conforme dados do servico.
+            std::string pass = ExtractJsonString(resp, "password");
+            if (pass.empty() || pass == "1") {
+                result.message = L"Credencial Windows ausente ou inicial insegura.";
+                return result;
+            }
+            // Autorizacao so e utilizavel quando a credencial DPAPI foi recebida.
+            result.password = std::wstring(pass.begin(), pass.end());
             result.success = true;
             result.user = L"Filhos";
-            std::string pass = ExtractJsonString(resp, "password");
-            if (!pass.empty()) {
-                result.password = std::wstring(pass.begin(), pass.end());
-            } else {
-                result.password = L"1";
-            }
             result.childId = cid;
 
             std::string n = ExtractJsonString(resp, "child_name");

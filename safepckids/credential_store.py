@@ -11,23 +11,22 @@ import ctypes
 from ctypes import wintypes
 import json
 import logging
-import os
 from pathlib import Path
 import sys
-from typing import Optional, Tuple
+from typing import Tuple
 
 from .session_secret import (
     PROGRAMDATA_DIR,
     SECURITY_DIR,
     TOKEN_FILE,
     _run_win_cmd,
-    save_secure_secret,
 )
 
 
 logger = logging.getLogger("safepckids.credential_store")
 
-CREDENTIALS_FILE = PROGRAMDATA_DIR / "credentials.bin"
+CREDENTIALS_FILE = SECURITY_DIR / "credentials.bin"
+LEGACY_CREDENTIALS_FILE = PROGRAMDATA_DIR / "credentials.bin"
 
 
 class DATA_BLOB(ctypes.Structure):
@@ -40,7 +39,7 @@ class DATA_BLOB(ctypes.Structure):
 def _dpapi_encrypt(data_bytes: bytes) -> bytes:
     """Criptografa bytes usando DPAPI no escopo LOCAL_MACHINE (0x4)."""
     if sys.platform != "win32":
-        return data_bytes
+        raise RuntimeError("DPAPI esta disponivel somente no Windows.")
 
     blob_in = DATA_BLOB(len(data_bytes), ctypes.cast(data_bytes, ctypes.POINTER(ctypes.c_char)))
     blob_out = DATA_BLOB()
@@ -59,7 +58,7 @@ def _dpapi_encrypt(data_bytes: bytes) -> bytes:
 def _dpapi_decrypt(cipher_bytes: bytes) -> bytes:
     """Decriptografa bytes usando DPAPI."""
     if sys.platform != "win32":
-        return cipher_bytes
+        raise RuntimeError("DPAPI esta disponivel somente no Windows.")
 
     blob_in = DATA_BLOB(len(cipher_bytes), ctypes.cast(cipher_bytes, ctypes.POINTER(ctypes.c_char)))
     blob_out = DATA_BLOB()
@@ -74,73 +73,103 @@ def _dpapi_decrypt(cipher_bytes: bytes) -> bytes:
     return res
 
 
-def save_filhos_credentials(username: str = "Filhos", password: str = "1") -> bool:
-    """Grava as credenciais da conta Filhos criptografadas no cofre DPAPI e no token de sessao."""
+def _remove_legacy_secret() -> bool:
+    try:
+        TOKEN_FILE.unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        logger.warning("Nao foi possivel remover o segredo legado em texto: %s", exc)
+        return False
+
+
+def _restrict_security_directory() -> None:
+    if sys.platform != "win32":
+        return
+    result = _run_win_cmd([
+        "icacls", str(SECURITY_DIR), "/inheritance:r", "/grant:r",
+        "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)",
+    ], timeout=10.0)
+    if result.returncode != 0:
+        raise RuntimeError(f"Falha ao restringir ACL do cofre: {result.stderr.strip()}")
+
+
+def save_filhos_credentials(username: str, password: str) -> bool:
+    """Grava credenciais exclusivamente no cofre DPAPI do Windows."""
+    if not username or not password or password == "1":
+        logger.error("Usuario e senha nao podem ser vazios nem usar a senha inicial insegura.")
+        return False
+    if not _remove_legacy_secret():
+        return False
+
+    staging_file = CREDENTIALS_FILE.with_suffix(CREDENTIALS_FILE.suffix + ".tmp")
     try:
         PROGRAMDATA_DIR.mkdir(parents=True, exist_ok=True)
+        SECURITY_DIR.mkdir(parents=True, exist_ok=True)
+        _restrict_security_directory()
         payload = json.dumps({"user": username, "password": password}).encode("utf-8")
 
-        # 1. Criptografa via DPAPI
-        try:
-            encrypted = _dpapi_encrypt(payload)
-            CREDENTIALS_FILE.write_bytes(encrypted)
-        except Exception as e:
-            logger.error(f"Nao foi possivel proteger a senha da conta Filhos via DPAPI: {e}")
-            return False
+        encrypted = _dpapi_encrypt(payload)
+        staging_file.write_bytes(encrypted)
+        staging_file.replace(CREDENTIALS_FILE)
 
-        # 2. Ajusta permissoes ACL no arquivo de credenciais
         if sys.platform == "win32":
-            try:
-                current_user = None
-                try:
-                    current_user = os.getlogin()
-                except Exception:
-                    current_user = os.environ.get("USERNAME")
+            acl = _run_win_cmd([
+                "icacls", str(CREDENTIALS_FILE), "/inheritance:r", "/grant:r",
+                "*S-1-5-18:F", "*S-1-5-32-544:F",
+            ], timeout=10.0)
+            if acl.returncode != 0:
+                CREDENTIALS_FILE.unlink(missing_ok=True)
+                raise RuntimeError(f"Falha ao restringir ACL de credentials.bin: {acl.stderr.strip()}")
 
-                cmd_acl = [
-                    "icacls", str(CREDENTIALS_FILE),
-                    "/grant", "*S-1-5-18:F",
-                    "*S-1-5-32-544:F",
-                ]
-                if current_user:
-                    cmd_acl.append(f"{current_user}:F")
-                _run_win_cmd(cmd_acl, timeout=10.0)
-            except Exception:
-                pass
-
-        # 3. Sincroniza com o arquivo de segredo legadado/compativel (TOKEN_FILE)
-        save_secure_secret(password, token_file=TOKEN_FILE, security_dir=SECURITY_DIR)
+        try:
+            LEGACY_CREDENTIALS_FILE.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Nao foi possivel remover credentials.bin legado: %s", exc)
         logger.info(f"Credenciais da conta '{username}' gravadas com sucesso no cofre DPAPI.")
         return True
     except Exception as e:
+        try:
+            staging_file.unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            logger.warning("Nao foi possivel remover o arquivo de staging DPAPI: %s", cleanup_error)
         logger.error(f"Erro ao salvar credenciais da conta Filhos: {e}")
         return False
 
 
-def get_filhos_credentials(*, default_password: str = "1") -> Tuple[str, str]:
-    """Retorna (usuario, senha) a partir do cofre DPAPI, com fallback para TOKEN_FILE."""
-    if CREDENTIALS_FILE.exists():
+def get_filhos_credentials() -> Tuple[str, str]:
+    """Retorna credenciais DPAPI; segredos legados nunca sao usados como fallback."""
+    _remove_legacy_secret()
+    for path in (CREDENTIALS_FILE, LEGACY_CREDENTIALS_FILE):
+        if not path.exists():
+            continue
         try:
-            data = CREDENTIALS_FILE.read_bytes()
-            try:
-                decrypted = _dpapi_decrypt(data)
-            except Exception:
-                decrypted = data
-            info = json.loads(decrypted.decode("utf-8"))
-            return str(info.get("user", "Filhos")), str(info.get("password", default_password))
+            encrypted = path.read_bytes()
+            info = json.loads(_dpapi_decrypt(encrypted).decode("utf-8"))
+            username = str(info.get("user", ""))
+            password = str(info.get("password", ""))
+            if username and password:
+                if path == LEGACY_CREDENTIALS_FILE and password != "1":
+                    if not save_filhos_credentials(username, password):
+                        return "Filhos", ""
+                elif path == LEGACY_CREDENTIALS_FILE:
+                    logger.warning("Credencial inicial '1' requer rotacao antes de autenticar.")
+                else:
+                    try:
+                        LEGACY_CREDENTIALS_FILE.unlink(missing_ok=True)
+                    except OSError as exc:
+                        logger.warning("Nao foi possivel remover credentials.bin legado: %s", exc)
+                return username, password
         except Exception as e:
-            logger.debug(f"Aviso ao ler credentials.bin: {e}")
+            if path == LEGACY_CREDENTIALS_FILE:
+                try:
+                    if path.read_bytes().lstrip().startswith(b"{"):
+                        path.unlink(missing_ok=True)
+                        logger.warning("Arquivo legado de credenciais em texto removido.")
+                except OSError:
+                    pass
+            logger.warning("Nao foi possivel descriptografar %s: %s", path.name, e)
 
-    # Fallback para TOKEN_FILE
-    if TOKEN_FILE.exists():
-        try:
-            val = TOKEN_FILE.read_text(encoding="utf-8").strip()
-            if val:
-                return "Filhos", val
-        except Exception:
-            pass
-
-    return "Filhos", default_password
+    return "Filhos", ""
 
 
 def get_filhos_password() -> str:
