@@ -49,10 +49,10 @@ $hb = Invoke-Probe -Method 'GET' -Path '/api/heartbeat'
 if ($hb -ne 200) { throw "Servidor nao respondeu /api/heartbeat em $base (status $hb)" }
 
 $tests = @(
-    @{ Name = 'Path traversal /assets'; Method = 'GET'; Path = '/assets/../../pyproject.toml'; Headers = @{}; Expected = 403 },
-    @{ Name = 'Path traversal /ui'; Method = 'GET'; Path = '/ui/../../pyproject.toml'; Headers = @{}; Expected = 403 },
+    @{ Name = 'Path traversal /assets'; Method = 'GET'; Path = '/assets/../../pyproject.toml'; Headers = @{}; Expected = 404 },
+    @{ Name = 'Path traversal /ui'; Method = 'GET'; Path = '/ui/../../pyproject.toml'; Headers = @{}; Expected = 404 },
     @{ Name = 'CORS externo em /api/dashboard'; Method = 'GET'; Path = '/api/dashboard'; Headers = @{ Origin = 'https://evil.example' }; Expected = 403 },
-    @{ Name = 'Token invalido em /api/dashboard'; Method = 'GET'; Path = '/api/dashboard'; Headers = @{ 'X-Session-Token' = 'token-invalido' }; Expected = 401 }
+    @{ Name = 'Token invalido em /api/dashboard'; Method = 'GET'; Path = '/api/dashboard'; Headers = @{ 'X-Session-Token' = 'token-invalido' }; Expected = 403 }
 )
 
 foreach ($t in $tests) {

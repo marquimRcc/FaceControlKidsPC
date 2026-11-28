@@ -209,6 +209,17 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             return False
 
         if not is_remote_route and hasattr(self, "headers"):
+            host_hdr = (self.headers.get("Host") or "").strip()
+            if host_hdr:
+                try:
+                    parsed_host = urlsplit("//" + host_hdr)
+                    if not _is_loopback_ip(parsed_host.hostname or ""):
+                        self.send_json({"ok": False, "error": "Host local nao autorizado."}, 403)
+                        return False
+                except ValueError:
+                    self.send_json({"ok": False, "error": "Host local nao autorizado."}, 403)
+                    return False
+
             origin = self.headers.get("Origin", "")
             referer = self.headers.get("Referer", "")
             fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
@@ -1299,7 +1310,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             rel = path[len("/assets/"):] if path.startswith("/assets/") else path
             target = _resolve_safe_subpath(ASSETS_DIR, rel)
             if target is None:
-                self.send_error(403, "Caminho de asset nao permitido")
+                self.send_error(404, "Asset nao encontrado")
                 return
 
         if not target.exists() or not target.is_file():
@@ -1329,7 +1340,7 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
             rel = path[len("/ui/"):] if path.startswith("/ui/") else path
             target = _resolve_safe_subpath(target_dir, rel)
             if target is None:
-                self.send_error(403, "Caminho estatico nao permitido")
+                self.send_error(404, "Arquivo nao encontrado")
                 return
 
         if not target.exists() or not target.is_file():
@@ -1345,11 +1356,10 @@ class SafePCKidsApiHandler(BaseHTTPRequestHandler):
         try:
             content = target.read_bytes()
             if target.name == "app.html" and self._is_loopback():
-                html_text = content.decode("utf-8")
-                token_script = f"<script>window.__SAFEPCKIDS_TOKEN__={json.dumps(self.session_token)};</script>"
-                if "</head>" in html_text and "__SAFEPCKIDS_TOKEN__" not in html_text:
-                    html_text = html_text.replace("</head>", f"  {token_script}\n</head>", 1)
-                    content = html_text.encode("utf-8")
+                token_script = (
+                    f"<script>window.__SAFEPCKIDS_TOKEN__={json.dumps(self.session_token)};</script>"
+                ).encode("utf-8")
+                content = content.replace(b"<head>", b"<head>" + token_script, 1)
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(content)))

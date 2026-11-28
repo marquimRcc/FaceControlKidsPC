@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 
 import safepckids.app_server as app_server
+from safepckids.admin_auth import AUTH_SETTING, hash_pin
 from safepckids.app_server import (
     API_SESSION_TOKEN,
     MAX_POST_BODY_BYTES,
@@ -141,7 +142,7 @@ class TestAppServerSecurity(unittest.TestCase):
             "/ui/%2e%2e/app_server.py",
         ):
             status, _, _ = self._request("GET", bad_path)
-            self.assertEqual(status, 403, f"Esperava 403 para {bad_path}, veio {status}")
+            self.assertEqual(status, 404, f"Esperava 404 para {bad_path}, veio {status}")
 
     def test_app_html_injects_api_token_only_for_loopback(self):
         status, _, raw = self._request("GET", "/")
@@ -180,7 +181,7 @@ class TestAppServerSecurity(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "sec.sqlite3"
             store = Storage(db_path)
-            store.set_parent_pin("4321")
+            store.set_setting(AUTH_SETTING, hash_pin("4321"))
             store.close()
 
             tok_headers = {"X-SafePCKids-Token": SafePCKidsApiHandler.session_token}

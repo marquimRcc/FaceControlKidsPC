@@ -293,7 +293,8 @@ class TestCredentialStoreDPAPI(unittest.TestCase):
             legacy.parent.mkdir()
             legacy.write_text("legacy-password", encoding="utf-8")
             with patch.object(cred_store, "TOKEN_FILE", legacy), \
-                 patch.object(cred_store, "CREDENTIALS_FILE", data_dir / "missing.bin"):
+                 patch.object(cred_store, "CREDENTIALS_FILE", data_dir / "missing.bin"), \
+                 patch.object(cred_store, "LEGACY_CREDENTIALS_FILE", data_dir / "missing_legacy.bin"):
                 self.assertEqual(cred_store.get_filhos_credentials(), ("Filhos", ""))
             self.assertFalse(legacy.exists())
 
